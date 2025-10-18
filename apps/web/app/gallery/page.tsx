@@ -1,0 +1,265 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Upload, LogOut, Trash2, X } from "lucide-react";
+import type { PhotoIndex, PhotoCategory, PhotoStats } from "@/types/storage";
+import { CategoryFilter } from "@/components/gallery/category-filter";
+import { PhotoGrid } from "@/components/gallery/photo-grid";
+
+export default function GalleryPage() {
+  const router = useRouter();
+  const [photos, setPhotos] = useState<PhotoIndex[]>([]);
+  const [stats, setStats] = useState<PhotoStats | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<PhotoCategory | "all">("all");
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    fetchPhotos();
+  }, []);
+
+  const fetchPhotos = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch("/api/photos");
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          router.push("/login");
+          return;
+        }
+        throw new Error("Failed to fetch photos");
+      }
+
+      const data = await response.json();
+      setPhotos(data.photos);
+      setStats(data.stats);
+      setUserId(data.userId);
+    } catch (error) {
+      console.error("Error fetching photos:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  };
+
+  const handlePhotoDelete = async (photoId: string) => {
+    try {
+      const response = await fetch(`/api/photos/${photoId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete photo");
+      }
+
+      // Refresh photos
+      await fetchPhotos();
+    } catch (error) {
+      console.error("Error deleting photo:", error);
+      throw error;
+    }
+  };
+
+  const toggleSelectionMode = () => {
+    setSelectionMode(!selectionMode);
+    setSelectedPhotos(new Set());
+  };
+
+  const togglePhotoSelection = (photoId: string) => {
+    setSelectedPhotos((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(photoId)) {
+        newSet.delete(photoId);
+      } else {
+        newSet.add(photoId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAll = () => {
+    const allPhotoIds = new Set(filteredPhotos.map((p) => p.id));
+    setSelectedPhotos(allPhotoIds);
+  };
+
+  const deselectAll = () => {
+    setSelectedPhotos(new Set());
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedPhotos.size === 0) return;
+
+    const confirmed = confirm(
+      `Are you sure you want to delete ${selectedPhotos.size} photo${selectedPhotos.size > 1 ? "s" : ""}?`
+    );
+
+    if (!confirmed) return;
+
+    setDeleting(true);
+
+    try {
+      // Delete photos sequentially
+      for (const photoId of selectedPhotos) {
+        await fetch(`/api/photos/${photoId}`, {
+          method: "DELETE",
+        });
+      }
+
+      // Refresh photos
+      await fetchPhotos();
+      setSelectedPhotos(new Set());
+      setSelectionMode(false);
+    } catch (error) {
+      console.error("Error deleting photos:", error);
+      alert("Failed to delete some photos. Please try again.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const filteredPhotos =
+    selectedCategory === "all"
+      ? photos
+      : photos.filter((photo) => photo.category === selectedCategory);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-4">📷</div>
+          <p className="text-muted-foreground">Loading photos...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <div className="border-b border-border bg-card">
+        <div className="max-w-7xl mx-auto px-8 py-6">
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-3xl font-bold text-foreground">Photo Gallery</h1>
+            <div className="flex items-center gap-4">
+              <Link
+                href="/documents"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Documents
+              </Link>
+
+              {!selectionMode ? (
+                <>
+                  <button
+                    onClick={toggleSelectionMode}
+                    className="flex items-center gap-2 px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-accent transition-colors"
+                    disabled={photos.length === 0}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Select</span>
+                  </button>
+                  <Link
+                    href="/gallery/upload"
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>Upload</span>
+                  </Link>
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Logout</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={selectAll}
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    onClick={deselectAll}
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Deselect All
+                  </button>
+                  <button
+                    onClick={handleBatchDelete}
+                    disabled={selectedPhotos.size === 0 || deleting}
+                    className="flex items-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>
+                      {deleting
+                        ? "Deleting..."
+                        : `Delete (${selectedPhotos.size})`}
+                    </span>
+                  </button>
+                  <button
+                    onClick={toggleSelectionMode}
+                    className="flex items-center gap-2 px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-accent transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                    <span>Cancel</span>
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Category Filter */}
+          {stats && (
+            <CategoryFilter
+              stats={stats}
+              selectedCategory={selectedCategory}
+              onCategoryChange={setSelectedCategory}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Photo Grid */}
+      <div className="max-w-7xl mx-auto px-8 py-8">
+        {userId ? (
+          <PhotoGrid
+            photos={filteredPhotos}
+            userId={userId}
+            onPhotoDelete={handlePhotoDelete}
+            selectionMode={selectionMode}
+            selectedPhotos={selectedPhotos}
+            onPhotoToggle={togglePhotoSelection}
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="text-6xl mb-4">📷</div>
+            <h3 className="text-xl font-semibold text-foreground mb-2">No photos yet</h3>
+            <p className="text-muted-foreground mb-6">
+              Upload your first photo to get started
+            </p>
+            <Link
+              href="/gallery/upload"
+              className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            >
+              <Upload className="w-5 h-5" />
+              <span>Upload Photo</span>
+            </Link>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

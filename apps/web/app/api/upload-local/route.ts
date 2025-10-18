@@ -54,12 +54,13 @@ export async function POST(req: Request) {
     const fileExtension = file.name.split(".").pop();
     const fileName = `${timestamp}-${randomString}.${fileExtension}`;
 
-    // 创建用户专属上传目录（按用户ID分组）
+    // 创建用户专属上传目录（文档图片存储在 documents 子目录）
     const uploadDir = join(
       process.cwd(),
       "public",
       "images",
-      session.userId
+      session.userId,
+      "documents"
     );
 
     if (!existsSync(uploadDir)) {
@@ -68,10 +69,10 @@ export async function POST(req: Request) {
 
     // 保存文件
     const filePath = join(uploadDir, fileName);
-    await writeFile(filePath, buffer);
+    await writeFile(filePath, buffer as any);
 
     // 返回可访问的 URL
-    const url = `/images/${session.userId}/${fileName}`;
+    const url = `/images/${session.userId}/documents/${fileName}`;
 
     return NextResponse.json({ url });
   } catch (error) {
