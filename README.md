@@ -1,104 +1,277 @@
-<a href="https://novel.sh">
-  <img alt="Novel is a Notion-style WYSIWYG editor with AI-powered autocompletions." src="https://novel.sh/opengraph-image.png">
-  <h1 align="center">Novel</h1>
-</a>
+# Novel Book - Multi-User Document Editor
 
-<p align="center">
-  An open-source Notion-style WYSIWYG editor with AI-powered autocompletions. 
-</p>
+A multi-user document editing application built on the Novel editor (Notion-style WYSIWYG) with local file storage and JWT authentication.
 
-<p align="center">
-  <a href="https://news.ycombinator.com/item?id=36360789"><img src="https://img.shields.io/badge/Hacker%20News-369-%23FF6600" alt="Hacker News"></a>
-  <a href="https://github.com/steven-tey/novel/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/steven-tey/novel?label=license&logo=github&color=f80&logoColor=fff" alt="License" />
-  </a>
-  <a href="https://github.com/steven-tey/novel"><img src="https://img.shields.io/github/stars/steven-tey/novel?style=social" alt="Novel.sh's GitHub repo"></a>
-</p>
+## Features
 
-<p align="center">
-  <a href="#introduction"><strong>Introduction</strong></a> ·
-  <a href="#deploy-your-own"><strong>Deploy Your Own</strong></a> ·
-  <a href="#setting-up-locally"><strong>Setting Up Locally</strong></a> ·
-  <a href="#tech-stack"><strong>Tech Stack</strong></a> ·
-  <a href="#contributing"><strong>Contributing</strong></a> ·
-  <a href="#license"><strong>License</strong></a>
-</p>
-<br/>
-
-## Docs (WIP)
-
-https://novel.sh/docs/introduction
-
-## Introduction
-
-[Novel](https://novel.sh/) is a Notion-style WYSIWYG editor with AI-powered autocompletions.
-
-https://github.com/steven-tey/novel/assets/28986134/2099877f-4f2b-4b1c-8782-5d803d63be5c
-
-<br />
-
-## Deploy Your Own
-
-You can deploy your own version of Novel to Vercel with one click:
-
-[![Deploy with Vercel](https://vercel.com/button)](https://stey.me/novel-deploy)
-
-## Setting Up Locally
-
-To set up Novel locally, you'll need to clone the repository and set up the following environment variables:
-
-- `OPENAI_API_KEY` – your OpenAI API key (you can get one [here](https://platform.openai.com/account/api-keys))
-- `BLOB_READ_WRITE_TOKEN` – your Vercel Blob read/write token (currently [still in beta](https://vercel.com/docs/storage/vercel-blob/quickstart#quickstart), but feel free to [sign up on this form](https://vercel.fyi/blob-beta) for access)
-
-If you've deployed this to Vercel, you can also use [`vc env pull`](https://vercel.com/docs/cli/env#exporting-development-environment-variables) to pull the environment variables from your Vercel project.
-
-To run the app locally, you can run the following commands:
-
-```
-pnpm i
-pnpm dev
-```
-
-## Cross-framework support
-
-While Novel is built for React, we also have a few community-maintained packages for non-React frameworks:
-
-- Svelte: https://novel.sh/svelte
-- Vue: https://novel.sh/vue
-
-## VSCode Extension
-
-Thanks to @bennykok, Novel also has a VSCode Extension: https://novel.sh/vscode
-
-https://github.com/steven-tey/novel/assets/28986134/58ebf7e3-cdb3-43df-878b-119e304f7373
+- 🔐 **User Authentication** - JWT-based authentication with bcrypt password hashing
+- 👥 **Multi-User Support** - Complete user isolation with per-user data storage
+- 📝 **Rich Text Editor** - Notion-style WYSIWYG editor powered by Tiptap
+- 🖼️ **Image Upload** - User-specific image storage with drag-and-drop support
+- 🔍 **Document Search** - Real-time search across document titles, content, and tags
+- 💾 **Auto-Save** - Automatic document saving with 500ms debounce
+- 🎨 **Modern UI** - Clean interface built with Tailwind CSS
+- 🔒 **Secure** - HTTP-only cookies, password encryption, path traversal protection
 
 ## Tech Stack
 
-Novel is built on the following stack:
+### Backend
+- **Next.js 15** - App Router with API routes
+- **TypeScript** - Type-safe development
+- **jose** - JWT token generation and verification
+- **bcryptjs** - Password hashing
+- **File System** - Local JSON storage (easily migrated to database)
 
-- [Next.js](https://nextjs.org/) – framework
-- [Tiptap](https://tiptap.dev/) – text editor
-- [OpenAI](https://openai.com/) - AI completions
-- [Vercel AI SDK](https://sdk.vercel.ai/docs) – AI library
-- [Vercel](https://vercel.com) – deployments
-- [TailwindCSS](https://tailwindcss.com/) – styles
-- [Cal Sans](https://github.com/calcom/font) – font
+### Frontend
+- **React 18** - UI framework
+- **Novel Editor** - Tiptap-based rich text editor
+- **Tailwind CSS** - Styling
+- **Lucide React** - Icons
+- **use-debounce** - Auto-save optimization
 
-## Contributing
+### Architecture
+- **Turborepo** - Monorepo build system
+- **Storage Abstraction** - Repository pattern for easy database migration
+- **Atomic File Writes** - Data integrity with temp file + rename pattern
 
-Here's how you can contribute:
+## Quick Start
 
-- [Open an issue](https://github.com/steven-tey/novel/issues) if you believe you've encountered a bug.
-- Make a [pull request](https://github.com/steven-tey/novel/pull) to add new features/make quality-of-life improvements/fix bugs.
+### Prerequisites
+- Node.js 18+
+- pnpm 9.5.0+
 
-<a href="https://github.com/steven-tey/novel/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=steven-tey/novel" />
-</a>
+### Installation
 
-## Repo Activity
+```bash
+# Clone the repository
+git clone https://github.com/Terryzhang-jp/novel_book.git
+cd novel_book
 
-![Novel.sh repo activity – generated by Axiom](https://repobeats.axiom.co/api/embed/2ebdaa143b0ad6e7c2ee23151da7b37f67da0b36.svg)
+# Install dependencies
+pnpm install
+
+# Setup environment variables
+cd apps/web
+cp .env.example .env.local
+```
+
+### Configuration
+
+Edit `apps/web/.env.local`:
+
+```env
+# Required: JWT secret (minimum 32 characters)
+JWT_SECRET=your-super-secret-key-change-in-production-min-32-chars
+
+# Optional: Enable AI features
+OPENAI_API_KEY=sk-your-openai-api-key
+```
+
+### Development
+
+```bash
+# Start development server
+pnpm dev
+
+# The app will be available at http://localhost:3000
+```
+
+### Build
+
+```bash
+# Build for production
+pnpm build
+
+# Type checking
+pnpm typecheck
+
+# Linting
+pnpm lint
+
+# Format code
+pnpm format
+```
+
+## Usage
+
+### First Time Setup
+
+1. Visit `http://localhost:3000`
+2. Click "Sign up" to create an account
+3. Enter your email, password (min 6 characters), and optional name
+4. You'll be automatically logged in and redirected to your documents
+
+### Creating Documents
+
+1. Click "New Document" button
+2. Enter a document title
+3. Start writing with the rich text editor
+4. Documents auto-save every 500ms
+
+### Editor Features
+
+- **Slash Commands** - Type `/` to see available commands
+- **Formatting** - Bold, italic, underline, strikethrough, code
+- **Headings** - H1, H2, H3
+- **Lists** - Bullet lists, numbered lists, task lists
+- **Code Blocks** - Syntax highlighting
+- **Images** - Drag & drop or paste images
+- **Links** - Add hyperlinks
+- **Math** - LaTeX math equations
+- **AI** - AI-powered writing assistance (with OpenAI API key)
+
+## Project Structure
+
+```
+novel_book/
+├── apps/
+│   └── web/                    # Next.js application
+│       ├── app/                # App router pages
+│       │   ├── api/           # API routes
+│       │   │   ├── auth/      # Authentication endpoints
+│       │   │   ├── documents/ # Document CRUD
+│       │   │   └── upload-local/ # Image upload
+│       │   ├── documents/     # Document pages
+│       │   ├── login/         # Login page
+│       │   └── register/      # Registration page
+│       ├── lib/               # Core logic
+│       │   ├── auth/          # JWT & session management
+│       │   └── storage/       # File storage layer
+│       ├── components/        # React components
+│       ├── middleware.ts      # Route protection
+│       ├── data/              # User data (gitignored)
+│       └── public/images/     # Uploaded images (gitignored)
+└── packages/
+    └── headless/              # Novel editor core
+```
+
+## API Endpoints
+
+### Authentication
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/login` - Login user
+- `POST /api/auth/logout` - Logout user
+
+### Documents
+- `GET /api/documents` - List user's documents
+- `POST /api/documents` - Create new document
+- `GET /api/documents/[id]` - Get document details
+- `PUT /api/documents/[id]` - Update document
+- `DELETE /api/documents/[id]` - Delete document
+
+### Upload
+- `POST /api/upload-local` - Upload image
+
+## Storage Architecture
+
+### File Structure
+
+```
+apps/web/
+├── data/
+│   ├── auth/
+│   │   └── users.json              # All users
+│   ├── documents/
+│   │   └── {userId}/
+│   │       └── {docId}.json        # User's documents
+│   └── indexes/
+│       └── {userId}.json           # Document index
+└── public/images/
+    └── {userId}/                    # User's images
+```
+
+### Storage Layer
+
+The storage layer uses a repository pattern with these components:
+
+- **user-storage.ts** - User CRUD operations
+- **document-storage.ts** - Document CRUD with auto-indexing
+- **index-manager.ts** - Fast document queries
+- **file-system.ts** - Atomic write operations
+- **init.ts** - Directory initialization
+
+### Database Migration
+
+The storage layer is abstracted for easy migration:
+
+1. Implement same interfaces with database queries
+2. Replace storage classes in `lib/storage/`
+3. No changes needed in API routes or frontend
+
+Recommended databases:
+- **Supabase** (PostgreSQL) - Recommended
+- **PlanetScale** (MySQL)
+- **Prisma** + any database
+
+## Security Features
+
+- ✅ JWT authentication with 7-day expiration
+- ✅ bcrypt password hashing (10 rounds)
+- ✅ HTTP-only cookies prevent XSS
+- ✅ Path traversal protection
+- ✅ File type validation (images only)
+- ✅ File size limits (10MB max)
+- ✅ Per-user data isolation
+- ✅ Permission checks on all operations
+
+## Development
+
+### Commands
+
+```bash
+# Development
+pnpm dev              # Start dev server
+pnpm build            # Build for production
+pnpm typecheck        # Type checking
+pnpm lint             # Lint code
+pnpm lint:fix         # Fix lint issues
+pnpm format           # Format code
+pnpm format:fix       # Format and fix
+pnpm clean            # Clean build artifacts
+```
+
+### Testing Multi-User
+
+1. Register User A and create documents
+2. Logout and register User B
+3. Create documents as User B
+4. Verify User A and User B see only their own documents
+5. Check `data/` directory shows proper isolation
+
+## Documentation
+
+- **CLAUDE.md** - Comprehensive guide for Claude Code development
+- **Implementation docs** - See `/doc` directory for detailed implementation notes
+
+## Known Limitations
+
+- **Concurrent Editing**: Last-Write-Wins strategy (suitable for single-user editing)
+- **Search**: Client-side only (may be slow with many documents)
+- **Backup**: No automatic backup (manually backup `data/` directory)
+- **Image Deduplication**: Not implemented
+
+## Future Enhancements
+
+- Real-time collaboration (WebSocket, Y.js)
+- Full-text search (ElasticSearch)
+- Document versioning
+- Image optimization and CDN
+- Password reset functionality
+- Export to PDF/Markdown/HTML
+- Mobile app
 
 ## License
 
-Licensed under the [Apache-2.0 license](https://github.com/steven-tey/novel/blob/main/LICENSE).
+Licensed under the [Apache-2.0 license](LICENSE).
+
+## Acknowledgments
+
+Built on top of [Novel](https://novel.sh/) by [@steventey](https://github.com/steven-tey) - an amazing Notion-style WYSIWYG editor.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+---
+
+**Built with ❤️ using Next.js, Tiptap, and Tailwind CSS**
