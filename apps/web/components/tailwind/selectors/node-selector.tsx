@@ -97,7 +97,7 @@ export const NodeSelector = ({ open, onOpenChange }: NodeSelectorProps) => {
   return (
     <Popover modal={true} open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild className="gap-2 rounded-none border-none hover:bg-accent focus:ring-0">
-        <Button size="sm" variant="ghost" className="gap-2">
+        <Button size="sm" variant="ghost" className="gap-2 text-foreground">
           <span className="whitespace-nowrap text-sm">{activeItem.name}</span>
           <ChevronDown className="h-4 w-4" />
         </Button>
@@ -110,10 +110,10 @@ export const NodeSelector = ({ open, onOpenChange }: NodeSelectorProps) => {
               item.command(editor);
               onOpenChange(false);
             }}
-            className="flex cursor-pointer items-center justify-between rounded-sm px-2 py-1 text-sm hover:bg-accent"
+            className="flex cursor-pointer items-center justify-between rounded-sm px-2 py-1 text-sm text-foreground hover:bg-accent"
           >
             <div className="flex items-center space-x-2">
-              <div className="rounded-sm border p-1">
+              <div className="rounded-sm border border-muted p-1">
                 <item.icon className="h-3 w-3" />
               </div>
               <span>{item.name}</span>

@@ -102,7 +102,7 @@ export const ColorSelector = ({ open, onOpenChange }: ColorSelectorProps) => {
   return (
     <Popover modal={true} open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
-        <Button size="sm" className="gap-2 rounded-none" variant="ghost">
+        <Button size="sm" className="gap-2 rounded-none text-foreground" variant="ghost">
           <span
             className="rounded-sm px-1"
             style={{
@@ -136,10 +136,10 @@ export const ColorSelector = ({ open, onOpenChange }: ColorSelectorProps) => {
                     .run();
                 onOpenChange(false);
               }}
-              className="flex cursor-pointer items-center justify-between px-2 py-1 text-sm hover:bg-accent"
+              className="flex cursor-pointer items-center justify-between px-2 py-1 text-sm text-foreground hover:bg-accent"
             >
               <div className="flex items-center gap-2">
-                <div className="rounded-sm border px-2 py-px font-medium" style={{ color }}>
+                <div className="rounded-sm border border-muted px-2 py-px font-medium" style={{ color }}>
                   A
                 </div>
                 <span>{name}</span>
@@ -157,10 +157,10 @@ export const ColorSelector = ({ open, onOpenChange }: ColorSelectorProps) => {
                 name !== "Default" && editor.chain().focus().setHighlight({ color }).run();
                 onOpenChange(false);
               }}
-              className="flex cursor-pointer items-center justify-between px-2 py-1 text-sm hover:bg-accent"
+              className="flex cursor-pointer items-center justify-between px-2 py-1 text-sm text-foreground hover:bg-accent"
             >
               <div className="flex items-center gap-2">
-                <div className="rounded-sm border px-2 py-px font-medium" style={{ backgroundColor: color }}>
+                <div className="rounded-sm border border-muted px-2 py-px font-medium" style={{ backgroundColor: color }}>
                   A
                 </div>
                 <span>{name}</span>

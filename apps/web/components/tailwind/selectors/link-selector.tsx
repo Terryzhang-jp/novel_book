@@ -42,7 +42,7 @@ export const LinkSelector = ({ open, onOpenChange }: LinkSelectorProps) => {
   return (
     <Popover modal={true} open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
-        <Button size="sm" variant="ghost" className="gap-2 rounded-none border-none">
+        <Button size="sm" variant="ghost" className="gap-2 rounded-none border-none text-foreground">
           <p className="text-base">↗</p>
           <p
             className={cn("underline decoration-stone-400 underline-offset-4", {
@@ -71,7 +71,7 @@ export const LinkSelector = ({ open, onOpenChange }: LinkSelectorProps) => {
             ref={inputRef}
             type="text"
             placeholder="Paste a link"
-            className="flex-1 bg-background p-1 text-sm outline-none"
+            className="flex-1 bg-background p-1 text-sm text-foreground outline-none placeholder:text-muted-foreground"
             defaultValue={editor.getAttributes("link").href || ""}
           />
           {editor.getAttributes("link").href ? (

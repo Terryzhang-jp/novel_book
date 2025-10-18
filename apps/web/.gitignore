@@ -1,1 +1,11 @@
 .vercel
+
+# 本地数据存储（不要提交到 git）
+data/
+
+# 上传的图片（不要提交到 git）
+public/images/*
+!public/images/.gitkeep
+
+# 环境变量
+.env.local

@@ -115,10 +115,28 @@ ul[data-type="taskList"] li[data-checked="true"] > div > p {
   text-decoration-thickness: 2px;
 }
 
-/* Overwrite tippy-box original max-width */
+/* Overwrite tippy-box original max-width and border */
 
 .tippy-box {
   max-width: 400px !important;
+  border: none !important;
+  outline: none !important;
+}
+
+.tippy-box[data-theme~="light"] {
+  border: none !important;
+  outline: none !important;
+}
+
+.tippy-content {
+  border: none !important;
+  outline: none !important;
+}
+
+/* Remove all borders from tippy */
+[data-tippy-root] * {
+  border: none !important;
+  outline: none !important;
 }
 
 .ProseMirror:not(.dragging) .ProseMirror-selectednode {
