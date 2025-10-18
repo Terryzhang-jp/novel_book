@@ -291,6 +291,189 @@ export class PhotoStorage {
   async getStats(userId: string): Promise<PhotoStats> {
     return await indexManager.getPhotoStats(userId);
   }
+
+  /**
+   * 为照片设置地点（关联地点库）
+   * 这会从地点库获取坐标并更新照片的location metadata
+   *
+   * @param photoId - 照片ID
+   * @param userId - 用户ID（用于权限验证）
+   * @param locationId - 地点库中的地点ID
+   * @returns 更新后的照片
+   */
+  async setLocation(
+    photoId: string,
+    userId: string,
+    locationId: string
+  ): Promise<Photo> {
+    // 获取照片
+    const photo = await this.findById(photoId);
+    if (!photo) {
+      throw new NotFoundError("Photo");
+    }
+
+    // 权限检查
+    if (photo.userId !== userId) {
+      throw new UnauthorizedError(
+        "You don't have permission to update this photo"
+      );
+    }
+
+    // 获取地点信息（需要导入locationStorage）
+    const { locationStorage } = await import("./location-storage");
+    const location = await locationStorage.findById(locationId, userId);
+    if (!location) {
+      throw new NotFoundError("Location");
+    }
+
+    // 更新照片
+    const updatedPhoto: Photo = {
+      ...photo,
+      locationId,
+      metadata: {
+        ...photo.metadata,
+        location: {
+          latitude: location.coordinates.latitude,
+          longitude: location.coordinates.longitude,
+          altitude: photo.metadata.location?.altitude,
+          source: "location-library",
+        },
+      },
+      updatedAt: new Date().toISOString(),
+    };
+
+    // 重新计算分类
+    updatedPhoto.category = this.categorize(updatedPhoto.metadata);
+
+    // 保存照片
+    await atomicWriteJSON(this.getPhotoPath(photoId), updatedPhoto);
+
+    // 更新索引
+    const photoIndex: PhotoIndex = {
+      id: updatedPhoto.id,
+      fileName: updatedPhoto.fileName,
+      category: updatedPhoto.category,
+      dateTime: updatedPhoto.metadata.dateTime,
+      location: updatedPhoto.metadata.location
+        ? {
+            latitude: updatedPhoto.metadata.location.latitude,
+            longitude: updatedPhoto.metadata.location.longitude,
+          }
+        : undefined,
+      updatedAt: updatedPhoto.updatedAt,
+    };
+    await indexManager.updatePhoto(userId, photoId, photoIndex);
+
+    // 增加地点的使用计数
+    await locationStorage.incrementUsage(locationId, userId);
+
+    return updatedPhoto;
+  }
+
+  /**
+   * 移除照片的地点关联
+   * 这会移除locationId，但保留metadata.location（如果来自EXIF）
+   *
+   * @param photoId - 照片ID
+   * @param userId - 用户ID（用于权限验证）
+   * @returns 更新后的照片
+   */
+  async removeLocation(photoId: string, userId: string): Promise<Photo> {
+    // 获取照片
+    const photo = await this.findById(photoId);
+    if (!photo) {
+      throw new NotFoundError("Photo");
+    }
+
+    // 权限检查
+    if (photo.userId !== userId) {
+      throw new UnauthorizedError(
+        "You don't have permission to update this photo"
+      );
+    }
+
+    const oldLocationId = photo.locationId;
+
+    // 更新照片 - 移除地点库关联
+    const updatedPhoto: Photo = {
+      ...photo,
+      locationId: undefined,
+      // 如果location来自地点库，则移除；如果来自EXIF，则改回exif标记
+      metadata: {
+        ...photo.metadata,
+        location:
+          photo.metadata.location?.source === "location-library"
+            ? undefined
+            : photo.metadata.location
+            ? {
+                ...photo.metadata.location,
+                source: "exif" as const,
+              }
+            : undefined,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+
+    // 重新计算分类
+    updatedPhoto.category = this.categorize(updatedPhoto.metadata);
+
+    // 保存照片
+    await atomicWriteJSON(this.getPhotoPath(photoId), updatedPhoto);
+
+    // 更新索引
+    const photoIndex: PhotoIndex = {
+      id: updatedPhoto.id,
+      fileName: updatedPhoto.fileName,
+      category: updatedPhoto.category,
+      dateTime: updatedPhoto.metadata.dateTime,
+      location: updatedPhoto.metadata.location
+        ? {
+            latitude: updatedPhoto.metadata.location.latitude,
+            longitude: updatedPhoto.metadata.location.longitude,
+          }
+        : undefined,
+      updatedAt: updatedPhoto.updatedAt,
+    };
+    await indexManager.updatePhoto(userId, photoId, photoIndex);
+
+    // 减少地点的使用计数
+    if (oldLocationId) {
+      const { locationStorage } = await import("./location-storage");
+      await locationStorage.decrementUsage(oldLocationId, userId);
+    }
+
+    return updatedPhoto;
+  }
+
+  /**
+   * 批量为多张照片设置地点
+   * 用于批量操作功能
+   *
+   * @param photoIds - 照片ID数组
+   * @param userId - 用户ID（用于权限验证）
+   * @param locationId - 地点库中的地点ID
+   * @returns 更新成功的照片数量
+   */
+  async batchSetLocation(
+    photoIds: string[],
+    userId: string,
+    locationId: string
+  ): Promise<{ success: number; failed: number }> {
+    let success = 0;
+    let failed = 0;
+
+    for (const photoId of photoIds) {
+      try {
+        await this.setLocation(photoId, userId, locationId);
+        success++;
+      } catch (error) {
+        console.error(`Failed to set location for photo ${photoId}:`, error);
+        failed++;
+      }
+    }
+
+    return { success, failed };
+  }
 }
 
 // 导出单例

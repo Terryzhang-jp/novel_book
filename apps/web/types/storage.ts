@@ -64,6 +64,14 @@ export type PhotoCategory =
   | "neither"; // 无时间 + 无地点
 
 /**
+ * 地点来源类型
+ */
+export type LocationSource =
+  | "exif" // 来自照片EXIF数据
+  | "manual" // 用户手动输入
+  | "location-library"; // 来自地点库
+
+/**
  * 照片数据模型
  */
 export interface Photo {
@@ -72,6 +80,9 @@ export interface Photo {
   fileName: string; // 存储的文件名
   originalName: string; // 原始文件名
 
+  // 地点库关联（优先级高于EXIF）
+  locationId?: string; // 关联的地点库ID
+
   // EXIF 元数据
   metadata: {
     dateTime?: string; // 拍摄时间 (ISO 8601)
@@ -79,6 +90,7 @@ export interface Photo {
       latitude: number; // 纬度
       longitude: number; // 经度
       altitude?: number; // 海拔（米）
+      source?: LocationSource; // 地点来源（新增字段）
     };
     camera?: {
       make?: string; // 相机制造商
@@ -131,4 +143,57 @@ export interface PhotoStats {
     "location-only": number;
     neither: number;
   };
+}
+
+/**
+ * 地点数据模型
+ */
+export interface Location {
+  id: string; // UUID
+  userId: string; // 所属用户ID
+  name: string; // 用户自定义名称（如"家"、"埃菲尔铁塔"）
+
+  // 坐标（必需）
+  coordinates: {
+    latitude: number; // 纬度
+    longitude: number; // 经度
+  };
+
+  // 地址信息（可选，来自反向地理编码）
+  address?: {
+    formattedAddress: string; // 完整地址
+    country?: string; // 国家
+    state?: string; // 州/省
+    city?: string; // 城市
+    postalCode?: string; // 邮编
+  };
+
+  // 可选元数据
+  placeId?: string; // Google Place ID（如果可用）
+  category?: string; // 用户自定义分类
+  notes?: string; // 备注
+
+  // 使用追踪
+  usageCount: number; // 被多少张照片使用
+  lastUsedAt?: string; // 最后使用时间 (ISO 8601)
+
+  // 时间戳
+  createdAt: string; // ISO 8601
+  updatedAt: string;
+}
+
+/**
+ * 地点索引（用于快速查询）
+ */
+export interface LocationIndex {
+  id: string;
+  name: string;
+  coordinates: {
+    latitude: number;
+    longitude: number;
+  };
+  formattedAddress?: string;
+  usageCount: number;
+  lastUsedAt?: string;
+  updatedAt: string;
 }

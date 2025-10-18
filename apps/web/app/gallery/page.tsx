@@ -3,10 +3,12 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Upload, LogOut, Trash2, X } from "lucide-react";
+import { Upload, LogOut, Trash2, X, MapPin, Map } from "lucide-react";
 import type { PhotoIndex, PhotoCategory, PhotoStats } from "@/types/storage";
 import { CategoryFilter } from "@/components/gallery/category-filter";
 import { PhotoGrid } from "@/components/gallery/photo-grid";
+import { PhotoDetailModal } from "@/components/photos/photo-detail-modal";
+import { BatchLocationAssignment } from "@/components/photos/batch-location-assignment";
 
 export default function GalleryPage() {
   const router = useRouter();
@@ -18,6 +20,8 @@ export default function GalleryPage() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [detailPhotoId, setDetailPhotoId] = useState<string | null>(null);
+  const [showBatchLocationModal, setShowBatchLocationModal] = useState(false);
 
   useEffect(() => {
     fetchPhotos();
@@ -127,10 +131,72 @@ export default function GalleryPage() {
     }
   };
 
+  /**
+   * Handle batch location assignment
+   */
+  const handleBatchLocationClick = () => {
+    if (selectedPhotos.size === 0) return;
+    setShowBatchLocationModal(true);
+  };
+
+  /**
+   * Handle batch location assignment completion
+   */
+  const handleBatchLocationComplete = async (result: { success: number; failed: number }) => {
+    // Close the modal
+    setShowBatchLocationModal(false);
+
+    // Refresh photos to show updated location data
+    await fetchPhotos();
+
+    // Optionally: clear selection and exit selection mode
+    // Commenting this out so users can continue selecting if needed
+    // setSelectedPhotos(new Set());
+    // setSelectionMode(false);
+  };
+
   const filteredPhotos =
     selectedCategory === "all"
       ? photos
       : photos.filter((photo) => photo.category === selectedCategory);
+
+  /**
+   * Handle photo click to open detail modal
+   */
+  const handlePhotoClick = (photoId: string) => {
+    setDetailPhotoId(photoId);
+  };
+
+  /**
+   * Handle navigation in photo detail modal
+   */
+  const handleDetailNavigate = (direction: 'prev' | 'next') => {
+    if (!detailPhotoId) return;
+
+    const currentIndex = filteredPhotos.findIndex((p) => p.id === detailPhotoId);
+    if (currentIndex === -1) return;
+
+    if (direction === 'prev' && currentIndex > 0) {
+      setDetailPhotoId(filteredPhotos[currentIndex - 1].id);
+    } else if (direction === 'next' && currentIndex < filteredPhotos.length - 1) {
+      setDetailPhotoId(filteredPhotos[currentIndex + 1].id);
+    }
+  };
+
+  /**
+   * Get navigation state for detail modal
+   */
+  const getNavigationState = () => {
+    if (!detailPhotoId) return { hasPrev: false, hasNext: false };
+
+    const currentIndex = filteredPhotos.findIndex((p) => p.id === detailPhotoId);
+    if (currentIndex === -1) return { hasPrev: false, hasNext: false };
+
+    return {
+      hasPrev: currentIndex > 0,
+      hasNext: currentIndex < filteredPhotos.length - 1,
+    };
+  };
 
   if (loading) {
     return (
@@ -156,6 +222,20 @@ export default function GalleryPage() {
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
                 Documents
+              </Link>
+              <Link
+                href="/gallery/map"
+                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Map className="w-4 h-4" />
+                Map
+              </Link>
+              <Link
+                href="/gallery/locations"
+                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <MapPin className="w-4 h-4" />
+                Locations
               </Link>
 
               {!selectionMode ? (
@@ -196,6 +276,14 @@ export default function GalleryPage() {
                     className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Deselect All
+                  </button>
+                  <button
+                    onClick={handleBatchLocationClick}
+                    disabled={selectedPhotos.size === 0}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <MapPin className="w-4 h-4" />
+                    <span>Assign Location ({selectedPhotos.size})</span>
                   </button>
                   <button
                     onClick={handleBatchDelete}
@@ -242,6 +330,7 @@ export default function GalleryPage() {
             selectionMode={selectionMode}
             selectedPhotos={selectedPhotos}
             onPhotoToggle={togglePhotoSelection}
+            onPhotoClick={handlePhotoClick}
           />
         ) : (
           <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -260,6 +349,28 @@ export default function GalleryPage() {
           </div>
         )}
       </div>
+
+      {/* Photo Detail Modal */}
+      {userId && (
+        <PhotoDetailModal
+          isOpen={!!detailPhotoId}
+          photoId={detailPhotoId}
+          userId={userId}
+          onClose={() => setDetailPhotoId(null)}
+          onNavigate={handleDetailNavigate}
+          hasPrev={getNavigationState().hasPrev}
+          hasNext={getNavigationState().hasNext}
+          onPhotoUpdate={fetchPhotos}
+        />
+      )}
+
+      {/* Batch Location Assignment Modal */}
+      <BatchLocationAssignment
+        isOpen={showBatchLocationModal}
+        photoIds={Array.from(selectedPhotos)}
+        onClose={() => setShowBatchLocationModal(false)}
+        onComplete={handleBatchLocationComplete}
+      />
     </div>
   );
 }

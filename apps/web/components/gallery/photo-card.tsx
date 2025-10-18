@@ -12,6 +12,7 @@ interface PhotoCardProps {
   selectionMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: (photoId: string) => void;
+  onClick?: (photoId: string) => void;
 }
 
 export function PhotoCard({
@@ -21,6 +22,7 @@ export function PhotoCard({
   selectionMode = false,
   isSelected = false,
   onToggleSelect,
+  onClick,
 }: PhotoCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -58,13 +60,15 @@ export function PhotoCard({
   const handleClick = () => {
     if (selectionMode && onToggleSelect) {
       onToggleSelect(photo.id);
+    } else if (onClick) {
+      onClick(photo.id);
     }
   };
 
   return (
     <div
       className={`group relative bg-card rounded-lg overflow-hidden shadow-md transition-all duration-200 ${
-        selectionMode ? "cursor-pointer" : "hover:shadow-xl hover:-translate-y-1"
+        selectionMode || onClick ? "cursor-pointer" : "hover:shadow-xl hover:-translate-y-1"
       } ${isSelected ? "ring-4 ring-primary" : ""}`}
       onClick={handleClick}
     >

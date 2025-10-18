@@ -11,6 +11,7 @@ interface PhotoGridProps {
   selectionMode?: boolean;
   selectedPhotos?: Set<string>;
   onPhotoToggle?: (photoId: string) => void;
+  onPhotoClick?: (photoId: string) => void;
 }
 
 export function PhotoGrid({
@@ -20,6 +21,7 @@ export function PhotoGrid({
   selectionMode = false,
   selectedPhotos = new Set(),
   onPhotoToggle,
+  onPhotoClick,
 }: PhotoGridProps) {
   const breakpointColumns = {
     default: 4,
@@ -55,6 +57,7 @@ export function PhotoGrid({
             selectionMode={selectionMode}
             isSelected={selectedPhotos.has(photo.id)}
             onToggleSelect={onPhotoToggle}
+            onClick={onPhotoClick}
           />
         </div>
       ))}

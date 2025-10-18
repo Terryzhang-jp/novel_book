@@ -4,6 +4,7 @@ import type {
   PhotoIndex,
   PhotoCategory,
   PhotoStats,
+  LocationIndex,
 } from "@/types/storage";
 import { atomicWriteJSON, readJSON, exists } from "./file-system";
 import { PATHS } from "./init";
@@ -210,6 +211,99 @@ export class IndexManager {
     });
 
     return stats;
+  }
+
+  // ==================== 地点索引方法 ====================
+
+  /**
+   * 获取用户地点索引文件路径
+   */
+  private getUserLocationIndexPath(userId: string): string {
+    return join(PATHS.INDEXES, `user-${userId}-locations.json`);
+  }
+
+  /**
+   * 读取用户的地点索引
+   */
+  async getUserLocations(userId: string): Promise<LocationIndex[]> {
+    const path = this.getUserLocationIndexPath(userId);
+    if (!exists(path)) {
+      return [];
+    }
+    return await readJSON<LocationIndex[]>(path);
+  }
+
+  /**
+   * 添加地点到索引
+   */
+  async addLocation(userId: string, location: LocationIndex): Promise<void> {
+    const locations = await this.getUserLocations(userId);
+    locations.push(location);
+
+    // 按使用次数倒序排序（最常用的在前面）
+    // 如果使用次数相同，按更新时间倒序排序
+    locations.sort((a, b) => {
+      if (b.usageCount !== a.usageCount) {
+        return b.usageCount - a.usageCount;
+      }
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+
+    await atomicWriteJSON(this.getUserLocationIndexPath(userId), locations);
+  }
+
+  /**
+   * 更新索引中的地点信息
+   */
+  async updateLocation(
+    userId: string,
+    locationId: string,
+    updates: LocationIndex
+  ): Promise<void> {
+    const locations = await this.getUserLocations(userId);
+    const index = locations.findIndex((loc) => loc.id === locationId);
+
+    if (index !== -1) {
+      locations[index] = updates;
+
+      // 重新排序
+      locations.sort((a, b) => {
+        if (b.usageCount !== a.usageCount) {
+          return b.usageCount - a.usageCount;
+        }
+        return (
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+      });
+
+      await atomicWriteJSON(this.getUserLocationIndexPath(userId), locations);
+    }
+  }
+
+  /**
+   * 从索引中移除地点
+   */
+  async removeLocation(userId: string, locationId: string): Promise<void> {
+    const locations = await this.getUserLocations(userId);
+    const filtered = locations.filter((loc) => loc.id !== locationId);
+    await atomicWriteJSON(this.getUserLocationIndexPath(userId), filtered);
+  }
+
+  /**
+   * 搜索地点（简单的名称和地址搜索）
+   */
+  async searchLocations(
+    userId: string,
+    query: string
+  ): Promise<LocationIndex[]> {
+    const locations = await this.getUserLocations(userId);
+    const lowerQuery = query.toLowerCase();
+
+    return locations.filter(
+      (loc) =>
+        loc.name.toLowerCase().includes(lowerQuery) ||
+        loc.formattedAddress?.toLowerCase().includes(lowerQuery)
+    );
   }
 }
 

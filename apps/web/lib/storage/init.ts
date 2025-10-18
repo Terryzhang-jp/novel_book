@@ -16,6 +16,7 @@ export const PATHS = {
   AUTH: join(getDataRoot(), "auth"),
   DOCUMENTS: join(getDataRoot(), "documents"),
   PHOTOS: join(getDataRoot(), "photos"),
+  LOCATIONS: join(getDataRoot(), "locations"),
   INDEXES: join(getDataRoot(), "indexes"),
   IMAGES: join(process.cwd(), "public", "images"),
 
@@ -34,6 +35,7 @@ export async function initializeStorage(): Promise<void> {
   await ensureDir(PATHS.AUTH);
   await ensureDir(PATHS.DOCUMENTS);
   await ensureDir(PATHS.PHOTOS);
+  await ensureDir(PATHS.LOCATIONS);
   await ensureDir(PATHS.INDEXES);
   await ensureDir(PATHS.IMAGES);
 

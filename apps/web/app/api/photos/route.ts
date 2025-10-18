@@ -86,10 +86,12 @@ export async function GET(req: Request) {
   try {
     // 验证用户身份
     const session = await requireAuth(req);
+    console.log("[GET /api/photos] User authenticated:", session.userId);
 
     // 获取查询参数
     const { searchParams } = new URL(req.url);
     const category = searchParams.get("category") as PhotoCategory | null;
+    console.log("[GET /api/photos] Category filter:", category);
 
     // 获取照片列表
     let photos;
@@ -98,9 +100,11 @@ export async function GET(req: Request) {
     } else {
       photos = await photoStorage.findByUserId(session.userId);
     }
+    console.log("[GET /api/photos] Found photos:", photos.length);
 
     // 获取统计信息
     const stats = await photoStorage.getStats(session.userId);
+    console.log("[GET /api/photos] Stats:", JSON.stringify(stats));
 
     return NextResponse.json({
       photos,
@@ -108,7 +112,8 @@ export async function GET(req: Request) {
       userId: session.userId,
     });
   } catch (error) {
-    console.error("Get photos error:", error);
+    console.error("[GET /api/photos] Error occurred:", error);
+    console.error("[GET /api/photos] Error stack:", error instanceof Error ? error.stack : "No stack");
 
     // 处理认证错误
     if (error instanceof Error && error.message === "Please login to continue") {
@@ -119,7 +124,7 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json(
-      { error: "Failed to get photos" },
+      { error: "Failed to get photos", details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

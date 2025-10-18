@@ -1,0 +1,99 @@
+/**
+ * Leaflet Map Styles
+ *
+ * Custom styles to integrate Leaflet maps with our design system.
+ *
+ * Note: The core Leaflet CSS is loaded via CDN in the map components
+ * to avoid build issues with image assets.
+ */
+
+/* Custom map container styles */
+.leaflet-container {
+  font-family: inherit;
+  font-size: 14px;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* Customize popup styles to match our theme */
+.leaflet-popup-content-wrapper {
+  background-color: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border-radius: var(--radius);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+.leaflet-popup-tip {
+  background-color: hsl(var(--card));
+}
+
+.leaflet-popup-close-button {
+  color: hsl(var(--muted-foreground));
+}
+
+.leaflet-popup-close-button:hover {
+  color: hsl(var(--foreground));
+}
+
+/* Customize marker shadow for our theme */
+.leaflet-marker-icon {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+/* Control buttons (zoom, layers, etc) */
+.leaflet-control-zoom a {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+}
+
+.leaflet-control-zoom a:hover {
+  background-color: hsl(var(--accent));
+}
+
+/* Attribution */
+.leaflet-control-attribution {
+  background-color: hsla(var(--background) / 0.8);
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+}
+
+.leaflet-control-attribution a {
+  color: hsl(var(--primary));
+}
+
+/* Dark mode adjustments */
+.dark .leaflet-layer,
+.dark .leaflet-control-zoom-in,
+.dark .leaflet-control-zoom-out,
+.dark .leaflet-control-attribution {
+  filter: brightness(0.9) contrast(1.1);
+}
+
+/* Custom marker pulse animation */
+@keyframes marker-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+.marker-pulse {
+  animation: marker-pulse 2s infinite;
+}
+
+/* Clickable marker cursor */
+.leaflet-interactive {
+  cursor: pointer;
+}
+
+/* Map loading state */
+.leaflet-container.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
