@@ -52,6 +52,67 @@ export async function GET(
 }
 
 /**
+ * PUT /api/photos/[id] - 更新照片信息
+ * 支持更新：description（旅行日记）
+ */
+export async function PUT(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    // 验证用户身份
+    const session = await requireAuth(req);
+
+    const { id: photoId } = await params;
+    const body = await req.json();
+
+    // 目前只支持更新 description
+    if (body.description !== undefined) {
+      const updatedPhoto = await photoStorage.updateDescription(
+        photoId,
+        session.userId,
+        body.description
+      );
+
+      return NextResponse.json({ photo: updatedPhoto });
+    }
+
+    // 未来可以在这里添加其他字段的更新逻辑
+    // 例如：title, tags 等
+
+    return NextResponse.json(
+      { error: "No valid fields to update" },
+      { status: 400 }
+    );
+  } catch (error) {
+    console.error("Update photo error:", error);
+
+    if (error instanceof NotFoundError) {
+      return NextResponse.json({ error: "Photo not found" }, { status: 404 });
+    }
+
+    if (error instanceof UnauthorizedError) {
+      return NextResponse.json(
+        { error: "You don't have permission to update this photo" },
+        { status: 403 }
+      );
+    }
+
+    if (error instanceof Error && error.message === "Please login to continue") {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: "Failed to update photo" },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * DELETE /api/photos/[id] - 删除照片
  */
 export async function DELETE(

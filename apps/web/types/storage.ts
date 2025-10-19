@@ -109,7 +109,7 @@ export interface Photo {
 
   // 可选字段
   title?: string; // 自定义标题
-  description?: string; // 描述
+  description?: JSONContent; // 描述（Novel编辑器格式）
   tags?: string[]; // 标签
 
   // 时间戳

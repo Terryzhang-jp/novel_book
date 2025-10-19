@@ -3,6 +3,7 @@ import { join } from "path";
 import { writeFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import exifr from "exifr";
+import type { JSONContent } from "novel";
 import type { Photo, PhotoIndex, PhotoCategory, PhotoStats } from "@/types/storage";
 import {
   atomicWriteJSON,
@@ -473,6 +474,48 @@ export class PhotoStorage {
     }
 
     return { success, failed };
+  }
+
+  /**
+   * 更新照片的描述（用于旅行日记功能）
+   *
+   * @param photoId - 照片ID
+   * @param userId - 用户ID（用于权限验证）
+   * @param description - 新的描述内容（Novel编辑器JSONContent格式）
+   * @returns 更新后的照片
+   */
+  async updateDescription(
+    photoId: string,
+    userId: string,
+    description: JSONContent
+  ): Promise<Photo> {
+    // 获取照片
+    const photo = await this.findById(photoId);
+    if (!photo) {
+      throw new NotFoundError("Photo");
+    }
+
+    // 权限检查
+    if (photo.userId !== userId) {
+      throw new UnauthorizedError(
+        "You don't have permission to update this photo"
+      );
+    }
+
+    // 更新照片描述
+    const updatedPhoto: Photo = {
+      ...photo,
+      description,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // 保存照片
+    await atomicWriteJSON(this.getPhotoPath(photoId), updatedPhoto);
+
+    // 注意：description 不影响索引，所以不需要更新索引
+    // 索引只包含基本信息（id, fileName, category, dateTime, location）
+
+    return updatedPhoto;
   }
 }
 

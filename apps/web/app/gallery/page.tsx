@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Upload, LogOut, Trash2, X, MapPin, Map } from "lucide-react";
+import { Upload, LogOut, Trash2, X, MapPin, Map, BookOpen } from "lucide-react";
 import type { PhotoIndex, PhotoCategory, PhotoStats } from "@/types/storage";
 import { CategoryFilter } from "@/components/gallery/category-filter";
 import { PhotoGrid } from "@/components/gallery/photo-grid";
@@ -222,6 +222,13 @@ export default function GalleryPage() {
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
                 Documents
+              </Link>
+              <Link
+                href="/gallery/journal"
+                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <BookOpen className="w-4 h-4" />
+                Journal
               </Link>
               <Link
                 href="/gallery/map"
