@@ -17,6 +17,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Loader2 } from 'lucide-react';
+import { AppLayout } from '@/components/layout/app-layout';
 import { JournalLayout } from '@/components/journal/journal-layout';
 import { PhotoListSidebar } from '@/components/journal/photo-list-sidebar';
 import { PhotoCaptionEditor } from '@/components/journal/photo-caption-editor';
@@ -33,7 +34,7 @@ export default function JournalPage() {
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * Fetch all photos with full details (not just index)
+   * Fetch all photos (now returns complete Photo[] with fileUrl)
    */
   const fetchPhotos = useCallback(async () => {
     try {
@@ -52,20 +53,9 @@ export default function JournalPage() {
 
       const data = await response.json();
 
-      // Fetch full details for each photo
-      const photosWithDetails = await Promise.all(
-        data.photos.map(async (photoIndex: any) => {
-          const detailResponse = await fetch(`/api/photos/${photoIndex.id}`);
-          if (detailResponse.ok) {
-            const detailData = await detailResponse.json();
-            return detailData.photo;
-          }
-          return null;
-        })
-      );
-
-      const validPhotos = photosWithDetails.filter(
-        (photo): photo is Photo => photo !== null
+      // API now returns complete Photo[] objects (no need for individual detail requests)
+      const validPhotos = data.photos.filter(
+        (photo: any): photo is Photo => photo !== null && photo.id
       );
 
       setPhotos(validPhotos);
@@ -131,80 +121,86 @@ export default function JournalPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading journal...</p>
+      <AppLayout>
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading journal...</p>
+          </div>
         </div>
-      </div>
+      </AppLayout>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-destructive mb-4">{error}</p>
-          <button
-            type="button"
-            onClick={() => fetchPhotos()}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-          >
-            Try Again
-          </button>
+      <AppLayout>
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-destructive mb-4">{error}</p>
+            <button
+              type="button"
+              onClick={() => fetchPhotos()}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
         </div>
-      </div>
+      </AppLayout>
     );
   }
 
   return (
-    <div className="h-screen flex flex-col">
-      {/* Header */}
-      <header className="border-b border-border bg-card px-6 py-4 flex-shrink-0">
-        <div className="flex items-center gap-4">
-          <Link
-            href="/gallery"
-            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back to Gallery</span>
-          </Link>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold">Travel Journal</h1>
+    <AppLayout>
+      <div className="h-screen flex flex-col">
+        {/* Header */}
+        <header className="border-b border-border bg-card px-6 py-4 flex-shrink-0">
+          <div className="flex items-center gap-4">
+            <Link
+              href="/gallery"
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back to Gallery</span>
+            </Link>
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold">Travel Journal</h1>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Content */}
-      <div className="flex-1 overflow-hidden">
-        {userId ? (
-          <JournalLayout
-            sidebar={
-              <PhotoListSidebar
-                photos={photos}
-                selectedPhotoId={selectedPhotoId}
-                onPhotoSelect={handlePhotoSelect}
-                userId={userId}
-              />
-            }
-            editor={
-              <PhotoCaptionEditor
-                photoId={selectedPhotoId}
-                userId={userId}
-                photoFileName={selectedPhoto?.fileName}
-                initialDescription={selectedPhoto?.description || createEmptyJSONContent()}
-                onSave={handleSave}
-              />
-            }
-          />
-        ) : (
-          <div className="h-full flex items-center justify-center">
-            <p className="text-muted-foreground">
-              Please log in to access the journal
-            </p>
-          </div>
-        )}
+        {/* Main Content */}
+        <div className="flex-1 overflow-hidden">
+          {userId ? (
+            <JournalLayout
+              sidebar={
+                <PhotoListSidebar
+                  photos={photos}
+                  selectedPhotoId={selectedPhotoId}
+                  onPhotoSelect={handlePhotoSelect}
+                  userId={userId}
+                />
+              }
+              editor={
+                <PhotoCaptionEditor
+                  photoId={selectedPhotoId}
+                  userId={userId}
+                  photoFileUrl={selectedPhoto?.fileUrl}
+                  initialDescription={selectedPhoto?.description || createEmptyJSONContent()}
+                  onSave={handleSave}
+                />
+              }
+            />
+          ) : (
+            <div className="h-full flex items-center justify-center">
+              <p className="text-muted-foreground">
+                Please log in to access the journal
+              </p>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </AppLayout>
   );
 }

@@ -79,6 +79,7 @@ export interface Photo {
   userId: string; // 所属用户ID
   fileName: string; // 存储的文件名
   originalName: string; // 原始文件名
+  fileUrl: string; // Supabase Storage 公开 URL
 
   // 地点库关联（优先级高于EXIF）
   locationId?: string; // 关联的地点库ID
@@ -111,6 +112,9 @@ export interface Photo {
   title?: string; // 自定义标题
   description?: JSONContent; // 描述（Novel编辑器格式）
   tags?: string[]; // 标签
+
+  // 公开设置
+  isPublic?: boolean; // 是否公开（默认 true）- 用于公共地图展示
 
   // 时间戳
   createdAt: string; // 上传时间 (ISO 8601)

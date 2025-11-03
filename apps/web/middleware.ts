@@ -7,8 +7,14 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Public routes (不需要认证)
-  const publicRoutes = ["/login", "/register"];
+  const publicRoutes = ["/login", "/register", "/chichibu"];
   const isPublicRoute = publicRoutes.some((route) =>
+    pathname.startsWith(route)
+  );
+
+  // Auth-only routes (已登录用户不应访问，如登录/注册页)
+  const authOnlyRoutes = ["/login", "/register"];
+  const isAuthOnlyRoute = authOnlyRoutes.some((route) =>
     pathname.startsWith(route)
   );
 
@@ -32,11 +38,12 @@ export async function middleware(request: NextRequest) {
     await verifyToken(token);
 
     // Token 有效
-    // 如果访问登录/注册页面，重定向到文档列表
-    if (isPublicRoute) {
+    // 如果访问登录/注册页面（而不是其他公开页面），重定向到文档列表
+    if (isAuthOnlyRoute) {
       return NextResponse.redirect(new URL("/documents", request.url));
     }
 
+    // 其他页面（包括 /chichibu）正常访问
     return NextResponse.next();
   } catch (error) {
     // Token 无效，删除 cookie 并重定向到登录

@@ -19,6 +19,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { Plus, Search, MapPin, Trash2, AlertTriangle, Grid3x3, Map } from 'lucide-react';
+import { AppLayout } from '@/components/layout/app-layout';
 import {
   LocationCard,
   LocationCardSkeleton,
@@ -296,63 +297,50 @@ export default function LocationsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-3xl font-bold mb-2">Location Library</h1>
-              <p className="text-muted-foreground">
-                Manage your saved locations for quick photo assignment
-              </p>
+    <AppLayout>
+      <div className="min-h-screen bg-background">
+        {/* Header */}
+        <div className="border-b border-border bg-card">
+          <div className="container mx-auto px-4 py-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h1 className="text-3xl font-bold mb-2">Location Library</h1>
+                <p className="text-muted-foreground">
+                  Manage your saved locations for quick photo assignment
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                {locations.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleCreateNew}
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded-md font-medium hover:bg-primary/90 transition-colors flex items-center gap-2"
+                  >
+                    <Plus className="w-5 h-5" />
+                    Add Location
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <Link
-                href="/gallery"
-                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Grid3x3 className="w-4 h-4" />
-                Gallery
-              </Link>
-              <Link
-                href="/gallery/map"
-                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Map className="w-4 h-4" />
-                Map
-              </Link>
-              {locations.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleCreateNew}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md font-medium hover:bg-primary/90 transition-colors flex items-center gap-2"
-                >
-                  <Plus className="w-5 h-5" />
-                  Add Location
-                </button>
-              )}
-            </div>
+
+            {/* Search Bar */}
+            {locations.length > 0 && (
+              <div className="relative max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search locations..."
+                  className="w-full pl-10 pr-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            )}
           </div>
-
-          {/* Search Bar */}
-          {locations.length > 0 && (
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search locations..."
-                className="w-full pl-10 pr-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-          )}
         </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="container mx-auto px-4 py-8">
+        {/* Main Content */}
+        <div className="container mx-auto px-4 py-8">
         {/* Error Message */}
         {error && (
           <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
@@ -419,25 +407,26 @@ export default function LocationsPage() {
         )}
       </div>
 
-      {/* Form Modal */}
-      <LocationFormModal
-        isOpen={isFormOpen}
-        mode={formMode}
-        initialData={editingLocation || undefined}
-        onSave={handleSave}
-        onClose={() => {
-          setIsFormOpen(false);
-          setEditingLocation(null);
-        }}
-      />
+        {/* Form Modal */}
+        <LocationFormModal
+          isOpen={isFormOpen}
+          mode={formMode}
+          initialData={editingLocation || undefined}
+          onSave={handleSave}
+          onClose={() => {
+            setIsFormOpen(false);
+            setEditingLocation(null);
+          }}
+        />
 
-      {/* Delete Confirmation Modal */}
-      <DeleteConfirmModal
-        isOpen={!!deletingLocation && !isDeleting}
-        location={deletingLocation}
-        onConfirm={handleConfirmDelete}
-        onCancel={() => setDeletingLocation(null)}
-      />
-    </div>
+        {/* Delete Confirmation Modal */}
+        <DeleteConfirmModal
+          isOpen={!!deletingLocation && !isDeleting}
+          location={deletingLocation}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setDeletingLocation(null)}
+        />
+      </div>
+    </AppLayout>
   );
 }

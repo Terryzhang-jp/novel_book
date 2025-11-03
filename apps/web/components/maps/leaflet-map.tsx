@@ -41,7 +41,7 @@ interface LeafletMapProps {
  * Run: pnpm add react-leaflet leaflet && pnpm add -D @types/leaflet
  */
 export function LeafletMap({
-  center = [39.9042, 116.4074], // Default: Beijing
+  center = [35.9914, 139.0858], // Default: Chichibu, Japan
   zoom = 13,
   markers = [],
   onClick,

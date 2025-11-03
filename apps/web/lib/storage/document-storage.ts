@@ -1,29 +1,14 @@
 import { v4 as uuidv4 } from "uuid";
-import { join } from "path";
 import type { Document, DocumentIndex } from "@/types/storage";
 import type { JSONContent } from "novel";
-import {
-  atomicWriteJSON,
-  readJSON,
-  exists,
-  deleteFile,
-} from "./file-system";
-import { PATHS } from "./init";
 import { NotFoundError, UnauthorizedError } from "./errors";
-import { indexManager } from "./index-manager";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 /**
- * 文档存储类
+ * 文档存储类 - Supabase 版本
  * 负责文档的 CRUD 操作
  */
 export class DocumentStorage {
-  /**
-   * 获取文档文件路径
-   */
-  private getDocumentPath(docId: string): string {
-    return join(PATHS.DOCUMENTS, `${docId}.json`);
-  }
-
   /**
    * 创建新文档
    */
@@ -37,42 +22,69 @@ export class DocumentStorage {
       content: [],
     };
 
-    const doc: Document = {
-      id: uuidv4(),
-      userId,
-      title,
-      content: content || defaultContent,
-      images: content ? this.extractImages(content) : [],
-      preview: content ? this.generatePreview(content) : "",
-      tags: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+    const docId = uuidv4();
+    const now = new Date().toISOString();
+    const docContent = content || defaultContent;
+
+    const { data, error } = await supabaseAdmin
+      .from('documents')
+      .insert({
+        id: docId,
+        user_id: userId,
+        title,
+        content: docContent,
+        images: content ? this.extractImages(content) : [],
+        tags: [],
+        preview: content ? this.generatePreview(content) : "",
+        is_public: false,
+        created_at: now,
+        updated_at: now,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to create document: ${error.message}`);
+    }
+
+    return {
+      id: data.id,
+      userId: data.user_id,
+      title: data.title,
+      content: data.content,
+      images: data.images,
+      tags: data.tags,
+      preview: data.preview,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
     };
-
-    // 保存文档文件
-    await atomicWriteJSON(this.getDocumentPath(doc.id), doc);
-
-    // 添加到索引
-    await indexManager.addDocument(userId, {
-      id: doc.id,
-      title: doc.title,
-      preview: doc.preview || "",
-      tags: doc.tags || [],
-      updatedAt: doc.updatedAt,
-    });
-
-    return doc;
   }
 
   /**
    * 根据 ID 读取文档
    */
   async findById(docId: string): Promise<Document | null> {
-    const path = this.getDocumentPath(docId);
-    if (!exists(path)) {
+    const { data, error } = await supabaseAdmin
+      .from('documents')
+      .select('*')
+      .eq('id', docId)
+      .single();
+
+    if (error || !data) {
       return null;
     }
-    return await readJSON<Document>(path);
+
+    return {
+      id: data.id,
+      userId: data.user_id,
+      title: data.title,
+      content: data.content,
+      images: data.images,
+      tags: data.tags,
+      preview: data.preview,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
   }
 
   /**
@@ -83,64 +95,81 @@ export class DocumentStorage {
     userId: string,
     data: Partial<Omit<Document, "id" | "userId" | "createdAt">>
   ): Promise<Document> {
+    // 验证权限
     const doc = await this.findById(docId);
     if (!doc) {
       throw new NotFoundError("Document");
     }
 
-    // 权限检查：只有文档所有者才能编辑
     if (doc.userId !== userId) {
       throw new UnauthorizedError(
         "You don't have permission to edit this document"
       );
     }
 
-    // 更新文档数据
-    const updated: Document = {
-      ...doc,
-      ...data,
-      // 如果更新了 content，重新提取图片和预览
-      images: data.content ? this.extractImages(data.content) : doc.images,
-      preview: data.content ? this.generatePreview(data.content) : doc.preview,
-      updatedAt: new Date().toISOString(),
+    // 准备更新数据
+    const updateData: any = {
+      updated_at: new Date().toISOString(),
     };
 
-    // 保存文档
-    await atomicWriteJSON(this.getDocumentPath(docId), updated);
+    if (data.title !== undefined) updateData.title = data.title;
+    if (data.content !== undefined) {
+      updateData.content = data.content;
+      updateData.images = this.extractImages(data.content);
+      updateData.preview = this.generatePreview(data.content);
+    }
+    if (data.tags !== undefined) updateData.tags = data.tags;
 
-    // 更新索引
-    await indexManager.updateDocument(userId, docId, {
+    const { data: updated, error } = await supabaseAdmin
+      .from('documents')
+      .update(updateData)
+      .eq('id', docId)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update document: ${error.message}`);
+    }
+
+    return {
       id: updated.id,
+      userId: updated.user_id,
       title: updated.title,
-      preview: updated.preview || "",
-      tags: updated.tags || [],
-      updatedAt: updated.updatedAt,
-    });
-
-    return updated;
+      content: updated.content,
+      images: updated.images,
+      tags: updated.tags,
+      preview: updated.preview,
+      createdAt: updated.created_at,
+      updatedAt: updated.updated_at,
+    };
   }
 
   /**
    * 删除文档
    */
   async delete(docId: string, userId: string): Promise<void> {
+    // 验证权限
     const doc = await this.findById(docId);
     if (!doc) {
       throw new NotFoundError("Document");
     }
 
-    // 权限检查
     if (doc.userId !== userId) {
       throw new UnauthorizedError(
         "You don't have permission to delete this document"
       );
     }
 
-    // 删除文档文件
-    await deleteFile(this.getDocumentPath(docId));
+    const { error } = await supabaseAdmin
+      .from('documents')
+      .delete()
+      .eq('id', docId)
+      .eq('user_id', userId);
 
-    // 从索引中移除
-    await indexManager.removeDocument(userId, docId);
+    if (error) {
+      throw new Error(`Failed to delete document: ${error.message}`);
+    }
 
     // TODO: 删除关联的图片文件
     // 这里可以遍历 doc.images 数组，删除对应的图片
@@ -150,7 +179,23 @@ export class DocumentStorage {
    * 获取用户的所有文档（返回索引列表）
    */
   async findByUserId(userId: string): Promise<DocumentIndex[]> {
-    return await indexManager.getUserDocuments(userId);
+    const { data, error } = await supabaseAdmin
+      .from('documents')
+      .select('id, title, preview, tags, updated_at')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false });
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data.map(doc => ({
+      id: doc.id,
+      title: doc.title,
+      preview: doc.preview || "",
+      tags: doc.tags || [],
+      updatedAt: doc.updated_at,
+    }));
   }
 
   /**
@@ -208,14 +253,48 @@ export class DocumentStorage {
    * 搜索文档
    */
   async search(userId: string, query: string): Promise<DocumentIndex[]> {
-    return await indexManager.searchDocuments(userId, query);
+    const { data, error } = await supabaseAdmin
+      .from('documents')
+      .select('id, title, preview, tags, updated_at')
+      .eq('user_id', userId)
+      .or(`title.ilike.%${query}%,preview.ilike.%${query}%`)
+      .order('updated_at', { ascending: false });
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data.map(doc => ({
+      id: doc.id,
+      title: doc.title,
+      preview: doc.preview || "",
+      tags: doc.tags || [],
+      updatedAt: doc.updated_at,
+    }));
   }
 
   /**
    * 按标签获取文档
    */
   async findByTag(userId: string, tag: string): Promise<DocumentIndex[]> {
-    return await indexManager.getDocumentsByTag(userId, tag);
+    const { data, error } = await supabaseAdmin
+      .from('documents')
+      .select('id, title, preview, tags, updated_at')
+      .eq('user_id', userId)
+      .contains('tags', [tag])
+      .order('updated_at', { ascending: false });
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data.map(doc => ({
+      id: doc.id,
+      title: doc.title,
+      preview: doc.preview || "",
+      tags: doc.tags || [],
+      updatedAt: doc.updated_at,
+    }));
   }
 }
 

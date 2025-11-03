@@ -1,51 +1,22 @@
 /**
- * Location Storage Layer
+ * Location Storage Layer - Supabase Version
  *
  * Manages CRUD operations for user locations in the location library.
  * Each location represents a place that users can associate with their photos.
- *
- * Storage structure:
- * - Full location: data/locations/{userId}/{locationId}.json
- * - Index: data/indexes/user-{userId}-locations.json (managed by IndexManager)
- *
- * This follows the same pattern as PhotoStorage and DocumentStorage.
  */
 
 import { v4 as uuidv4 } from "uuid";
-import { join } from "path";
 import type { Location, LocationIndex } from "@/types/storage";
-import type { GeocodingResult, LatLng } from "@/lib/maps/types";
-import {
-  atomicWriteJSON,
-  readJSON,
-  exists,
-  deleteFile,
-  ensureDir,
-} from "./file-system";
-import { PATHS } from "./init";
+import type { GeocodingResult } from "@/lib/maps/types";
 import { NotFoundError, UnauthorizedError } from "./errors";
-import { indexManager } from "./index-manager";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 /**
- * Location Storage Class
+ * Location Storage Class - Supabase Version
  *
  * Provides CRUD operations for location library entries.
  */
 export class LocationStorage {
-  /**
-   * Get the path to a user's locations directory
-   */
-  private getUserLocationsDir(userId: string): string {
-    return join(PATHS.LOCATIONS, userId);
-  }
-
-  /**
-   * Get the path to a specific location file
-   */
-  private getLocationPath(userId: string, locationId: string): string {
-    return join(this.getUserLocationsDir(userId), `${locationId}.json`);
-  }
-
   /**
    * Create a new location
    *
@@ -67,73 +38,88 @@ export class LocationStorage {
       notes?: string;
     }
   ): Promise<Location> {
-    // Ensure user's locations directory exists
-    const userLocationsDir = this.getUserLocationsDir(userId);
-    await ensureDir(userLocationsDir);
-
-    // Create location object
     const now = new Date().toISOString();
-    const location: Location = {
-      id: uuidv4(),
-      userId,
-      name: name.trim(),
-      coordinates,
-      address: address
-        ? {
-            formattedAddress: address.formattedAddress,
-            country: address.country,
-            state: address.state,
-            city: address.city,
-            postalCode: address.postalCode,
-          }
-        : undefined,
-      placeId: options?.placeId,
-      category: options?.category,
-      notes: options?.notes,
-      usageCount: 0,
-      createdAt: now,
-      updatedAt: now,
+    const locationId = uuidv4();
+
+    const { data, error } = await supabaseAdmin
+      .from('locations')
+      .insert({
+        id: locationId,
+        user_id: userId,
+        name: name.trim(),
+        coordinates,
+        address: address
+          ? {
+              formattedAddress: address.formattedAddress,
+              country: address.country,
+              state: address.state,
+              city: address.city,
+              postalCode: address.postalCode,
+            }
+          : null,
+        place_id: options?.placeId || null,
+        category: options?.category || null,
+        notes: options?.notes || null,
+        usage_count: 0,
+        created_at: now,
+        updated_at: now,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to create location: ${error.message}`);
+    }
+
+    return {
+      id: data.id,
+      userId: data.user_id,
+      name: data.name,
+      coordinates: data.coordinates,
+      address: data.address,
+      placeId: data.place_id,
+      category: data.category,
+      notes: data.notes,
+      usageCount: data.usage_count,
+      lastUsedAt: data.last_used_at,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
     };
-
-    // Save to file
-    const locationPath = this.getLocationPath(userId, location.id);
-    await atomicWriteJSON(locationPath, location);
-
-    // Add to index
-    const locationIndex: LocationIndex = {
-      id: location.id,
-      name: location.name,
-      coordinates: location.coordinates,
-      formattedAddress: location.address?.formattedAddress,
-      usageCount: location.usageCount,
-      lastUsedAt: location.lastUsedAt,
-      updatedAt: location.updatedAt,
-    };
-    await indexManager.addLocation(userId, locationIndex);
-
-    return location;
   }
 
   /**
    * Find a location by ID
    *
    * @param locationId - Location ID
+   * @param userId - User ID (for authorization)
    * @returns Location or null if not found
    */
   async findById(locationId: string, userId: string): Promise<Location | null> {
-    const path = this.getLocationPath(userId, locationId);
-    if (!exists(path)) {
+    const { data, error } = await supabaseAdmin
+      .from('locations')
+      .select('*')
+      .eq('id', locationId)
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !data) {
       return null;
     }
 
-    const location = await readJSON<Location>(path);
-
-    // Verify ownership
-    if (location.userId !== userId) {
-      return null;
-    }
-
-    return location;
+    return {
+      id: data.id,
+      userId: data.user_id,
+      name: data.name,
+      coordinates: data.coordinates,
+      address: data.address,
+      placeId: data.place_id,
+      category: data.category,
+      notes: data.notes,
+      usageCount: data.usage_count,
+      lastUsedAt: data.last_used_at,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
   }
 
   /**
@@ -143,7 +129,25 @@ export class LocationStorage {
    * @returns Array of location indexes, sorted by usage count (descending)
    */
   async findByUserId(userId: string): Promise<LocationIndex[]> {
-    return await indexManager.getUserLocations(userId);
+    const { data, error } = await supabaseAdmin
+      .from('locations')
+      .select('id, name, coordinates, address, usage_count, last_used_at, updated_at')
+      .eq('user_id', userId)
+      .order('usage_count', { ascending: false });
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data.map(location => ({
+      id: location.id,
+      name: location.name,
+      coordinates: location.coordinates,
+      formattedAddress: location.address?.formattedAddress,
+      usageCount: location.usage_count,
+      lastUsedAt: location.last_used_at,
+      updatedAt: location.updated_at,
+    }));
   }
 
   /**
@@ -161,43 +165,45 @@ export class LocationStorage {
       Pick<Location, "name" | "coordinates" | "address" | "category" | "notes">
     >
   ): Promise<Location> {
-    // Get existing location
-    const location = await this.findById(locationId, userId);
-    if (!location) {
+    // Verify ownership first
+    const existing = await this.findById(locationId, userId);
+    if (!existing) {
       throw new NotFoundError("Location");
     }
 
-    // Verify ownership
-    if (location.userId !== userId) {
-      throw new UnauthorizedError(
-        "You don't have permission to update this location"
-      );
+    const { data, error } = await supabaseAdmin
+      .from('locations')
+      .update({
+        name: updates.name,
+        coordinates: updates.coordinates,
+        address: updates.address,
+        category: updates.category,
+        notes: updates.notes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', locationId)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update location: ${error.message}`);
     }
 
-    // Apply updates
-    const updatedLocation: Location = {
-      ...location,
-      ...updates,
-      updatedAt: new Date().toISOString(),
+    return {
+      id: data.id,
+      userId: data.user_id,
+      name: data.name,
+      coordinates: data.coordinates,
+      address: data.address,
+      placeId: data.place_id,
+      category: data.category,
+      notes: data.notes,
+      usageCount: data.usage_count,
+      lastUsedAt: data.last_used_at,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
     };
-
-    // Save to file
-    const locationPath = this.getLocationPath(userId, locationId);
-    await atomicWriteJSON(locationPath, updatedLocation);
-
-    // Update index
-    const locationIndex: LocationIndex = {
-      id: updatedLocation.id,
-      name: updatedLocation.name,
-      coordinates: updatedLocation.coordinates,
-      formattedAddress: updatedLocation.address?.formattedAddress,
-      usageCount: updatedLocation.usageCount,
-      lastUsedAt: updatedLocation.lastUsedAt,
-      updatedAt: updatedLocation.updatedAt,
-    };
-    await indexManager.updateLocation(userId, locationId, locationIndex);
-
-    return updatedLocation;
   }
 
   /**
@@ -210,27 +216,21 @@ export class LocationStorage {
    * @param userId - User ID (for authorization)
    */
   async delete(locationId: string, userId: string): Promise<void> {
-    // Get existing location
-    const location = await this.findById(locationId, userId);
-    if (!location) {
+    // Verify ownership first
+    const existing = await this.findById(locationId, userId);
+    if (!existing) {
       throw new NotFoundError("Location");
     }
 
-    // Verify ownership
-    if (location.userId !== userId) {
-      throw new UnauthorizedError(
-        "You don't have permission to delete this location"
-      );
-    }
+    const { error } = await supabaseAdmin
+      .from('locations')
+      .delete()
+      .eq('id', locationId)
+      .eq('user_id', userId);
 
-    // Delete file
-    const locationPath = this.getLocationPath(userId, locationId);
-    if (exists(locationPath)) {
-      await deleteFile(locationPath);
+    if (error) {
+      throw new Error(`Failed to delete location: ${error.message}`);
     }
-
-    // Remove from index
-    await indexManager.removeLocation(userId, locationId);
   }
 
   /**
@@ -241,7 +241,26 @@ export class LocationStorage {
    * @returns Matching locations
    */
   async search(userId: string, query: string): Promise<LocationIndex[]> {
-    return await indexManager.searchLocations(userId, query);
+    const { data, error } = await supabaseAdmin
+      .from('locations')
+      .select('id, name, coordinates, address, usage_count, last_used_at, updated_at')
+      .eq('user_id', userId)
+      .ilike('name', `%${query}%`)
+      .order('usage_count', { ascending: false });
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data.map(location => ({
+      id: location.id,
+      name: location.name,
+      coordinates: location.coordinates,
+      formattedAddress: location.address?.formattedAddress,
+      usageCount: location.usage_count,
+      lastUsedAt: location.last_used_at,
+      updatedAt: location.updated_at,
+    }));
   }
 
   /**
@@ -252,42 +271,21 @@ export class LocationStorage {
    * @param userId - User ID (for authorization)
    */
   async incrementUsage(locationId: string, userId: string): Promise<void> {
-    // Get existing location
+    // Verify ownership first
     const location = await this.findById(locationId, userId);
     if (!location) {
       throw new NotFoundError("Location");
     }
 
-    // Verify ownership
-    if (location.userId !== userId) {
-      throw new UnauthorizedError(
-        "You don't have permission to update this location"
-      );
-    }
-
-    // Increment usage count and update last used time
-    const updatedLocation: Location = {
-      ...location,
-      usageCount: location.usageCount + 1,
-      lastUsedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    // Save to file
-    const locationPath = this.getLocationPath(userId, locationId);
-    await atomicWriteJSON(locationPath, updatedLocation);
-
-    // Update index
-    const locationIndex: LocationIndex = {
-      id: updatedLocation.id,
-      name: updatedLocation.name,
-      coordinates: updatedLocation.coordinates,
-      formattedAddress: updatedLocation.address?.formattedAddress,
-      usageCount: updatedLocation.usageCount,
-      lastUsedAt: updatedLocation.lastUsedAt,
-      updatedAt: updatedLocation.updatedAt,
-    };
-    await indexManager.updateLocation(userId, locationId, locationIndex);
+    await supabaseAdmin
+      .from('locations')
+      .update({
+        usage_count: location.usageCount + 1,
+        last_used_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', locationId)
+      .eq('user_id', userId);
   }
 
   /**
@@ -305,33 +303,14 @@ export class LocationStorage {
       return;
     }
 
-    // Verify ownership
-    if (location.userId !== userId) {
-      return;
-    }
-
-    // Decrement usage count (minimum 0)
-    const updatedLocation: Location = {
-      ...location,
-      usageCount: Math.max(0, location.usageCount - 1),
-      updatedAt: new Date().toISOString(),
-    };
-
-    // Save to file
-    const locationPath = this.getLocationPath(userId, locationId);
-    await atomicWriteJSON(locationPath, updatedLocation);
-
-    // Update index
-    const locationIndex: LocationIndex = {
-      id: updatedLocation.id,
-      name: updatedLocation.name,
-      coordinates: updatedLocation.coordinates,
-      formattedAddress: updatedLocation.address?.formattedAddress,
-      usageCount: updatedLocation.usageCount,
-      lastUsedAt: updatedLocation.lastUsedAt,
-      updatedAt: updatedLocation.updatedAt,
-    };
-    await indexManager.updateLocation(userId, locationId, locationIndex);
+    await supabaseAdmin
+      .from('locations')
+      .update({
+        usage_count: Math.max(0, location.usageCount - 1),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', locationId)
+      .eq('user_id', userId);
   }
 }
 

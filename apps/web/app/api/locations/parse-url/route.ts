@@ -23,10 +23,13 @@ export const runtime = 'nodejs';
  */
 export async function POST(req: Request) {
   try {
+    console.log('[parse-url] Received request');
     const body = await req.json();
     const { url } = body;
+    console.log('[parse-url] URL:', url);
 
     if (!url || typeof url !== 'string') {
+      console.log('[parse-url] Invalid URL format');
       return NextResponse.json(
         { error: 'URL is required and must be a string' },
         { status: 400 }
@@ -35,6 +38,7 @@ export async function POST(req: Request) {
 
     // Validate that it's a Google Maps URL
     if (!url.includes('google.com/maps') && !url.includes('goo.gl')) {
+      console.log('[parse-url] Not a Google Maps URL');
       return NextResponse.json(
         { error: 'Invalid Google Maps URL' },
         { status: 400 }
@@ -42,36 +46,34 @@ export async function POST(req: Request) {
     }
 
     // Get the map provider
+    console.log('[parse-url] Creating map provider');
     const config = getDefaultMapConfig();
     const mapProvider = createMapProvider(config);
 
-    // If it's a short URL, expand it first
+    // If it's a short URL, expand it first by following redirects
     let urlToParse = url;
     if (url.includes('goo.gl') || url.includes('maps.app.goo.gl')) {
-      // Expand the short URL
-      const expandResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/locations/expand-url`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ url }),
-        }
-      );
-
-      if (expandResponse.ok) {
-        const expandData = await expandResponse.json();
-        urlToParse = expandData.expandedUrl;
-      } else {
-        console.warn('Failed to expand short URL, attempting to parse original:', url);
+      try {
+        // Follow redirects to get the full URL
+        const response = await fetch(url, {
+          redirect: 'follow',
+          method: 'HEAD',
+        });
+        urlToParse = response.url;
+        console.log('[parse-url] Expanded short URL:', url, '→', urlToParse);
+      } catch (error) {
+        console.warn('[parse-url] Failed to expand short URL, attempting to parse original:', url, error);
+        // If expansion fails, continue with original URL
       }
     }
 
     // Parse the URL using the map provider
+    console.log('[parse-url] Parsing URL with map provider:', urlToParse);
     const result = await mapProvider.parseGoogleMapsUrl(urlToParse);
+    console.log('[parse-url] Parse result:', result);
 
     if (!result) {
+      console.log('[parse-url] Failed to extract coordinates');
       return NextResponse.json(
         {
           error: 'Could not parse coordinates from URL',
@@ -81,10 +83,11 @@ export async function POST(req: Request) {
       );
     }
 
+    console.log('[parse-url] Successfully parsed, returning result');
     return NextResponse.json(result);
 
   } catch (error) {
-    console.error('Error parsing Google Maps URL:', error);
+    console.error('[parse-url] Error parsing Google Maps URL:', error);
     return NextResponse.json(
       {
         error: 'Failed to parse URL',

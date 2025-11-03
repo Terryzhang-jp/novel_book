@@ -1,46 +1,16 @@
 import { v4 as uuidv4 } from "uuid";
-import { join } from "path";
-import { writeFile, mkdir } from "fs/promises";
-import { existsSync } from "fs";
 import exifr from "exifr";
 import type { JSONContent } from "novel";
 import type { Photo, PhotoIndex, PhotoCategory, PhotoStats } from "@/types/storage";
-import {
-  atomicWriteJSON,
-  readJSON,
-  exists,
-  deleteFile,
-} from "./file-system";
-import { PATHS } from "./init";
 import { NotFoundError, UnauthorizedError } from "./errors";
-import { indexManager } from "./index-manager";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { uploadFile, deleteFile as deleteStorageFile, getPublicUrl } from "@/lib/supabase/storage";
 
 /**
- * 照片存储类
+ * 照片存储类 - Supabase版本
  * 负责照片的 CRUD 操作和 EXIF 提取
  */
 export class PhotoStorage {
-  /**
-   * 获取照片元数据文件路径
-   */
-  private getPhotoPath(photoId: string): string {
-    return join(PATHS.PHOTOS, `${photoId}.json`);
-  }
-
-  /**
-   * 获取照片文件存储路径
-   */
-  private getFilePath(userId: string, fileName: string): string {
-    return join(PATHS.IMAGES, userId, "gallery", fileName);
-  }
-
-  /**
-   * 获取用户的 gallery 目录路径
-   */
-  private getUserGalleryDir(userId: string): string {
-    return join(PATHS.IMAGES, userId, "gallery");
-  }
-
   /**
    * 从 EXIF 数据中提取元数据
    */
@@ -182,76 +152,157 @@ export class PhotoStorage {
     // 确定分类
     const category = this.categorize(metadata);
 
-    // 创建照片记录
-    const photo: Photo = {
-      id: uuidv4(),
-      userId,
-      fileName,
-      originalName: file.name,
-      metadata,
-      category,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    // 上传到 Supabase Storage
+    const storagePath = `${userId}/gallery/${fileName}`;
+    await uploadFile('photos', storagePath, buffer, {
+      contentType: file.type,
+      upsert: false,
+    });
 
-    // 确保用户的 gallery 目录存在
-    const galleryDir = this.getUserGalleryDir(userId);
-    if (!existsSync(galleryDir)) {
-      await mkdir(galleryDir, { recursive: true });
+    // 获取公开 URL
+    const fileUrl = getPublicUrl('photos', storagePath);
+
+    // 创建照片记录
+    const photoId = uuidv4();
+    const now = new Date().toISOString();
+
+    const { data, error } = await supabaseAdmin
+      .from('photos')
+      .insert({
+        id: photoId,
+        user_id: userId,
+        file_name: fileName,
+        original_name: file.name,
+        file_url: fileUrl,
+        metadata,
+        category,
+        is_public: true,
+        created_at: now,
+        updated_at: now,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to create photo: ${error.message}`);
     }
 
-    // 保存文件到磁盘
-    const filePath = this.getFilePath(userId, fileName);
-    await writeFile(filePath, buffer as any);
-
-    // 保存元数据到 JSON
-    await atomicWriteJSON(this.getPhotoPath(photo.id), photo);
-
-    // 添加到索引
-    const photoIndex: PhotoIndex = {
-      id: photo.id,
-      fileName: photo.fileName,
-      category: photo.category,
-      dateTime: photo.metadata.dateTime,
-      location: photo.metadata.location
-        ? {
-            latitude: photo.metadata.location.latitude,
-            longitude: photo.metadata.location.longitude,
-          }
-        : undefined,
-      updatedAt: photo.updatedAt,
+    return {
+      id: data.id,
+      userId: data.user_id,
+      fileName: data.file_name,
+      originalName: data.original_name,
+      fileUrl: data.file_url,
+      metadata: data.metadata,
+      category: data.category,
+      locationId: data.location_id,
+      title: data.title,
+      description: data.description,
+      tags: data.tags,
+      isPublic: data.is_public,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
     };
-    await indexManager.addPhoto(userId, photoIndex);
-
-    return photo;
   }
 
   /**
    * 根据 ID 获取照片
    */
   async findById(photoId: string): Promise<Photo | null> {
-    const path = this.getPhotoPath(photoId);
-    if (!exists(path)) {
+    const { data, error } = await supabaseAdmin
+      .from('photos')
+      .select('*')
+      .eq('id', photoId)
+      .single();
+
+    if (error || !data) {
       return null;
     }
-    return await readJSON<Photo>(path);
+
+    return {
+      id: data.id,
+      userId: data.user_id,
+      fileName: data.file_name,
+      originalName: data.original_name,
+      fileUrl: data.file_url,
+      metadata: data.metadata,
+      category: data.category,
+      locationId: data.location_id,
+      title: data.title,
+      description: data.description,
+      tags: data.tags,
+      isPublic: data.is_public,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
   }
 
   /**
-   * 获取用户的所有照片（返回索引列表）
+   * 获取用户的所有照片（返回完整照片列表）
    */
-  async findByUserId(userId: string): Promise<PhotoIndex[]> {
-    return await indexManager.getUserPhotos(userId);
+  async findByUserId(userId: string): Promise<Photo[]> {
+    const { data, error } = await supabaseAdmin
+      .from('photos')
+      .select('*')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false });
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data.map(photo => ({
+      id: photo.id,
+      userId: photo.user_id,
+      fileName: photo.file_name,
+      originalName: photo.original_name,
+      fileUrl: photo.file_url,
+      metadata: photo.metadata,
+      category: photo.category,
+      locationId: photo.location_id,
+      title: photo.title,
+      description: photo.description,
+      tags: photo.tags,
+      isPublic: photo.is_public,
+      createdAt: photo.created_at,
+      updatedAt: photo.updated_at,
+    }));
   }
 
   /**
-   * 按分类获取照片
+   * 按分类获取照片（返回完整照片列表）
    */
   async findByCategory(
     userId: string,
     category: PhotoCategory
-  ): Promise<PhotoIndex[]> {
-    return await indexManager.getPhotosByCategory(userId, category);
+  ): Promise<Photo[]> {
+    const { data, error } = await supabaseAdmin
+      .from('photos')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('category', category)
+      .order('updated_at', { ascending: false });
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data.map(photo => ({
+      id: photo.id,
+      userId: photo.user_id,
+      fileName: photo.file_name,
+      originalName: photo.original_name,
+      fileUrl: photo.file_url,
+      metadata: photo.metadata,
+      category: photo.category,
+      locationId: photo.location_id,
+      title: photo.title,
+      description: photo.description,
+      tags: photo.tags,
+      isPublic: photo.is_public,
+      createdAt: photo.created_at,
+      updatedAt: photo.updated_at,
+    }));
   }
 
   /**
@@ -270,37 +321,65 @@ export class PhotoStorage {
       );
     }
 
-    // 删除文件
-    const filePath = this.getFilePath(userId, photo.fileName);
-    if (exists(filePath)) {
-      await deleteFile(filePath);
+    // 删除 Storage 中的文件
+    const storagePath = `${userId}/gallery/${photo.fileName}`;
+    try {
+      await deleteStorageFile('photos', storagePath);
+    } catch (error) {
+      console.error('Failed to delete file from storage:', error);
     }
 
-    // 删除元数据文件
-    const metadataPath = this.getPhotoPath(photoId);
-    if (exists(metadataPath)) {
-      await deleteFile(metadataPath);
-    }
+    // 删除数据库记录
+    const { error } = await supabaseAdmin
+      .from('photos')
+      .delete()
+      .eq('id', photoId);
 
-    // 从索引中移除
-    await indexManager.removePhoto(userId, photoId);
+    if (error) {
+      throw new Error(`Failed to delete photo: ${error.message}`);
+    }
   }
 
   /**
    * 获取照片统计信息
    */
   async getStats(userId: string): Promise<PhotoStats> {
-    return await indexManager.getPhotoStats(userId);
+    const { data, error } = await supabaseAdmin
+      .from('photos')
+      .select('category')
+      .eq('user_id', userId);
+
+    if (error || !data) {
+      return {
+        total: 0,
+        byCategory: {
+          'time-location': 0,
+          'time-only': 0,
+          'location-only': 0,
+          'neither': 0,
+        },
+      };
+    }
+
+    const byCategory = {
+      'time-location': 0,
+      'time-only': 0,
+      'location-only': 0,
+      'neither': 0,
+    };
+
+    data.forEach(photo => {
+      byCategory[photo.category]++;
+    });
+
+    return {
+      total: data.length,
+      byCategory,
+    };
   }
 
   /**
    * 为照片设置地点（关联地点库）
-   * 这会从地点库获取坐标并更新照片的location metadata
-   *
-   * @param photoId - 照片ID
-   * @param userId - 用户ID（用于权限验证）
-   * @param locationId - 地点库中的地点ID
-   * @returns 更新后的照片
    */
   async setLocation(
     photoId: string,
@@ -320,73 +399,85 @@ export class PhotoStorage {
       );
     }
 
-    // 获取地点信息（需要导入locationStorage）
-    const { locationStorage } = await import("./location-storage");
-    const location = await locationStorage.findById(locationId, userId);
-    if (!location) {
+    // 获取地点信息
+    const { data: location, error: locationError } = await supabaseAdmin
+      .from('locations')
+      .select('*')
+      .eq('id', locationId)
+      .eq('user_id', userId)
+      .single();
+
+    if (locationError || !location) {
       throw new NotFoundError("Location");
     }
 
-    // 更新照片
-    const updatedPhoto: Photo = {
-      ...photo,
-      locationId,
-      metadata: {
-        ...photo.metadata,
-        location: {
-          latitude: location.coordinates.latitude,
-          longitude: location.coordinates.longitude,
-          altitude: photo.metadata.location?.altitude,
-          source: "location-library",
-        },
+    // 更新照片的元数据
+    const updatedMetadata = {
+      ...photo.metadata,
+      location: {
+        latitude: location.coordinates.latitude,
+        longitude: location.coordinates.longitude,
+        altitude: photo.metadata.location?.altitude,
+        source: "location-library" as const,
       },
-      updatedAt: new Date().toISOString(),
     };
 
     // 重新计算分类
-    updatedPhoto.category = this.categorize(updatedPhoto.metadata);
+    const category = this.categorize(updatedMetadata);
 
-    // 保存照片
-    await atomicWriteJSON(this.getPhotoPath(photoId), updatedPhoto);
+    // 更新照片
+    const { data, error } = await supabaseAdmin
+      .from('photos')
+      .update({
+        location_id: locationId,
+        metadata: updatedMetadata,
+        category,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', photoId)
+      .select()
+      .single();
 
-    // 更新索引
-    const photoIndex: PhotoIndex = {
-      id: updatedPhoto.id,
-      fileName: updatedPhoto.fileName,
-      category: updatedPhoto.category,
-      dateTime: updatedPhoto.metadata.dateTime,
-      location: updatedPhoto.metadata.location
-        ? {
-            latitude: updatedPhoto.metadata.location.latitude,
-            longitude: updatedPhoto.metadata.location.longitude,
-          }
-        : undefined,
-      updatedAt: updatedPhoto.updatedAt,
-    };
-    await indexManager.updatePhoto(userId, photoId, photoIndex);
+    if (error) {
+      throw new Error(`Failed to update photo: ${error.message}`);
+    }
 
     // 增加地点的使用计数
-    await locationStorage.incrementUsage(locationId, userId);
+    await supabaseAdmin
+      .from('locations')
+      .update({
+        usage_count: location.usage_count + 1,
+        last_used_at: new Date().toISOString(),
+      })
+      .eq('id', locationId);
 
-    return updatedPhoto;
+    return {
+      id: data.id,
+      userId: data.user_id,
+      fileName: data.file_name,
+      originalName: data.original_name,
+      fileUrl: data.file_url,
+      metadata: data.metadata,
+      category: data.category,
+      locationId: data.location_id,
+      title: data.title,
+      description: data.description,
+      tags: data.tags,
+      isPublic: data.is_public,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
   }
 
   /**
    * 移除照片的地点关联
-   * 这会移除locationId，但保留metadata.location（如果来自EXIF）
-   *
-   * @param photoId - 照片ID
-   * @param userId - 用户ID（用于权限验证）
-   * @returns 更新后的照片
    */
   async removeLocation(photoId: string, userId: string): Promise<Photo> {
-    // 获取照片
     const photo = await this.findById(photoId);
     if (!photo) {
       throw new NotFoundError("Photo");
     }
 
-    // 权限检查
     if (photo.userId !== userId) {
       throw new UnauthorizedError(
         "You don't have permission to update this photo"
@@ -395,65 +486,76 @@ export class PhotoStorage {
 
     const oldLocationId = photo.locationId;
 
-    // 更新照片 - 移除地点库关联
-    const updatedPhoto: Photo = {
-      ...photo,
-      locationId: undefined,
-      // 如果location来自地点库，则移除；如果来自EXIF，则改回exif标记
-      metadata: {
-        ...photo.metadata,
-        location:
-          photo.metadata.location?.source === "location-library"
-            ? undefined
-            : photo.metadata.location
-            ? {
-                ...photo.metadata.location,
-                source: "exif" as const,
-              }
-            : undefined,
-      },
-      updatedAt: new Date().toISOString(),
+    // 更新元数据
+    const updatedMetadata = {
+      ...photo.metadata,
+      location:
+        photo.metadata.location?.source === "location-library"
+          ? undefined
+          : photo.metadata.location
+          ? {
+              ...photo.metadata.location,
+              source: "exif" as const,
+            }
+          : undefined,
     };
 
-    // 重新计算分类
-    updatedPhoto.category = this.categorize(updatedPhoto.metadata);
+    const category = this.categorize(updatedMetadata);
 
-    // 保存照片
-    await atomicWriteJSON(this.getPhotoPath(photoId), updatedPhoto);
+    const { data, error } = await supabaseAdmin
+      .from('photos')
+      .update({
+        location_id: null,
+        metadata: updatedMetadata,
+        category,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', photoId)
+      .select()
+      .single();
 
-    // 更新索引
-    const photoIndex: PhotoIndex = {
-      id: updatedPhoto.id,
-      fileName: updatedPhoto.fileName,
-      category: updatedPhoto.category,
-      dateTime: updatedPhoto.metadata.dateTime,
-      location: updatedPhoto.metadata.location
-        ? {
-            latitude: updatedPhoto.metadata.location.latitude,
-            longitude: updatedPhoto.metadata.location.longitude,
-          }
-        : undefined,
-      updatedAt: updatedPhoto.updatedAt,
-    };
-    await indexManager.updatePhoto(userId, photoId, photoIndex);
+    if (error) {
+      throw new Error(`Failed to update photo: ${error.message}`);
+    }
 
     // 减少地点的使用计数
     if (oldLocationId) {
-      const { locationStorage } = await import("./location-storage");
-      await locationStorage.decrementUsage(oldLocationId, userId);
+      const { data: location } = await supabaseAdmin
+        .from('locations')
+        .select('usage_count')
+        .eq('id', oldLocationId)
+        .single();
+
+      if (location && location.usage_count > 0) {
+        await supabaseAdmin
+          .from('locations')
+          .update({
+            usage_count: location.usage_count - 1,
+          })
+          .eq('id', oldLocationId);
+      }
     }
 
-    return updatedPhoto;
+    return {
+      id: data.id,
+      userId: data.user_id,
+      fileName: data.file_name,
+      originalName: data.original_name,
+      fileUrl: data.file_url,
+      metadata: data.metadata,
+      category: data.category,
+      locationId: data.location_id,
+      title: data.title,
+      description: data.description,
+      tags: data.tags,
+      isPublic: data.is_public,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
   }
 
   /**
    * 批量为多张照片设置地点
-   * 用于批量操作功能
-   *
-   * @param photoIds - 照片ID数组
-   * @param userId - 用户ID（用于权限验证）
-   * @param locationId - 地点库中的地点ID
-   * @returns 更新成功的照片数量
    */
   async batchSetLocation(
     photoIds: string[],
@@ -478,44 +580,145 @@ export class PhotoStorage {
 
   /**
    * 更新照片的描述（用于旅行日记功能）
-   *
-   * @param photoId - 照片ID
-   * @param userId - 用户ID（用于权限验证）
-   * @param description - 新的描述内容（Novel编辑器JSONContent格式）
-   * @returns 更新后的照片
    */
   async updateDescription(
     photoId: string,
     userId: string,
     description: JSONContent
   ): Promise<Photo> {
-    // 获取照片
     const photo = await this.findById(photoId);
     if (!photo) {
       throw new NotFoundError("Photo");
     }
 
-    // 权限检查
     if (photo.userId !== userId) {
       throw new UnauthorizedError(
         "You don't have permission to update this photo"
       );
     }
 
-    // 更新照片描述
-    const updatedPhoto: Photo = {
-      ...photo,
-      description,
-      updatedAt: new Date().toISOString(),
+    const { data, error } = await supabaseAdmin
+      .from('photos')
+      .update({
+        description,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', photoId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update photo: ${error.message}`);
+    }
+
+    return {
+      id: data.id,
+      userId: data.user_id,
+      fileName: data.file_name,
+      originalName: data.original_name,
+      fileUrl: data.file_url,
+      metadata: data.metadata,
+      category: data.category,
+      locationId: data.location_id,
+      title: data.title,
+      description: data.description,
+      tags: data.tags,
+      isPublic: data.is_public,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  }
+
+  /**
+   * 更新照片的时间
+   */
+  async updateDateTime(
+    photoId: string,
+    userId: string,
+    dateTime: string | null
+  ): Promise<Photo> {
+    const photo = await this.findById(photoId);
+    if (!photo) {
+      throw new NotFoundError("Photo");
+    }
+
+    if (photo.userId !== userId) {
+      throw new UnauthorizedError(
+        "You don't have permission to update this photo"
+      );
+    }
+
+    // 更新元数据
+    const updatedMetadata = {
+      ...photo.metadata,
+      dateTime: dateTime || undefined,
     };
 
-    // 保存照片
-    await atomicWriteJSON(this.getPhotoPath(photoId), updatedPhoto);
+    const category = this.categorize(updatedMetadata);
 
-    // 注意：description 不影响索引，所以不需要更新索引
-    // 索引只包含基本信息（id, fileName, category, dateTime, location）
+    const { data, error } = await supabaseAdmin
+      .from('photos')
+      .update({
+        metadata: updatedMetadata,
+        category,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', photoId)
+      .select()
+      .single();
 
-    return updatedPhoto;
+    if (error) {
+      throw new Error(`Failed to update photo: ${error.message}`);
+    }
+
+    return {
+      id: data.id,
+      userId: data.user_id,
+      fileName: data.file_name,
+      originalName: data.original_name,
+      fileUrl: data.file_url,
+      metadata: data.metadata,
+      category: data.category,
+      locationId: data.location_id,
+      title: data.title,
+      description: data.description,
+      tags: data.tags,
+      isPublic: data.is_public,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  }
+
+  /**
+   * 获取所有公开的照片（用于公共地图）
+   */
+  async getAllPublicPhotos(): Promise<Photo[]> {
+    const { data, error } = await supabaseAdmin
+      .from('photos')
+      .select('*')
+      .eq('is_public', true)
+      .not('metadata->location', 'is', null);
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data.map(photo => ({
+      id: photo.id,
+      userId: photo.user_id,
+      fileName: photo.file_name,
+      originalName: photo.original_name,
+      fileUrl: photo.file_url,
+      metadata: photo.metadata,
+      category: photo.category,
+      locationId: photo.location_id,
+      title: photo.title,
+      description: photo.description,
+      tags: photo.tags,
+      isPublic: photo.is_public,
+      createdAt: photo.created_at,
+      updatedAt: photo.updated_at,
+    }));
   }
 }
 

@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/tailwind/ui/button";
-import { Plus, Search, Trash2, FileText, LogOut } from "lucide-react";
+import { Plus, Search, Trash2, FileText } from "lucide-react";
+import { AppLayout } from "@/components/layout/app-layout";
 
 interface DocumentIndex {
   id: string;
@@ -88,16 +89,6 @@ export default function DocumentsPage() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-      router.push("/login");
-      router.refresh();
-    } catch (err) {
-      console.error("Logout failed:", err);
-    }
-  };
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -114,37 +105,28 @@ export default function DocumentsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Header */}
-      <header className="border-b bg-white shadow-sm">
-        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <FileText className="h-8 w-8 text-blue-600" />
-              <h1 className="text-2xl font-bold text-gray-900">
-                My Documents
-              </h1>
-            </div>
-            <div className="flex items-center space-x-3">
+    <AppLayout>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+        {/* Page Header */}
+        <div className="border-b bg-white shadow-sm">
+          <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <FileText className="h-8 w-8 text-blue-600" />
+                <h1 className="text-2xl font-bold text-gray-900">
+                  My Documents
+                </h1>
+              </div>
               <Button onClick={handleCreateDocument} className="flex items-center space-x-2">
                 <Plus className="h-4 w-4" />
                 <span>New Document</span>
               </Button>
-              <Button
-                onClick={handleLogout}
-                variant="outline"
-                className="flex items-center space-x-2"
-              >
-                <LogOut className="h-4 w-4" />
-                <span>Logout</span>
-              </Button>
             </div>
           </div>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        {/* Main Content */}
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Search Bar */}
         <div className="mb-8">
           <div className="relative">
@@ -271,7 +253,8 @@ export default function DocumentsPage() {
               : `${documents.length} ${documents.length === 1 ? "document" : "documents"}`}
           </div>
         )}
-      </main>
-    </div>
+        </div>
+      </div>
+    </AppLayout>
   );
 }

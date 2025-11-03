@@ -7,6 +7,7 @@ import { Button } from "@/components/tailwind/ui/button";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import DocumentEditor from "@/components/document-editor";
 import type { JSONContent } from "novel";
+import { AppLayout } from "@/components/layout/app-layout";
 
 interface Document {
   id: string;
@@ -102,35 +103,40 @@ export default function EditDocumentPage({
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-        <div className="text-center">
-          <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-blue-600" />
-          <p className="text-gray-600">Loading document...</p>
+      <AppLayout>
+        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+          <div className="text-center">
+            <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-blue-600" />
+            <p className="text-gray-600">Loading document...</p>
+          </div>
         </div>
-      </div>
+      </AppLayout>
     );
   }
 
   if (error || !document) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-        <div className="w-full max-w-md rounded-2xl bg-white p-10 text-center shadow-xl">
-          <h2 className="mb-4 text-2xl font-bold text-gray-900">
-            {error || "Document not found"}
-          </h2>
-          <Link href="/documents">
-            <Button className="flex items-center space-x-2">
-              <ArrowLeft className="h-4 w-4" />
-              <span>Back to documents</span>
-            </Button>
-          </Link>
+      <AppLayout>
+        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+          <div className="w-full max-w-md rounded-2xl bg-white p-10 text-center shadow-xl">
+            <h2 className="mb-4 text-2xl font-bold text-gray-900">
+              {error || "Document not found"}
+            </h2>
+            <Link href="/documents">
+              <Button className="flex items-center space-x-2">
+                <ArrowLeft className="h-4 w-4" />
+                <span>Back to documents</span>
+              </Button>
+            </Link>
+          </div>
         </div>
-      </div>
+      </AppLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <AppLayout>
+      <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b bg-card shadow-sm">
         <div className="mx-auto max-w-screen-lg px-4 py-4">
@@ -168,6 +174,7 @@ export default function EditDocumentPage({
           onSave={handleContentSave}
         />
       </main>
-    </div>
+      </div>
+    </AppLayout>
   );
 }

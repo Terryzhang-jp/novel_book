@@ -3,16 +3,17 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Upload, LogOut, Trash2, X, MapPin, Map, BookOpen } from "lucide-react";
-import type { PhotoIndex, PhotoCategory, PhotoStats } from "@/types/storage";
+import { Upload, Trash2, X, MapPin } from "lucide-react";
+import type { Photo, PhotoCategory, PhotoStats } from "@/types/storage";
 import { CategoryFilter } from "@/components/gallery/category-filter";
 import { PhotoGrid } from "@/components/gallery/photo-grid";
 import { PhotoDetailModal } from "@/components/photos/photo-detail-modal";
 import { BatchLocationAssignment } from "@/components/photos/batch-location-assignment";
+import { AppLayout } from "@/components/layout/app-layout";
 
 export default function GalleryPage() {
   const router = useRouter();
-  const [photos, setPhotos] = useState<PhotoIndex[]>([]);
+  const [photos, setPhotos] = useState<Photo[]>([]);
   const [stats, setStats] = useState<PhotoStats | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<PhotoCategory | "all">("all");
   const [loading, setLoading] = useState(true);
@@ -49,11 +50,6 @@ export default function GalleryPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
   };
 
   const handlePhotoDelete = async (photoId: string) => {
@@ -200,51 +196,26 @@ export default function GalleryPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-4xl mb-4">📷</div>
-          <p className="text-muted-foreground">Loading photos...</p>
+      <AppLayout>
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-4xl mb-4">📷</div>
+            <p className="text-muted-foreground">Loading photos...</p>
+          </div>
         </div>
-      </div>
+      </AppLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <AppLayout>
+      <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="border-b border-border bg-card">
         <div className="max-w-7xl mx-auto px-8 py-6">
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-3xl font-bold text-foreground">Photo Gallery</h1>
             <div className="flex items-center gap-4">
-              <Link
-                href="/documents"
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Documents
-              </Link>
-              <Link
-                href="/gallery/journal"
-                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <BookOpen className="w-4 h-4" />
-                Journal
-              </Link>
-              <Link
-                href="/gallery/map"
-                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Map className="w-4 h-4" />
-                Map
-              </Link>
-              <Link
-                href="/gallery/locations"
-                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <MapPin className="w-4 h-4" />
-                Locations
-              </Link>
-
               {!selectionMode ? (
                 <>
                   <button
@@ -262,13 +233,6 @@ export default function GalleryPage() {
                     <Upload className="w-4 h-4" />
                     <span>Upload</span>
                   </Link>
-                  <button
-                    onClick={handleLogout}
-                    className="flex items-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Logout</span>
-                  </button>
                 </>
               ) : (
                 <>
@@ -378,6 +342,7 @@ export default function GalleryPage() {
         onClose={() => setShowBatchLocationModal(false)}
         onComplete={handleBatchLocationComplete}
       />
-    </div>
+      </div>
+    </AppLayout>
   );
 }

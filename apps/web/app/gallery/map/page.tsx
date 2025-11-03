@@ -16,15 +16,16 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Grid3x3, LogOut, Image as ImageIcon, MapPin } from 'lucide-react';
-import type { PhotoIndex, PhotoCategory, PhotoStats } from '@/types/storage';
+import { Grid3x3, Image as ImageIcon, MapPin } from 'lucide-react';
+import type { Photo, PhotoCategory, PhotoStats } from '@/types/storage';
+import { AppLayout } from '@/components/layout/app-layout';
 import { CategoryFilter } from '@/components/gallery/category-filter';
 import { PhotoMap, PhotoMapStats } from '@/components/maps/photo-map';
 import { PhotoDetailModal } from '@/components/photos/photo-detail-modal';
 
 export default function GalleryMapPage() {
   const router = useRouter();
-  const [photos, setPhotos] = useState<PhotoIndex[]>([]);
+  const [photos, setPhotos] = useState<Photo[]>([]);
   const [stats, setStats] = useState<PhotoStats | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<PhotoCategory | 'all'>('all');
   const [loading, setLoading] = useState(true);
@@ -52,6 +53,9 @@ export default function GalleryMapPage() {
       }
 
       const data = await response.json();
+      console.log('[Gallery Map] Fetched photos:', data.photos.length);
+      console.log('[Gallery Map] Photos with location:', data.photos.filter((p: any) => p.location).length);
+      console.log('[Gallery Map] Sample photo:', data.photos[0]);
       setPhotos(data.photos);
       setStats(data.stats);
       setUserId(data.userId);
@@ -60,11 +64,6 @@ export default function GalleryMapPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/login');
   };
 
   /**
@@ -126,71 +125,61 @@ export default function GalleryMapPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-4xl mb-4">🗺️</div>
-          <p className="text-muted-foreground">Loading map...</p>
+      <AppLayout>
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-4xl mb-4">🗺️</div>
+            <p className="text-muted-foreground">Loading map...</p>
+          </div>
         </div>
-      </div>
+      </AppLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-card">
-        <div className="max-w-7xl mx-auto px-8 py-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground mb-2">Map View</h1>
-              <p className="text-muted-foreground">
-                Explore your photos by location
-              </p>
+    <AppLayout>
+      <div className="min-h-screen bg-background">
+        {/* Header */}
+        <div className="border-b border-border bg-card">
+          <div className="max-w-7xl mx-auto px-8 py-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h1 className="text-3xl font-bold text-foreground mb-2">Map View</h1>
+                <p className="text-muted-foreground">
+                  Explore your photos by location
+                </p>
+              </div>
+              <div className="flex items-center gap-4">
+                <Link
+                  href="/gallery"
+                  className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Grid3x3 className="w-4 h-4" />
+                  Gallery
+                </Link>
+                <Link
+                  href="/gallery/locations"
+                  className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <MapPin className="w-4 h-4" />
+                  Locations
+                </Link>
+              </div>
             </div>
-            <div className="flex items-center gap-4">
-              <Link
-                href="/documents"
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Documents
-              </Link>
-              <Link
-                href="/gallery"
-                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Grid3x3 className="w-4 h-4" />
-                Gallery
-              </Link>
-              <Link
-                href="/gallery/locations"
-                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <MapPin className="w-4 h-4" />
-                Locations
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>Logout</span>
-              </button>
-            </div>
+
+            {/* Category Filter */}
+            {stats && (
+              <CategoryFilter
+                stats={stats}
+                selectedCategory={selectedCategory}
+                onCategoryChange={setSelectedCategory}
+              />
+            )}
           </div>
-
-          {/* Category Filter */}
-          {stats && (
-            <CategoryFilter
-              stats={stats}
-              selectedCategory={selectedCategory}
-              onCategoryChange={setSelectedCategory}
-            />
-          )}
         </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-8 py-8">
+        {/* Main Content */}
+        <div className="max-w-7xl mx-auto px-8 py-8">
         {photos.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="text-6xl mb-4">🗺️</div>
@@ -241,20 +230,21 @@ export default function GalleryMapPage() {
             )}
           </div>
         )}
-      </div>
+        </div>
 
-      {/* Photo Detail Modal */}
-      {userId && (
-        <PhotoDetailModal
-          isOpen={!!detailPhotoId}
-          photoId={detailPhotoId}
-          userId={userId}
-          onClose={() => setDetailPhotoId(null)}
-          onNavigate={handleDetailNavigate}
-          hasPrev={getNavigationState().hasPrev}
-          hasNext={getNavigationState().hasNext}
-        />
-      )}
-    </div>
+        {/* Photo Detail Modal */}
+        {userId && (
+          <PhotoDetailModal
+            isOpen={!!detailPhotoId}
+            photoId={detailPhotoId}
+            userId={userId}
+            onClose={() => setDetailPhotoId(null)}
+            onNavigate={handleDetailNavigate}
+            hasPrev={getNavigationState().hasPrev}
+            hasNext={getNavigationState().hasNext}
+          />
+        )}
+      </div>
+    </AppLayout>
   );
 }

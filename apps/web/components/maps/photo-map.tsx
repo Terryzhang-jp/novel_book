@@ -14,17 +14,33 @@
 
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import Image from 'next/image';
 import { MapPin, Image as ImageIcon, Loader2 } from 'lucide-react';
-import type { PhotoIndex } from '@/types/storage';
+import type { Photo } from '@/types/storage';
+
+// Photo already has userId, so this type is just an alias now
+type PhotoWithOptionalUserId = Photo;
 
 interface PhotoMapProps {
-  photos: PhotoIndex[];
-  userId: string;
+  photos: PhotoWithOptionalUserId[];
+  userId: string;  // Fallback userId if photo doesn't have one
   onPhotoClick?: (photoId: string) => void;
   className?: string;
   height?: string;
+  focusLocation?: {
+    latitude: number;
+    longitude: number;
+    zoom?: number;
+  } | null;
+  initialZoom?: number;  // Custom initial zoom level
+  highlightArea?: {
+    center: [number, number];
+    radius: number;  // in meters
+    color?: string;
+    fillColor?: string;
+    label?: string;
+  } | null;
 }
 
 /**
@@ -33,7 +49,7 @@ interface PhotoMapProps {
 interface PhotoLocation {
   latitude: number;
   longitude: number;
-  photos: PhotoIndex[];
+  photos: PhotoWithOptionalUserId[];
 }
 
 /**
@@ -47,6 +63,9 @@ export function PhotoMap({
   onPhotoClick,
   className = '',
   height = '600px',
+  focusLocation = null,
+  initialZoom,
+  highlightArea = null,
 }: PhotoMapProps) {
   const [isClient, setIsClient] = useState(false);
   const [mapComponents, setMapComponents] = useState<any>(null);
@@ -94,7 +113,7 @@ export function PhotoMap({
     const locationMap = new Map<string, PhotoLocation>();
 
     photos.forEach((photo) => {
-      const location = photo.location;
+      const location = photo.metadata?.location;
       if (!location) return;
 
       // Create a key from coordinates (rounded to 6 decimals)
@@ -119,7 +138,7 @@ export function PhotoMap({
    */
   const mapCenter = useMemo((): [number, number] => {
     if (photoLocations.length === 0) {
-      return [39.9042, 116.4074]; // Default: Beijing
+      return [35.9915, 139.0842]; // Default: Chichibu (秩父)
     }
 
     const avgLat = photoLocations.reduce((sum, loc) => sum + loc.latitude, 0) / photoLocations.length;
@@ -145,48 +164,154 @@ export function PhotoMap({
     );
   }
 
-  const { MapContainer, TileLayer, Marker, Popup } = mapComponents;
+  const { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Tooltip } = mapComponents;
 
   /**
-   * Custom popup content for a location
+   * MapFocusController - Internal component to control map focus
+   */
+  function MapFocusController({
+    focusLocation
+  }: {
+    focusLocation: {
+      latitude: number;
+      longitude: number;
+      zoom?: number;
+    } | null
+  }) {
+    const map = useMap();
+
+    useEffect(() => {
+      if (focusLocation) {
+        // Fly to the specified location with animation
+        map.flyTo(
+          [focusLocation.latitude, focusLocation.longitude],
+          focusLocation.zoom || 15,
+          {
+            duration: 1.5,
+            easeLinearity: 0.25,
+          }
+        );
+      }
+    }, [focusLocation, map]);
+
+    return null;
+  }
+
+  /**
+   * Format date for display
+   */
+  function formatDate(dateString?: string): string {
+    if (!dateString) return '未知时间';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  }
+
+  /**
+   * Extract text from description JSONContent
+   */
+  function extractDescription(description: any): string {
+    if (!description || !description.content) return '';
+
+    let text = '';
+    for (const node of description.content) {
+      if (node.type === 'paragraph' && node.content) {
+        for (const item of node.content) {
+          if (item.type === 'text' && item.text) {
+            text += item.text;
+          }
+        }
+        text += '\n';
+      }
+    }
+    return text.trim();
+  }
+
+  /**
+   * Custom popup content for a location - Story-based view
    */
   function LocationPopupContent({ location }: { location: PhotoLocation }) {
+    // Get the first photo for main display
+    const firstPhoto = location.photos[0];
+    const photoUserId = (firstPhoto as any).userId || userId;
+    const userName = (firstPhoto as any).userName || 'Anonymous';
+    const description = extractDescription((firstPhoto as any).description);
+
     return (
-      <div className="min-w-[200px] max-w-[300px]">
-        <div className="mb-2 pb-2 border-b border-border">
-          <p className="text-sm font-medium">
-            {location.photos.length} photo{location.photos.length !== 1 ? 's' : ''} at this location
-          </p>
-          <p className="text-xs text-muted-foreground font-mono mt-1">
-            {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-          </p>
-        </div>
+      <div className="min-w-[280px] max-w-[320px]">
+        {/* Main Photo */}
+        <button
+          type="button"
+          onClick={() => onPhotoClick?.(firstPhoto.id)}
+          className="relative w-full aspect-[4/3] bg-muted rounded-lg overflow-hidden mb-3 hover:ring-2 hover:ring-primary transition-all cursor-pointer"
+        >
+          <Image
+            src={firstPhoto.fileUrl}
+            alt={firstPhoto.fileName}
+            fill
+            className="object-cover"
+            sizes="320px"
+            unoptimized
+          />
+        </button>
 
-        {/* Photo grid in popup */}
-        <div className="grid grid-cols-2 gap-2">
-          {location.photos.slice(0, 4).map((photo) => (
-            <button
-              key={photo.id}
-              type="button"
-              onClick={() => onPhotoClick?.(photo.id)}
-              className="relative aspect-square bg-muted rounded overflow-hidden hover:ring-2 hover:ring-primary transition-all"
-            >
-              <Image
-                src={`/images/${userId}/gallery/${photo.fileName}`}
-                alt={photo.fileName}
-                fill
-                className="object-cover"
-                sizes="100px"
-              />
-            </button>
-          ))}
-        </div>
+        {/* Story Info */}
+        <div className="space-y-2">
+          {/* Who - 谁 */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">👤</span>
+            <span className="text-sm font-medium">{userName}</span>
+          </div>
 
-        {location.photos.length > 4 && (
-          <p className="text-xs text-muted-foreground mt-2 text-center">
-            +{location.photos.length - 4} more photo{location.photos.length - 4 !== 1 ? 's' : ''}
-          </p>
-        )}
+          {/* When - 什么时候 */}
+          {firstPhoto.metadata?.dateTime && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">📅</span>
+              <span className="text-xs text-muted-foreground">{formatDate(firstPhoto.metadata.dateTime)}</span>
+            </div>
+          )}
+
+          {/* Where - 在哪里 */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">📍</span>
+            <span className="text-xs text-muted-foreground font-mono">
+              {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
+            </span>
+          </div>
+
+          {/* Feeling/Description - 感受 */}
+          {description && (
+            <div className="pt-2 border-t border-border">
+              <div className="flex items-start gap-2">
+                <span className="text-xs text-muted-foreground mt-0.5">💭</span>
+                <p className="text-sm text-foreground line-clamp-3 flex-1">
+                  {description}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* More photos indicator */}
+          {location.photos.length > 1 && (
+            <div className="pt-2 border-t border-border">
+              <p className="text-xs text-muted-foreground text-center">
+                +{location.photos.length - 1} more photo{location.photos.length - 1 !== 1 ? 's' : ''} at this location
+              </p>
+            </div>
+          )}
+
+          {/* Click to view details */}
+          <button
+            type="button"
+            onClick={() => onPhotoClick?.(firstPhoto.id)}
+            className="w-full mt-2 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-medium rounded transition-colors"
+          >
+            查看详情 →
+          </button>
+        </div>
       </div>
     );
   }
@@ -204,15 +329,39 @@ export function PhotoMap({
       ) : (
         <MapContainer
           center={mapCenter}
-          zoom={photoLocations.length === 1 ? 13 : 4}
+          zoom={initialZoom ?? (photoLocations.length === 1 ? 13 : 4)}
           style={{ height: '100%', width: '100%' }}
           className="rounded-lg"
         >
+          {/* Map Focus Controller */}
+          <MapFocusController focusLocation={focusLocation} />
+
           {/* OpenStreetMap Tiles */}
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
+
+          {/* Highlight Area Circle */}
+          {highlightArea && (
+            <Circle
+              center={highlightArea.center}
+              radius={highlightArea.radius}
+              pathOptions={{
+                color: highlightArea.color || '#3b82f6',
+                fillColor: highlightArea.fillColor || '#3b82f6',
+                fillOpacity: 0.15,
+                weight: 3,
+                dashArray: '10, 10',
+              }}
+            >
+              {highlightArea.label && (
+                <Tooltip permanent direction="center" className="text-center font-semibold text-lg">
+                  {highlightArea.label}
+                </Tooltip>
+              )}
+            </Circle>
+          )}
 
           {/* Render markers for each location */}
           {photoLocations.map((location, index) => (

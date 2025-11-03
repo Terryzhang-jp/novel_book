@@ -56,7 +56,7 @@ export async function POST(req: Request) {
       fileName: photo.fileName,
       category: photo.category,
       metadata: photo.metadata,
-      url: `/images/${session.userId}/gallery/${photo.fileName}`,
+      url: photo.fileUrl,
       createdAt: photo.createdAt,
     });
   } catch (error) {
@@ -93,7 +93,7 @@ export async function GET(req: Request) {
     const category = searchParams.get("category") as PhotoCategory | null;
     console.log("[GET /api/photos] Category filter:", category);
 
-    // 获取照片列表
+    // 获取照片列表（现在返回完整Photo[]，包含fileUrl）
     let photos;
     if (category) {
       photos = await photoStorage.findByCategory(session.userId, category);
@@ -101,6 +101,13 @@ export async function GET(req: Request) {
       photos = await photoStorage.findByUserId(session.userId);
     }
     console.log("[GET /api/photos] Found photos:", photos.length);
+
+    // Debug: Log photos with location data
+    const photosWithLocation = photos.filter(p => p.metadata?.location);
+    console.log("[GET /api/photos] Photos with location field:", photosWithLocation.length);
+    if (photosWithLocation.length > 0) {
+      console.log("[GET /api/photos] Sample photo with location:", JSON.stringify(photosWithLocation[0]));
+    }
 
     // 获取统计信息
     const stats = await photoStorage.getStats(session.userId);

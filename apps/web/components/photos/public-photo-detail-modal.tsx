@@ -1,61 +1,82 @@
 /**
- * PhotoDetailModal Component
+ * PublicPhotoDetailModal Component
  *
- * Full-screen modal for viewing photo details with:
+ * Full-screen modal for viewing public photo details with:
  * - Large image display
  * - EXIF metadata display
- * - Location assignment interface
- * - Category information
+ * - Photo description (travel journal)
+ * - Uploader information (user name)
  * - Navigation between photos
  * - Keyboard shortcuts (Esc to close, arrow keys to navigate)
  *
- * This provides a detailed view for individual photos from the gallery.
+ * This is a READ-ONLY view for the public map page.
  */
 
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
-import { X, ChevronLeft, ChevronRight, Camera, Loader2, BookOpen, FileText } from 'lucide-react';
-import { LocationAssignment } from './location-assignment';
-import { DateTimeAssignment } from './datetime-assignment';
-import type { Photo } from '@/types/storage';
+import { X, ChevronLeft, ChevronRight, Calendar, Camera, Loader2, FileText, User } from 'lucide-react';
 import { extractTextFromJSON, isJSONContentEmpty } from '@/lib/utils/json-content';
+import type { JSONContent } from 'novel';
 
-interface PhotoDetailModalProps {
+interface PublicPhoto {
+  id: string;
+  userId: string;
+  fileName: string;
+  originalName: string;
+  userName: string;  // 上传者姓名
+  metadata: {
+    dateTime?: string;
+    location?: {
+      latitude: number;
+      longitude: number;
+      altitude?: number;
+    };
+    camera?: {
+      make?: string;
+      model?: string;
+    };
+    dimensions?: {
+      width: number;
+      height: number;
+    };
+    fileSize?: number;
+  };
+  description?: JSONContent;
+  category: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface PublicPhotoDetailModalProps {
   isOpen: boolean;
   photoId: string | null;
-  userId: string;
   onClose: () => void;
   onNavigate?: (direction: 'prev' | 'next') => void;
   hasPrev?: boolean;
   hasNext?: boolean;
-  onPhotoUpdate?: () => void;
 }
 
 /**
- * PhotoDetailModal Component
+ * PublicPhotoDetailModal Component
  *
- * Displays full photo details in a modal overlay with metadata
- * and location management capabilities.
+ * Displays full photo details in a modal overlay (READ-ONLY mode for public viewing).
  */
-export function PhotoDetailModal({
+export function PublicPhotoDetailModal({
   isOpen,
   photoId,
-  userId,
   onClose,
   onNavigate,
   hasPrev = false,
   hasNext = false,
-  onPhotoUpdate,
-}: PhotoDetailModalProps) {
-  const [photo, setPhoto] = useState<Photo | null>(null);
+}: PublicPhotoDetailModalProps) {
+  const [photo, setPhoto] = useState<PublicPhoto | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * Fetch full photo details
+   * Fetch full photo details from public API
    */
   const fetchPhoto = useCallback(async () => {
     if (!photoId) return;
@@ -64,11 +85,18 @@ export function PhotoDetailModal({
     setError(null);
 
     try {
-      const response = await fetch(`/api/photos/${photoId}`);
+      // Fetch all public photos and find the one we need
+      const response = await fetch('/api/public/photos');
 
       if (response.ok) {
         const data = await response.json();
-        setPhoto(data.photo);
+        const foundPhoto = data.photos.find((p: PublicPhoto) => p.id === photoId);
+
+        if (foundPhoto) {
+          setPhoto(foundPhoto);
+        } else {
+          setError('Photo not found');
+        }
       } else {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to load photo');
@@ -109,15 +137,6 @@ export function PhotoDetailModal({
   }, [isOpen, hasPrev, hasNext, onClose, onNavigate]);
 
   /**
-   * Handle location change
-   */
-  const handleLocationChange = (updatedPhoto: Photo) => {
-    setPhoto(updatedPhoto);
-    // Notify parent to refresh photo list so category updates are reflected
-    onPhotoUpdate?.();
-  };
-
-  /**
    * Format date for display
    */
   const formatDate = (dateString?: string): string | null => {
@@ -133,17 +152,15 @@ export function PhotoDetailModal({
     });
   };
 
-  /**
-   * Format category for display
-   */
-  const getCategoryLabel = (category?: string): string => {
-    if (!category) return 'Uncategorized';
-    return category.charAt(0).toUpperCase() + category.slice(1);
-  };
-
   if (!isOpen) return null;
 
   const imageUrl = photo ? photo.fileUrl : '';
+
+  // Debug: Log the image URL
+  if (photo) {
+    console.log('[PublicPhotoDetailModal] Photo data:', photo);
+    console.log('[PublicPhotoDetailModal] Image URL:', imageUrl);
+  }
 
   return (
     <div className="fixed inset-0 z-[9999] bg-background/95 backdrop-blur-sm">
@@ -224,6 +241,7 @@ export function PhotoDetailModal({
                       className="object-contain"
                       sizes="(max-width: 1024px) 100vw, 66vw"
                       priority
+                      unoptimized
                     />
                   </div>
 
@@ -236,21 +254,29 @@ export function PhotoDetailModal({
 
                 {/* Metadata Section (1/3 width on large screens) */}
                 <div className="space-y-6">
-                  {/* Category Badge */}
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">Category</p>
-                    <span className="inline-block px-3 py-1.5 bg-primary/10 text-primary rounded-full text-sm font-medium">
-                      {getCategoryLabel(photo.category)}
-                    </span>
+                  {/* Uploader Info */}
+                  <div className="p-4 bg-card border border-border rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <User className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-1">上传者</p>
+                        <p className="text-sm font-medium">{photo.userName}</p>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Date & Time Assignment */}
-                  <div className="p-4 bg-card border border-border rounded-lg">
-                    <DateTimeAssignment
-                      photo={photo}
-                      onDateTimeChange={handleLocationChange}
-                    />
-                  </div>
+                  {/* Date & Time */}
+                  {photo.metadata?.dateTime && (
+                    <div className="p-4 bg-card border border-border rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <Calendar className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm text-muted-foreground mb-1">Date & Time</p>
+                          <p className="text-sm">{formatDate(photo.metadata.dateTime)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Camera Info */}
                   {(photo.metadata?.camera?.make || photo.metadata?.camera?.model) && (
@@ -272,59 +298,32 @@ export function PhotoDetailModal({
                     </div>
                   )}
 
-                  {/* Location Assignment */}
-                  <div className="p-4 bg-card border border-border rounded-lg">
-                    <LocationAssignment
-                      photo={photo}
-                      onLocationChange={handleLocationChange}
-                    />
-                  </div>
-
                   {/* Photo Description / Caption */}
-                  <div className="p-4 bg-card border border-border rounded-lg">
-                    <div className="flex items-start gap-3">
-                      <FileText className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-muted-foreground mb-2">照片说明</p>
-
-                        {!isJSONContentEmpty(photo.description) ? (
-                          <>
-                            {/* Description Preview */}
-                            <div className="text-sm mb-3 p-3 bg-muted rounded-md">
-                              <p className="line-clamp-3">
-                                {extractTextFromJSON(photo.description, 150)}
-                              </p>
-                            </div>
-
-                            {/* View in Journal Button */}
-                            <Link
-                              href="/gallery/journal"
-                              className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors"
-                            >
-                              <BookOpen className="w-4 h-4" />
-                              <span>在日记中查看完整说明</span>
-                            </Link>
-                          </>
-                        ) : (
-                          <>
-                            {/* No Description */}
-                            <p className="text-sm text-muted-foreground mb-3">
-                              还没有添加说明
+                  {photo.description && !isJSONContentEmpty(photo.description) ? (
+                    <div className="p-4 bg-card border border-border rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <FileText className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-muted-foreground mb-2">照片说明</p>
+                          <div className="text-sm p-3 bg-muted rounded-md prose prose-sm max-w-none">
+                            <p className="whitespace-pre-wrap">
+                              {extractTextFromJSON(photo.description)}
                             </p>
-
-                            {/* Add Description Button */}
-                            <Link
-                              href="/gallery/journal"
-                              className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 transition-colors"
-                            >
-                              <BookOpen className="w-4 h-4" />
-                              <span>添加说明</span>
-                            </Link>
-                          </>
-                        )}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="p-4 bg-card border border-border rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <FileText className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-muted-foreground mb-2">照片说明</p>
+                          <p className="text-sm text-muted-foreground italic">No description yet</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* File Size */}
                   {photo.metadata?.fileSize && (

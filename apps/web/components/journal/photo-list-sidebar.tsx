@@ -77,7 +77,7 @@ export function PhotoListSidebar({
           const isSelected = photo.id === selectedPhotoId;
           const hasDescription = !isJSONContentEmpty(photo.description);
           const descriptionPreview = extractTextFromJSON(photo.description, 100);
-          const imageUrl = `/images/${userId}/gallery/${photo.fileName}`;
+          const imageUrl = photo.fileUrl;
 
           return (
             <button

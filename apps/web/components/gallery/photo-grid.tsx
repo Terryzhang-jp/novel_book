@@ -1,11 +1,11 @@
 "use client";
 
 import Masonry from "react-masonry-css";
-import type { PhotoIndex } from "@/types/storage";
+import type { Photo } from "@/types/storage";
 import { PhotoCard } from "./photo-card";
 
 interface PhotoGridProps {
-  photos: PhotoIndex[];
+  photos: Photo[];
   userId: string;
   onPhotoDelete?: (photoId: string) => void;
   selectionMode?: boolean;

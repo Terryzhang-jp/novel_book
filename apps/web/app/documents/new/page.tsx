@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/tailwind/ui/button";
 import { FileText, ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { AppLayout } from "@/components/layout/app-layout";
 
 export default function NewDocumentPage() {
   const [title, setTitle] = useState("");
@@ -60,7 +61,8 @@ export default function NewDocumentPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+    <AppLayout>
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
       <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-10 shadow-xl">
         <div className="text-center">
           <div className="mb-4 flex justify-center">
@@ -131,6 +133,7 @@ export default function NewDocumentPage() {
           </Link>
         </div>
       </div>
-    </div>
+      </div>
+    </AppLayout>
   );
 }

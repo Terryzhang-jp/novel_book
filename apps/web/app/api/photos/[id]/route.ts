@@ -53,7 +53,7 @@ export async function GET(
 
 /**
  * PUT /api/photos/[id] - 更新照片信息
- * 支持更新：description（旅行日记）
+ * 支持更新：description（旅行日记）、dateTime（照片时间）
  */
 export async function PUT(
   req: Request,
@@ -66,12 +66,23 @@ export async function PUT(
     const { id: photoId } = await params;
     const body = await req.json();
 
-    // 目前只支持更新 description
+    // 支持更新 description
     if (body.description !== undefined) {
       const updatedPhoto = await photoStorage.updateDescription(
         photoId,
         session.userId,
         body.description
+      );
+
+      return NextResponse.json({ photo: updatedPhoto });
+    }
+
+    // 支持更新 dateTime
+    if (body.dateTime !== undefined) {
+      const updatedPhoto = await photoStorage.updateDateTime(
+        photoId,
+        session.userId,
+        body.dateTime
       );
 
       return NextResponse.json({ photo: updatedPhoto });

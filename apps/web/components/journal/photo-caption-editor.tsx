@@ -49,7 +49,7 @@ const extensions = [...defaultExtensions, slashCommand];
 interface PhotoCaptionEditorProps {
   photoId: string | null;
   userId: string | null;
-  photoFileName?: string;
+  photoFileUrl?: string;
   initialDescription?: JSONContent;
   onSave?: (photoId: string, description: JSONContent) => Promise<void>;
 }
@@ -57,7 +57,7 @@ interface PhotoCaptionEditorProps {
 const PhotoCaptionEditor = ({
   photoId,
   userId,
-  photoFileName,
+  photoFileUrl,
   initialDescription,
   onSave,
 }: PhotoCaptionEditorProps) => {
@@ -113,7 +113,7 @@ const PhotoCaptionEditor = ({
     );
   }
 
-  const imageUrl = userId && photoFileName ? `/images/${userId}/gallery/${photoFileName}` : '';
+  const imageUrl = photoFileUrl || '';
 
   return (
     <div className="relative w-full h-full flex items-center justify-center p-6">

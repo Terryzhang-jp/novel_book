@@ -1,16 +1,60 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/tailwind/ui/button";
+import { PhotoMap } from "@/components/maps/photo-map";
+import { PublicPhotoDetailModal } from "@/components/photos/public-photo-detail-modal";
+import { MapPin, Loader2 } from "lucide-react";
+import type { PhotoCategory } from "@/types/storage";
+
+interface PublicPhotoIndex {
+  id: string;
+  userId: string;
+  userName: string;
+  fileName: string;
+  category: PhotoCategory;
+  dateTime?: string;
+  location?: {
+    latitude: number;
+    longitude: number;
+  };
+  updatedAt: string;
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [photos, setPhotos] = useState<PublicPhotoIndex[]>([]);
+  const [photosLoading, setPhotosLoading] = useState(true);
+  const [detailPhotoId, setDetailPhotoId] = useState<string | null>(null);
   const router = useRouter();
+
+  /**
+   * Fetch all public photos for the map
+   */
+  useEffect(() => {
+    const fetchPhotos = async () => {
+      try {
+        setPhotosLoading(true);
+        const response = await fetch('/api/public/photos');
+
+        if (response.ok) {
+          const data = await response.json();
+          setPhotos(data.photos);
+        }
+      } catch (error) {
+        console.error('Error fetching photos:', error);
+      } finally {
+        setPhotosLoading(false);
+      }
+    };
+
+    fetchPhotos();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,79 +85,181 @@ export default function LoginPage() {
     }
   };
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-      <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-10 shadow-xl">
+  const handlePhotoClick = (photoId: string) => {
+    setDetailPhotoId(photoId);
+  };
+
+  // Get representative userId for PhotoMap component
+  const representativeUserId = photos.length > 0 ? photos[0].userId : '';
+
+  if (photosLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
         <div className="text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-gray-900">
-            Welcome Back
-          </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Sign in to your account
-          </p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="mt-8 space-y-6">
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="email" className="sr-only">
-                Email address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="relative block w-full appearance-none rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm"
-                placeholder="Email address"
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="relative block w-full appearance-none rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm"
-                placeholder="Password"
-              />
-            </div>
-          </div>
-
-          {error && (
-            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-800">
-              {error}
-            </div>
-          )}
-
-          <Button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg py-3 text-sm font-semibold"
-          >
-            {loading ? "Signing in..." : "Sign in"}
-          </Button>
-        </form>
-
-        <div className="text-center text-sm text-gray-600">
-          Don't have an account?{" "}
-          <Link
-            href="/register"
-            className="font-medium text-blue-600 hover:text-blue-500"
-          >
-            Sign up
-          </Link>
+          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading Travel Creation...</p>
         </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="flex h-screen overflow-hidden">
+      {/* Left Side - Interactive Map */}
+      <div className="flex-1 relative">
+        {photos.length === 0 ? (
+          <div className="h-full flex items-center justify-center bg-muted">
+            <div className="text-center">
+              <MapPin className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">No photos yet</p>
+            </div>
+          </div>
+        ) : (
+          <PhotoMap
+            photos={photos}
+            userId={representativeUserId}
+            onPhotoClick={handlePhotoClick}
+            height="100vh"
+            initialZoom={10}
+          />
+        )}
+
+        {/* Top Title Overlay */}
+        <div className="absolute top-0 left-0 right-0 flex items-center justify-center pt-16 pointer-events-none z-[1000]">
+          <div className="text-center">
+            <h1 className="text-7xl font-light tracking-widest" style={{
+              color: '#1a1a1a',
+              fontFamily: 'Georgia, "Times New Roman", serif',
+              letterSpacing: '0.2em',
+              fontWeight: 300
+            }}>
+              9月 秩父 之行
+            </h1>
+          </div>
+        </div>
+      </div>
+
+      {/* Right Side - Login Form */}
+      <div className="w-[480px] bg-white shadow-2xl flex flex-col">
+        <div className="flex-1 flex items-center justify-center p-12">
+          <div className="w-full max-w-sm space-y-8">
+            {/* Header */}
+            <div className="text-center">
+              <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+                Welcome Back
+              </h2>
+              <p className="mt-2 text-sm text-gray-600">
+                Sign in to share your travel stories
+              </p>
+            </div>
+
+            {/* Login Form */}
+            <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                    Email address
+                  </label>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="block w-full appearance-none rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm"
+                    placeholder="you@example.com"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                    Password
+                  </label>
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="block w-full appearance-none rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm"
+                    placeholder="••••••••"
+                  />
+                </div>
+              </div>
+
+              {error && (
+                <div className="rounded-lg bg-red-50 p-3 text-sm text-red-800">
+                  {error}
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-lg py-3 text-sm font-semibold"
+              >
+                {loading ? "Signing in..." : "Sign in"}
+              </Button>
+            </form>
+
+            {/* Footer Links */}
+            <div className="space-y-4">
+              <div className="text-center text-sm text-gray-600">
+                Don't have an account?{" "}
+                <Link
+                  href="/register"
+                  className="font-medium text-blue-600 hover:text-blue-500"
+                >
+                  Sign up
+                </Link>
+              </div>
+
+              <div className="text-center">
+                <Link
+                  href="/chichibu"
+                  className="text-sm text-gray-500 hover:text-gray-700"
+                >
+                  Continue exploring without login →
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Stats Footer */}
+        <div className="border-t border-gray-200 px-12 py-6 bg-gray-50">
+          <div className="flex items-center justify-around text-center">
+            <div>
+              <p className="text-2xl font-bold text-gray-900">{photos.length}</p>
+              <p className="text-xs text-gray-500">Photos Shared</p>
+            </div>
+            <div className="h-12 w-px bg-gray-300" />
+            <div>
+              <p className="text-2xl font-bold text-gray-900">
+                {new Set(photos.map(p => p.userId)).size}
+              </p>
+              <p className="text-xs text-gray-500">Travelers</p>
+            </div>
+            <div className="h-12 w-px bg-gray-300" />
+            <div>
+              <p className="text-2xl font-bold text-gray-900">
+                {photos.filter(p => p.location).length}
+              </p>
+              <p className="text-xs text-gray-500">Locations</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Photo Detail Modal */}
+      <PublicPhotoDetailModal
+        isOpen={!!detailPhotoId}
+        photoId={detailPhotoId}
+        onClose={() => setDetailPhotoId(null)}
+      />
     </div>
   );
 }

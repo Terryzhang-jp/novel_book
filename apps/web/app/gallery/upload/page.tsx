@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Upload, X, CheckCircle, XCircle } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
+import { AppLayout } from "@/components/layout/app-layout";
 
 interface UploadingFile {
   file: File;
@@ -182,24 +183,25 @@ export default function UploadPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-8">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/gallery"
-              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span>Back to Gallery</span>
-            </Link>
+    <AppLayout>
+      <div className="min-h-screen bg-background p-8">
+        <div className="max-w-4xl mx-auto">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-4">
+              <Link
+                href="/gallery"
+                className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+                <span>Back to Gallery</span>
+              </Link>
+            </div>
+            <h1 className="text-3xl font-bold text-foreground">Upload Photo</h1>
           </div>
-          <h1 className="text-3xl font-bold text-foreground">Upload Photo</h1>
-        </div>
 
-        {/* Upload Area */}
-        <div className="space-y-6">
+          {/* Upload Area */}
+          <div className="space-y-6">
           <div
             onDragEnter={handleDrag}
             onDragLeave={handleDrag}
@@ -338,8 +340,9 @@ export default function UploadPage() {
               {error}
             </div>
           )}
+          </div>
         </div>
       </div>
-    </div>
+    </AppLayout>
   );
 }

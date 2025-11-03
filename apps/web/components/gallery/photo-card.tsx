@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import type { PhotoIndex } from "@/types/storage";
+import type { Photo } from "@/types/storage";
 import Image from "next/image";
 import { Trash2, Check } from "lucide-react";
 
 interface PhotoCardProps {
-  photo: PhotoIndex;
+  photo: Photo;
   userId: string;
   onDelete?: (photoId: string) => void;
   selectionMode?: boolean;
@@ -27,7 +27,7 @@ export function PhotoCard({
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const imageUrl = `/images/${userId}/gallery/${photo.fileName}`;
+  const imageUrl = photo.fileUrl;
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return null;
@@ -85,19 +85,19 @@ export function PhotoCard({
 
       {/* Metadata */}
       <div className="p-3 space-y-1">
-        {photo.dateTime && (
+        {photo.metadata?.dateTime && (
           <div className="flex items-center gap-2 text-sm text-foreground">
             <span>⏰</span>
-            <span>{formatDate(photo.dateTime)}</span>
+            <span>{formatDate(photo.metadata.dateTime)}</span>
           </div>
         )}
-        {photo.location && (
+        {photo.metadata?.location && (
           <div className="flex items-center gap-2 text-sm text-foreground">
             <span>📍</span>
-            <span className="truncate">{formatLocation(photo.location)}</span>
+            <span className="truncate">{formatLocation(photo.metadata.location)}</span>
           </div>
         )}
-        {!photo.dateTime && !photo.location && (
+        {!photo.metadata?.dateTime && !photo.metadata?.location && (
           <div className="text-sm text-muted-foreground">No metadata</div>
         )}
       </div>
