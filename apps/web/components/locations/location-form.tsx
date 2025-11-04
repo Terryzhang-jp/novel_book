@@ -32,6 +32,7 @@ export interface LocationFormData {
   name: string;
   coordinates: LatLng;
   address?: GeocodingResult;
+  isPublic?: boolean;
 }
 
 /**
@@ -49,6 +50,7 @@ export function LocationForm({
 }: LocationFormProps) {
   // Form state
   const [name, setName] = useState(initialData?.name || '');
+  const [isPublic, setIsPublic] = useState(initialData?.isPublic || false);
   const [selectedLocation, setSelectedLocation] = useState<{
     coordinates: LatLng;
     address?: GeocodingResult;
@@ -148,6 +150,7 @@ export function LocationForm({
         name: name.trim(),
         coordinates: selectedLocation.coordinates,
         address: selectedLocation.address,
+        isPublic,
       });
     } catch (err) {
       console.error('Failed to save location:', err);
@@ -218,6 +221,31 @@ export function LocationForm({
         <p className="text-xs text-muted-foreground">
           {name.length}/100 characters
         </p>
+      </div>
+
+      {/* Public Location Checkbox */}
+      <div className="space-y-2">
+        <div className="flex items-start gap-3 p-4 bg-muted/50 border border-border rounded-lg">
+          <input
+            id="is-public"
+            type="checkbox"
+            checked={isPublic}
+            onChange={(e) => setIsPublic(e.target.checked)}
+            disabled={isSaving}
+            className="mt-1 w-4 h-4 rounded border-input text-primary focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+          <div className="flex-1">
+            <label
+              htmlFor="is-public"
+              className="block text-sm font-medium cursor-pointer"
+            >
+              Make this location public
+            </label>
+            <p className="text-xs text-muted-foreground mt-1">
+              Public locations can be seen and used by all users. Private locations are only visible to you.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Location Picker */}

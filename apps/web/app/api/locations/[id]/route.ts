@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/session";
 import { locationStorage } from "@/lib/storage/location-storage";
+import { photoStorage } from "@/lib/storage/photo-storage";
 import { NotFoundError, UnauthorizedError } from "@/lib/storage/errors";
 
 export const runtime = "nodejs";
@@ -66,7 +67,8 @@ export async function GET(
  *   coordinates?: { latitude: number, longitude: number },
  *   address?: { ... },
  *   category?: string,
- *   notes?: string
+ *   notes?: string,
+ *   isPublic?: boolean
  * }
  */
 export async function PUT(
@@ -81,7 +83,7 @@ export async function PUT(
 
     // 解析请求体
     const body = await req.json();
-    const { name, coordinates, address, category, notes } = body;
+    const { name, coordinates, address, category, notes, isPublic } = body;
 
     // 验证坐标（如果提供）
     if (coordinates) {
@@ -115,6 +117,7 @@ export async function PUT(
     if (address !== undefined) updates.address = address;
     if (category !== undefined) updates.category = category;
     if (notes !== undefined) updates.notes = notes;
+    if (isPublic !== undefined) updates.isPublic = isPublic;
 
     // 更新地点
     const location = await locationStorage.update(
@@ -122,6 +125,16 @@ export async function PUT(
       session.userId,
       updates
     );
+
+    // 如果坐标发生了变化，同步到所有关联的照片
+    if (coordinates) {
+      const updatedPhotoCount = await photoStorage.syncLocationCoordinatesToPhotos(
+        locationId,
+        coordinates
+      );
+
+      console.log(`[Location Update] Synced coordinates to ${updatedPhotoCount} photos`);
+    }
 
     return NextResponse.json({
       location,

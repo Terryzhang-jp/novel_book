@@ -59,7 +59,7 @@ export function getPublicUrl(bucket: string, path: string): string {
  * @param bucket - Storage bucket name
  * @param path - File path within bucket
  */
-export async function deleteFile(bucket: string, path: string) {
+export async function deleteFile(bucket: string, path: string): Promise<any> {
   const { data, error } = await supabaseAdmin.storage
     .from(bucket)
     .remove([path]);
@@ -77,7 +77,7 @@ export async function deleteFile(bucket: string, path: string) {
  * @param bucket - Storage bucket name
  * @param path - Directory path (e.g., 'userId/gallery')
  */
-export async function listFiles(bucket: string, path: string) {
+export async function listFiles(bucket: string, path: string): Promise<any> {
   const { data, error } = await supabaseAdmin.storage
     .from(bucket)
     .list(path);

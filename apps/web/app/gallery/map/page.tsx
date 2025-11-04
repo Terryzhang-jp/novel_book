@@ -31,6 +31,7 @@ export default function GalleryMapPage() {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [detailPhotoId, setDetailPhotoId] = useState<string | null>(null);
+  const [locationPhotos, setLocationPhotos] = useState<Photo[]>([]); // Photos at the selected location
 
   /**
    * Fetch photos from API
@@ -54,7 +55,7 @@ export default function GalleryMapPage() {
 
       const data = await response.json();
       console.log('[Gallery Map] Fetched photos:', data.photos.length);
-      console.log('[Gallery Map] Photos with location:', data.photos.filter((p: any) => p.location).length);
+      console.log('[Gallery Map] Photos with location:', data.photos.filter((p: any) => p.metadata?.location).length);
       console.log('[Gallery Map] Sample photo:', data.photos[0]);
       setPhotos(data.photos);
       setStats(data.stats);
@@ -81,45 +82,67 @@ export default function GalleryMapPage() {
    * Get photos with location data
    */
   const photosWithLocation = useMemo(
-    () => filteredPhotos.filter((photo) => photo.location),
+    () => filteredPhotos.filter((photo) => photo.metadata?.location),
     [filteredPhotos]
   );
 
   /**
    * Handle photo click to open detail modal
+   * When a photo is clicked, find all photos at the same location
    */
   const handlePhotoClick = (photoId: string) => {
+    const clickedPhoto = filteredPhotos.find((p) => p.id === photoId);
+    if (!clickedPhoto?.metadata?.location) {
+      setDetailPhotoId(photoId);
+      setLocationPhotos([clickedPhoto!]);
+      return;
+    }
+
+    // Find all photos at the same location
+    const photosAtLocation = filteredPhotos.filter((photo) => {
+      if (!photo.metadata?.location) return false;
+
+      // Check if coordinates match (within small tolerance)
+      const latMatch = Math.abs(photo.metadata.location.latitude - clickedPhoto.metadata.location.latitude) < 0.00001;
+      const lngMatch = Math.abs(photo.metadata.location.longitude - clickedPhoto.metadata.location.longitude) < 0.00001;
+
+      return latMatch && lngMatch;
+    });
+
+    setLocationPhotos(photosAtLocation);
     setDetailPhotoId(photoId);
   };
 
   /**
    * Handle navigation in photo detail modal
+   * Navigate within photos at the same location
    */
   const handleDetailNavigate = (direction: 'prev' | 'next') => {
     if (!detailPhotoId) return;
 
-    const currentIndex = filteredPhotos.findIndex((p) => p.id === detailPhotoId);
+    const currentIndex = locationPhotos.findIndex((p) => p.id === detailPhotoId);
     if (currentIndex === -1) return;
 
     if (direction === 'prev' && currentIndex > 0) {
-      setDetailPhotoId(filteredPhotos[currentIndex - 1].id);
-    } else if (direction === 'next' && currentIndex < filteredPhotos.length - 1) {
-      setDetailPhotoId(filteredPhotos[currentIndex + 1].id);
+      setDetailPhotoId(locationPhotos[currentIndex - 1].id);
+    } else if (direction === 'next' && currentIndex < locationPhotos.length - 1) {
+      setDetailPhotoId(locationPhotos[currentIndex + 1].id);
     }
   };
 
   /**
    * Get navigation state for detail modal
+   * Based on photos at the same location
    */
   const getNavigationState = () => {
-    if (!detailPhotoId) return { hasPrev: false, hasNext: false };
+    if (!detailPhotoId || locationPhotos.length === 0) return { hasPrev: false, hasNext: false };
 
-    const currentIndex = filteredPhotos.findIndex((p) => p.id === detailPhotoId);
+    const currentIndex = locationPhotos.findIndex((p) => p.id === detailPhotoId);
     if (currentIndex === -1) return { hasPrev: false, hasNext: false };
 
     return {
       hasPrev: currentIndex > 0,
-      hasNext: currentIndex < filteredPhotos.length - 1,
+      hasNext: currentIndex < locationPhotos.length - 1,
     };
   };
 

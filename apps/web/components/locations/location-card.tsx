@@ -14,7 +14,7 @@
 'use client';
 
 import { useState } from 'react';
-import { MapPin, Edit, Trash2, MoreVertical } from 'lucide-react';
+import { MapPin, Edit, Trash2, MoreVertical, Globe } from 'lucide-react';
 import type { Location } from '@/types/storage';
 
 interface LocationCardProps {
@@ -99,19 +99,37 @@ export function LocationCard({
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
       className={`
-        group relative bg-card border border-border rounded-lg p-4
-        transition-all duration-200
+        group relative bg-card rounded-lg transition-all duration-200
+        ${location.isPublic
+          ? 'border-2 border-blue-500/40 dark:border-blue-400/40 pt-2 px-4 pb-4'
+          : 'border border-border p-4'}
         ${onClick ? 'cursor-pointer hover:shadow-md hover:border-primary/50' : ''}
         ${className}
       `}
     >
+      {/* Public Badge */}
+      {location.isPublic && (
+        <div className="flex items-center gap-1 px-2 py-1 mb-2 bg-blue-500/10 dark:bg-blue-400/10 border border-blue-500/30 dark:border-blue-400/30 rounded-full w-fit">
+          <Globe className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+          <span className="text-xs font-medium text-blue-600 dark:text-blue-400">Public</span>
+        </div>
+      )}
+
       {/* Header with icon and name */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-start gap-3 flex-1 min-w-0">
           {/* Location Icon */}
           <div className="flex-shrink-0 mt-0.5">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-              <MapPin className="w-5 h-5 text-primary" />
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+              location.isPublic
+                ? 'bg-blue-500/10 dark:bg-blue-400/10'
+                : 'bg-primary/10'
+            }`}>
+              <MapPin className={`w-5 h-5 ${
+                location.isPublic
+                  ? 'text-blue-600 dark:text-blue-400'
+                  : 'text-primary'
+              }`} />
             </div>
           </div>
 

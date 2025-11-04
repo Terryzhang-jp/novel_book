@@ -26,6 +26,12 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
+    name: "Profile",
+    href: "/profile",
+    icon: User,
+    description: "Your profile",
+  },
+  {
     name: "Documents",
     href: "/documents",
     icon: FileText,

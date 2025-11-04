@@ -22,6 +22,7 @@ interface PublicPhotoIndex {
   userId: string;
   userName: string;
   fileName: string;
+  fileUrl: string;
   dateTime?: string;
   location?: {
     latitude: number;

@@ -24,7 +24,7 @@ export class LocationStorage {
    * @param name - User-defined name (e.g., "Home", "Eiffel Tower")
    * @param coordinates - Latitude and longitude
    * @param address - Optional address information from geocoding
-   * @param options - Optional metadata (placeId, category, notes)
+   * @param options - Optional metadata (placeId, category, notes, isPublic)
    * @returns Created location
    */
   async create(
@@ -36,6 +36,7 @@ export class LocationStorage {
       placeId?: string;
       category?: string;
       notes?: string;
+      isPublic?: boolean;
     }
   ): Promise<Location> {
     const now = new Date().toISOString();
@@ -60,6 +61,7 @@ export class LocationStorage {
         place_id: options?.placeId || null,
         category: options?.category || null,
         notes: options?.notes || null,
+        is_public: options?.isPublic || false,
         usage_count: 0,
         created_at: now,
         updated_at: now,
@@ -82,6 +84,7 @@ export class LocationStorage {
       notes: data.notes,
       usageCount: data.usage_count,
       lastUsedAt: data.last_used_at,
+      isPublic: data.is_public,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -117,6 +120,7 @@ export class LocationStorage {
       notes: data.notes,
       usageCount: data.usage_count,
       lastUsedAt: data.last_used_at,
+      isPublic: data.is_public,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -131,7 +135,7 @@ export class LocationStorage {
   async findByUserId(userId: string): Promise<LocationIndex[]> {
     const { data, error } = await supabaseAdmin
       .from('locations')
-      .select('id, name, coordinates, address, usage_count, last_used_at, updated_at')
+      .select('id, user_id, name, coordinates, address, usage_count, last_used_at, is_public, updated_at')
       .eq('user_id', userId)
       .order('usage_count', { ascending: false });
 
@@ -141,11 +145,13 @@ export class LocationStorage {
 
     return data.map(location => ({
       id: location.id,
+      userId: location.user_id,
       name: location.name,
       coordinates: location.coordinates,
       formattedAddress: location.address?.formattedAddress,
       usageCount: location.usage_count,
       lastUsedAt: location.last_used_at,
+      isPublic: location.is_public,
       updatedAt: location.updated_at,
     }));
   }
@@ -162,7 +168,7 @@ export class LocationStorage {
     locationId: string,
     userId: string,
     updates: Partial<
-      Pick<Location, "name" | "coordinates" | "address" | "category" | "notes">
+      Pick<Location, "name" | "coordinates" | "address" | "category" | "notes" | "isPublic">
     >
   ): Promise<Location> {
     // Verify ownership first
@@ -179,6 +185,7 @@ export class LocationStorage {
         address: updates.address,
         category: updates.category,
         notes: updates.notes,
+        is_public: updates.isPublic,
         updated_at: new Date().toISOString(),
       })
       .eq('id', locationId)
@@ -201,6 +208,7 @@ export class LocationStorage {
       notes: data.notes,
       usageCount: data.usage_count,
       lastUsedAt: data.last_used_at,
+      isPublic: data.is_public,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -243,7 +251,7 @@ export class LocationStorage {
   async search(userId: string, query: string): Promise<LocationIndex[]> {
     const { data, error } = await supabaseAdmin
       .from('locations')
-      .select('id, name, coordinates, address, usage_count, last_used_at, updated_at')
+      .select('id, user_id, name, coordinates, address, usage_count, last_used_at, is_public, updated_at')
       .eq('user_id', userId)
       .ilike('name', `%${query}%`)
       .order('usage_count', { ascending: false });
@@ -254,11 +262,13 @@ export class LocationStorage {
 
     return data.map(location => ({
       id: location.id,
+      userId: location.user_id,
       name: location.name,
       coordinates: location.coordinates,
       formattedAddress: location.address?.formattedAddress,
       usageCount: location.usage_count,
       lastUsedAt: location.last_used_at,
+      isPublic: location.is_public,
       updatedAt: location.updated_at,
     }));
   }
@@ -311,6 +321,65 @@ export class LocationStorage {
       })
       .eq('id', locationId)
       .eq('user_id', userId);
+  }
+
+  /**
+   * Get all public locations (shared by all users)
+   *
+   * @returns Array of public location indexes, sorted by usage count (descending)
+   */
+  async findPublicLocations(): Promise<LocationIndex[]> {
+    const { data, error } = await supabaseAdmin
+      .from('locations')
+      .select('id, user_id, name, coordinates, address, usage_count, last_used_at, is_public, updated_at')
+      .eq('is_public', true)
+      .order('usage_count', { ascending: false });
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data.map(location => ({
+      id: location.id,
+      userId: location.user_id,
+      name: location.name,
+      coordinates: location.coordinates,
+      formattedAddress: location.address?.formattedAddress,
+      usageCount: location.usage_count,
+      lastUsedAt: location.last_used_at,
+      isPublic: location.is_public,
+      updatedAt: location.updated_at,
+    }));
+  }
+
+  /**
+   * Get all available locations for a user (their own + public locations)
+   *
+   * @param userId - User ID
+   * @returns Array of location indexes (user's own + public), sorted by usage count
+   */
+  async findAvailableLocations(userId: string): Promise<LocationIndex[]> {
+    const { data, error } = await supabaseAdmin
+      .from('locations')
+      .select('id, user_id, name, coordinates, address, usage_count, last_used_at, is_public, updated_at')
+      .or(`user_id.eq.${userId},is_public.eq.true`)
+      .order('usage_count', { ascending: false });
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data.map(location => ({
+      id: location.id,
+      userId: location.user_id,
+      name: location.name,
+      coordinates: location.coordinates,
+      formattedAddress: location.address?.formattedAddress,
+      usageCount: location.usage_count,
+      lastUsedAt: location.last_used_at,
+      isPublic: location.is_public,
+      updatedAt: location.updated_at,
+    }));
   }
 }
 

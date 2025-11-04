@@ -35,9 +35,24 @@ export async function middleware(request: NextRequest) {
 
   // 有 token，验证是否有效
   try {
-    await verifyToken(token);
+    const payload = await verifyToken(token);
 
     // Token 有效
+    // 检查是否需要强制修改密码
+    if (payload.requirePasswordChange) {
+      // 如果用户需要修改密码，但不在修改密码页面，则重定向
+      if (pathname !== "/change-password") {
+        return NextResponse.redirect(new URL("/change-password", request.url));
+      }
+      // 已经在修改密码页面，允许访问
+      return NextResponse.next();
+    }
+
+    // 不需要修改密码，如果在修改密码页面，重定向到文档列表
+    if (pathname === "/change-password") {
+      return NextResponse.redirect(new URL("/documents", request.url));
+    }
+
     // 如果访问登录/注册页面（而不是其他公开页面），重定向到文档列表
     if (isAuthOnlyRoute) {
       return NextResponse.redirect(new URL("/documents", request.url));

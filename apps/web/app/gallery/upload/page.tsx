@@ -263,7 +263,7 @@ export default function UploadPage() {
               </div>
 
               {/* File Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                 {selectedFiles.map((uploadingFile, index) => (
                   <div
                     key={index}
@@ -287,21 +287,21 @@ export default function UploadPage() {
                         <button
                           onClick={() => removeFile(index)}
                           disabled={uploading}
-                          className="p-2 bg-destructive text-destructive-foreground rounded-full hover:bg-destructive/90 transition-colors disabled:opacity-50"
+                          className="p-1.5 bg-destructive text-destructive-foreground rounded-full hover:bg-destructive/90 transition-colors disabled:opacity-50"
                         >
-                          <X className="w-4 h-4" />
+                          <X className="w-3 h-3" />
                         </button>
                       )}
                       {uploadingFile.status === "uploading" && (
-                        <div className="text-white text-sm">Uploading...</div>
+                        <div className="text-white text-xs">Uploading...</div>
                       )}
                       {uploadingFile.status === "success" && (
-                        <CheckCircle className="w-8 h-8 text-green-500" />
+                        <CheckCircle className="w-6 h-6 text-green-500" />
                       )}
                       {uploadingFile.status === "error" && (
-                        <div className="flex flex-col items-center gap-2">
-                          <XCircle className="w-8 h-8 text-red-500" />
-                          <p className="text-xs text-white text-center px-2">
+                        <div className="flex flex-col items-center gap-1">
+                          <XCircle className="w-6 h-6 text-red-500" />
+                          <p className="text-[10px] text-white text-center px-1">
                             {uploadingFile.error}
                           </p>
                         </div>
@@ -309,11 +309,11 @@ export default function UploadPage() {
                     </div>
 
                     {/* File Info */}
-                    <div className="p-2 bg-background/90">
-                      <p className="text-xs text-foreground truncate">
+                    <div className="p-1.5 bg-background/90">
+                      <p className="text-[10px] text-foreground truncate leading-tight">
                         {uploadingFile.file.name}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[10px] text-muted-foreground leading-tight">
                         {(uploadingFile.file.size / 1024 / 1024).toFixed(2)} MB
                       </p>
                     </div>

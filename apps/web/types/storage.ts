@@ -8,6 +8,7 @@ export interface User {
   email: string; // 邮箱（唯一）
   passwordHash: string; // bcrypt 哈希
   name?: string; // 用户名（可选）
+  requirePasswordChange: boolean; // 是否需要修改密码（初次登录时为true）
   createdAt: string; // ISO 8601 时间戳
   updatedAt: string;
 }
@@ -44,6 +45,7 @@ export interface DocumentIndex {
 export interface JWTPayload {
   userId: string;
   email: string;
+  requirePasswordChange?: boolean; // 是否需要修改密码（用于中间件重定向）
 }
 
 /**
@@ -181,6 +183,9 @@ export interface Location {
   usageCount: number; // 被多少张照片使用
   lastUsedAt?: string; // 最后使用时间 (ISO 8601)
 
+  // 公开设置
+  isPublic: boolean; // 是否公开（默认 false）- 公开的地点所有用户可见
+
   // 时间戳
   createdAt: string; // ISO 8601
   updatedAt: string;
@@ -199,5 +204,7 @@ export interface LocationIndex {
   formattedAddress?: string;
   usageCount: number;
   lastUsedAt?: string;
+  isPublic: boolean; // 是否公开
+  userId: string; // 所属用户ID（用于区分公共地点和私有地点）
   updatedAt: string;
 }

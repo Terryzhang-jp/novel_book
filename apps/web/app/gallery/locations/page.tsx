@@ -256,6 +256,7 @@ export default function LocationsPage() {
           name: data.name,
           coordinates: data.coordinates,
           address: data.address,
+          isPublic: data.isPublic,
         }),
       });
 
@@ -277,6 +278,7 @@ export default function LocationsPage() {
           name: data.name,
           coordinates: data.coordinates,
           address: data.address,
+          isPublic: data.isPublic,
         }),
       });
 

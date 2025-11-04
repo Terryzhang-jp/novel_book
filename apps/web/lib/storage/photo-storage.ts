@@ -690,6 +690,57 @@ export class PhotoStorage {
   }
 
   /**
+   * 同步 location 坐标到所有关联的照片
+   * 当 location 的坐标被更新时调用
+   */
+  async syncLocationCoordinatesToPhotos(
+    locationId: string,
+    newCoordinates: { latitude: number; longitude: number }
+  ): Promise<number> {
+    // 获取所有引用这个 locationId 的照片
+    const { data: photos, error: fetchError } = await supabaseAdmin
+      .from('photos')
+      .select('*')
+      .eq('location_id', locationId);
+
+    if (fetchError || !photos || photos.length === 0) {
+      return 0; // 没有照片需要更新
+    }
+
+    // 批量更新所有照片的坐标
+    let updatedCount = 0;
+    for (const photo of photos) {
+      const updatedMetadata = {
+        ...photo.metadata,
+        location: {
+          latitude: newCoordinates.latitude,
+          longitude: newCoordinates.longitude,
+          altitude: photo.metadata?.location?.altitude,
+          source: photo.metadata?.location?.source || "location-library",
+        },
+      };
+
+      // 重新计算分类
+      const category = this.categorize(updatedMetadata);
+
+      const { error: updateError } = await supabaseAdmin
+        .from('photos')
+        .update({
+          metadata: updatedMetadata,
+          category,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', photo.id);
+
+      if (!updateError) {
+        updatedCount++;
+      }
+    }
+
+    return updatedCount;
+  }
+
+  /**
    * 获取所有公开的照片（用于公共地图）
    */
   async getAllPublicPhotos(): Promise<Photo[]> {

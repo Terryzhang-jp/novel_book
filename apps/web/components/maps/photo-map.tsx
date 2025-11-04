@@ -19,8 +19,37 @@ import Image from 'next/image';
 import { MapPin, Image as ImageIcon, Loader2 } from 'lucide-react';
 import type { Photo } from '@/types/storage';
 
+// Minimal photo interface for map display
+interface MapPhoto {
+  id: string;
+  userId: string;
+  fileName: string;
+  fileUrl: string;
+  location?: {
+    latitude: number;
+    longitude: number;
+  };
+  dateTime?: string;
+}
+
 // Photo already has userId, so this type is just an alias now
-type PhotoWithOptionalUserId = Photo;
+type PhotoWithOptionalUserId = Photo | MapPhoto;
+
+// Helper function to get location from either photo type
+function getPhotoLocation(photo: PhotoWithOptionalUserId): { latitude: number; longitude: number } | undefined {
+  if ('metadata' in photo) {
+    return photo.metadata?.location;
+  }
+  return photo.location;
+}
+
+// Helper function to get dateTime from either photo type
+function getPhotoDateTime(photo: PhotoWithOptionalUserId): string | undefined {
+  if ('metadata' in photo) {
+    return photo.metadata?.dateTime;
+  }
+  return photo.dateTime;
+}
 
 interface PhotoMapProps {
   photos: PhotoWithOptionalUserId[];
@@ -113,7 +142,7 @@ export function PhotoMap({
     const locationMap = new Map<string, PhotoLocation>();
 
     photos.forEach((photo) => {
-      const location = photo.metadata?.location;
+      const location = getPhotoLocation(photo);
       if (!location) return;
 
       // Create a key from coordinates (rounded to 6 decimals)
@@ -231,7 +260,7 @@ export function PhotoMap({
   }
 
   /**
-   * Custom popup content for a location - Story-based view
+   * Custom popup content for a location - Story-based view with thumbnail grid
    */
   function LocationPopupContent({ location }: { location: PhotoLocation }) {
     // Get the first photo for main display
@@ -240,23 +269,66 @@ export function PhotoMap({
     const userName = (firstPhoto as any).userName || 'Anonymous';
     const description = extractDescription((firstPhoto as any).description);
 
+    // Get up to 4 photos for thumbnail display
+    const displayPhotos = location.photos.slice(0, 4);
+    const remainingCount = location.photos.length - displayPhotos.length;
+
     return (
       <div className="min-w-[280px] max-w-[320px]">
-        {/* Main Photo */}
-        <button
-          type="button"
-          onClick={() => onPhotoClick?.(firstPhoto.id)}
-          className="relative w-full aspect-[4/3] bg-muted rounded-lg overflow-hidden mb-3 hover:ring-2 hover:ring-primary transition-all cursor-pointer"
-        >
-          <Image
-            src={firstPhoto.fileUrl}
-            alt={firstPhoto.fileName}
-            fill
-            className="object-cover"
-            sizes="320px"
-            unoptimized
-          />
-        </button>
+        {/* Photo Thumbnails Grid (up to 4 photos) */}
+        {location.photos.length === 1 ? (
+          // Single photo - large display
+          <button
+            type="button"
+            onClick={() => onPhotoClick?.(firstPhoto.id)}
+            className="relative w-full aspect-[4/3] bg-muted rounded-lg overflow-hidden mb-3 hover:ring-2 hover:ring-primary transition-all cursor-pointer"
+          >
+            <Image
+              src={firstPhoto.fileUrl}
+              alt={firstPhoto.fileName}
+              fill
+              className="object-cover"
+              sizes="320px"
+              unoptimized
+            />
+          </button>
+        ) : (
+          // Multiple photos - grid display
+          <div className="mb-3">
+            <div className="grid grid-cols-2 gap-2">
+              {displayPhotos.map((photo, index) => (
+                <button
+                  key={photo.id}
+                  type="button"
+                  onClick={() => onPhotoClick?.(photo.id)}
+                  className="relative aspect-square bg-muted rounded-lg overflow-hidden hover:ring-2 hover:ring-primary transition-all cursor-pointer"
+                >
+                  <Image
+                    src={photo.fileUrl}
+                    alt={photo.fileName}
+                    fill
+                    className="object-cover"
+                    sizes="150px"
+                    unoptimized
+                  />
+                  {/* Show indicator for first photo */}
+                  {index === 0 && (
+                    <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/50 text-white text-[10px] font-medium rounded">
+                      主图
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Remaining photos indicator */}
+            {remainingCount > 0 && (
+              <p className="text-xs text-muted-foreground text-center mt-2">
+                +{remainingCount} more photo{remainingCount !== 1 ? 's' : ''} at this location
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Story Info */}
         <div className="space-y-2">
@@ -267,10 +339,10 @@ export function PhotoMap({
           </div>
 
           {/* When - 什么时候 */}
-          {firstPhoto.metadata?.dateTime && (
+          {getPhotoDateTime(firstPhoto) && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">📅</span>
-              <span className="text-xs text-muted-foreground">{formatDate(firstPhoto.metadata.dateTime)}</span>
+              <span className="text-xs text-muted-foreground">{formatDate(getPhotoDateTime(firstPhoto)!)}</span>
             </div>
           )}
 
@@ -291,15 +363,6 @@ export function PhotoMap({
                   {description}
                 </p>
               </div>
-            </div>
-          )}
-
-          {/* More photos indicator */}
-          {location.photos.length > 1 && (
-            <div className="pt-2 border-t border-border">
-              <p className="text-xs text-muted-foreground text-center">
-                +{location.photos.length - 1} more photo{location.photos.length - 1 !== 1 ? 's' : ''} at this location
-              </p>
             </div>
           )}
 

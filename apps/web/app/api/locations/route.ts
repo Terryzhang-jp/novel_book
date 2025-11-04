@@ -15,7 +15,12 @@ export const runtime = "nodejs";
 
 /**
  * GET /api/locations
- * List all locations for the authenticated user
+ * List locations based on query parameters
+ *
+ * Query params:
+ * - include=own (default): Only user's own locations
+ * - include=public: Only public locations
+ * - include=all: User's own + public locations
  *
  * Returns locations sorted by usage count (most used first)
  */
@@ -24,12 +29,34 @@ export async function GET(req: Request) {
     // 验证用户身份
     const session = await requireAuth(req);
 
-    // 获取用户的所有地点
-    const locations = await locationStorage.findByUserId(session.userId);
+    // 解析查询参数
+    const { searchParams } = new URL(req.url);
+    const include = searchParams.get("include") || "own";
+
+    let locations;
+
+    switch (include) {
+      case "public":
+        // 只获取公共地点
+        locations = await locationStorage.findPublicLocations();
+        break;
+
+      case "all":
+        // 获取用户自己的 + 公共地点
+        locations = await locationStorage.findAvailableLocations(session.userId);
+        break;
+
+      case "own":
+      default:
+        // 只获取用户自己的地点
+        locations = await locationStorage.findByUserId(session.userId);
+        break;
+    }
 
     return NextResponse.json({
       locations,
       total: locations.length,
+      include,
     });
   } catch (error) {
     console.error("Get locations error:", error);
@@ -64,7 +91,8 @@ export async function GET(req: Request) {
  *   },
  *   placeId?: string,
  *   category?: string,
- *   notes?: string
+ *   notes?: string,
+ *   isPublic?: boolean
  * }
  */
 export async function POST(req: Request) {
@@ -74,7 +102,7 @@ export async function POST(req: Request) {
 
     // 解析请求体
     const body = await req.json();
-    const { name, coordinates, address, placeId, category, notes } = body;
+    const { name, coordinates, address, placeId, category, notes, isPublic } = body;
 
     // 验证必需字段
     if (!name || typeof name !== "string") {
@@ -121,6 +149,7 @@ export async function POST(req: Request) {
         placeId,
         category,
         notes,
+        isPublic,
       }
     );
 

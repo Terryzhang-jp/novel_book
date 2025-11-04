@@ -20,11 +20,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // 生成 JWT token
-    const token = await createSession(user.id, user.email);
+    // 生成 JWT token (包含 requirePasswordChange 状态)
+    const token = await createSession(user.id, user.email, user.requirePasswordChange);
 
     // 返回响应并设置 cookie
-    const response = NextResponse.json({ success: true });
+    const response = NextResponse.json({
+      success: true,
+      requirePasswordChange: user.requirePasswordChange,
+    });
 
     response.cookies.set("auth-token", token, {
       httpOnly: true,

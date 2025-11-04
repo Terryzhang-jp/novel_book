@@ -29,6 +29,7 @@ interface PublicPhotoIndex {
   userId: string;
   userName: string;
   fileName: string;
+  fileUrl: string;
   category: PhotoCategory;
   dateTime?: string;
   location?: {
@@ -43,6 +44,7 @@ export default function ChichibuPage() {
   const [loading, setLoading] = useState(true);
   const [detailPhotoId, setDetailPhotoId] = useState<string | null>(null);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
+  const [locationPhotos, setLocationPhotos] = useState<PublicPhotoIndex[]>([]); // Photos at the selected location
   const [focusLocation, setFocusLocation] = useState<{
     latitude: number;
     longitude: number;
@@ -87,8 +89,28 @@ export default function ChichibuPage() {
 
   /**
    * Handle photo click from map popup to open detail modal
+   * When a photo is clicked, find all photos at the same location
    */
   const handlePhotoClick = (photoId: string) => {
+    const clickedPhoto = photos.find((p) => p.id === photoId);
+    if (!clickedPhoto?.location) {
+      setDetailPhotoId(photoId);
+      setLocationPhotos([clickedPhoto!]);
+      return;
+    }
+
+    // Find all photos at the same location
+    const photosAtLocation = photos.filter((photo) => {
+      if (!photo.location) return false;
+
+      // Check if coordinates match (within small tolerance)
+      const latMatch = Math.abs(photo.location.latitude - clickedPhoto.location.latitude) < 0.00001;
+      const lngMatch = Math.abs(photo.location.longitude - clickedPhoto.location.longitude) < 0.00001;
+
+      return latMatch && lngMatch;
+    });
+
+    setLocationPhotos(photosAtLocation);
     setDetailPhotoId(photoId);
   };
 
@@ -109,32 +131,34 @@ export default function ChichibuPage() {
 
   /**
    * Handle navigation in photo detail modal
+   * Navigate within photos at the same location
    */
   const handleDetailNavigate = (direction: 'prev' | 'next') => {
     if (!detailPhotoId) return;
 
-    const currentIndex = photos.findIndex((p) => p.id === detailPhotoId);
+    const currentIndex = locationPhotos.findIndex((p) => p.id === detailPhotoId);
     if (currentIndex === -1) return;
 
     if (direction === 'prev' && currentIndex > 0) {
-      setDetailPhotoId(photos[currentIndex - 1].id);
-    } else if (direction === 'next' && currentIndex < photos.length - 1) {
-      setDetailPhotoId(photos[currentIndex + 1].id);
+      setDetailPhotoId(locationPhotos[currentIndex - 1].id);
+    } else if (direction === 'next' && currentIndex < locationPhotos.length - 1) {
+      setDetailPhotoId(locationPhotos[currentIndex + 1].id);
     }
   };
 
   /**
    * Get navigation state for detail modal
+   * Based on photos at the same location
    */
   const getNavigationState = () => {
-    if (!detailPhotoId) return { hasPrev: false, hasNext: false };
+    if (!detailPhotoId || locationPhotos.length === 0) return { hasPrev: false, hasNext: false };
 
-    const currentIndex = photos.findIndex((p) => p.id === detailPhotoId);
+    const currentIndex = locationPhotos.findIndex((p) => p.id === detailPhotoId);
     if (currentIndex === -1) return { hasPrev: false, hasNext: false };
 
     return {
       hasPrev: currentIndex > 0,
-      hasNext: currentIndex < photos.length - 1,
+      hasNext: currentIndex < locationPhotos.length - 1,
     };
   };
 

@@ -24,6 +24,7 @@ interface PublicPhoto {
   id: string;
   userId: string;
   fileName: string;
+  fileUrl: string;
   originalName: string;
   userName: string;  // 上传者姓名
   metadata: {

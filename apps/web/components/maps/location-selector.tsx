@@ -42,7 +42,7 @@ export function LocationSelector({
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * Fetch user's locations from the library
+   * Fetch user's locations from the library (including public locations)
    */
   useEffect(() => {
     async function fetchLocations() {
@@ -50,7 +50,8 @@ export function LocationSelector({
       setError(null);
 
       try {
-        const response = await fetch('/api/locations');
+        // Fetch user's own locations + public locations
+        const response = await fetch('/api/locations?include=all');
 
         if (response.ok) {
           const data = await response.json();
@@ -200,8 +201,13 @@ export function LocationSelector({
                     </p>
                   </div>
 
-                  {/* Usage Count Badge */}
+                  {/* Badges */}
                   <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    {location.isPublic && (
+                      <span className="text-xs px-2 py-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-full font-medium">
+                        Public
+                      </span>
+                    )}
                     {location.usageCount > 0 && (
                       <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
                         Used {location.usageCount}×

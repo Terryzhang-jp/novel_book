@@ -7,9 +7,10 @@ import type { JWTPayload } from "@/types/storage";
  */
 export async function createSession(
   userId: string,
-  email: string
+  email: string,
+  requirePasswordChange?: boolean
 ): Promise<string> {
-  const token = await signToken({ userId, email });
+  const token = await signToken({ userId, email, requirePasswordChange });
   return token;
 }
 

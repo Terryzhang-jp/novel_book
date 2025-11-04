@@ -14,6 +14,7 @@ interface PublicPhotoIndex {
   userId: string;
   userName: string;
   fileName: string;
+  fileUrl: string;
   category: PhotoCategory;
   dateTime?: string;
   location?: {
@@ -73,7 +74,12 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (response.ok) {
-        router.push("/documents");
+        // 检查是否需要修改密码
+        if (data.requirePasswordChange) {
+          router.push("/change-password");
+        } else {
+          router.push("/documents");
+        }
         router.refresh();
       } else {
         setError(data.error || "Invalid email or password");
