@@ -1,6 +1,8 @@
 {
-  "buildCommand": "cd ../.. && pnpm run build --filter=novel-next-app",
+  "framework": "nextjs",
+  "buildCommand": "cd ../.. && pnpm turbo build --filter=novel-next-app && cp -r apps/web/.next .next",
   "installCommand": "cd ../.. && pnpm install",
+  "outputDirectory": ".next",
   "rewrites": [
     {
       "source": "/docs",
