@@ -253,5 +253,45 @@ All Novel editor components are in `apps/web/components/tailwind/`. Key customiz
 - Modified image upload to use authenticated API
 - Created DocumentEditor wrapper for API integration
 - Removed border from `.tippy-box` in prosemirror.css
+- Implemented image alignment controls (left/center/right)
 
 When modifying editor UI, always use Tailwind theme variables (`bg-background`, `text-foreground`, etc.) instead of fixed colors for theme compatibility.
+
+### Image Alignment Feature
+
+The editor supports image alignment controls that allow users to position images left, center, or right.
+
+**Implementation:**
+1. **UpdatedImage Extension** (`packages/headless/src/extensions/updated-image.ts`)
+   - Extended base Image extension with `align` attribute
+   - Stores alignment in `data-align` attribute
+   - Default: "left"
+
+2. **ImageAlignSelector Component** (`apps/web/components/tailwind/selectors/image-align-selector.tsx`)
+   - Bubble menu that appears when an image is selected
+   - Three buttons: AlignLeft, AlignCenter, AlignRight
+   - Uses `editor.updateAttributes('image', { align })` to update
+
+3. **EditorBubble Modified** (`packages/headless/src/components/editor-bubble.tsx`)
+   - Removed `editor.isActive("image")` check from `shouldShow`
+   - Removed `isNodeSelection` check
+   - Allows bubble menu to display for image node selections
+
+4. **CSS Styles** (`apps/web/styles/prosemirror.css`)
+   ```css
+   .ProseMirror img[data-align="left"] { margin-right: auto; }
+   .ProseMirror img[data-align="center"] { margin-left: auto; margin-right: auto; }
+   .ProseMirror img[data-align="right"] { margin-left: auto; }
+   ```
+
+**Usage:**
+1. Click on an image in the editor
+2. Bubble menu appears with alignment buttons
+3. Click left/center/right to change alignment
+4. Images inserted from photo sidebar default to left alignment
+
+**Photo Sidebar Integration:**
+- Located at `apps/web/components/documents/photo-sidebar.tsx`
+- Simple click-to-insert interface
+- No pre-selection of alignment (use editor controls after insertion)
+- Category filtering support (time+location, time-only, location-only, neither)
