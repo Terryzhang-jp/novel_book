@@ -1,6 +1,6 @@
 {
-  "buildCommand": "pnpm run build --filter=novel-next-app",
-  "installCommand": "cd ../.. && pnpm install && cd apps/web",
+  "buildCommand": "cd ../.. && pnpm run build --filter=novel-next-app",
+  "installCommand": "cd ../.. && pnpm install",
   "rewrites": [
     {
       "source": "/docs",
