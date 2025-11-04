@@ -11,6 +11,16 @@ const UpdatedImage = Image.extend({
       height: {
         default: null,
       },
+      align: {
+        default: "left",
+        parseHTML: (element) => element.getAttribute("data-align") || "left",
+        renderHTML: (attributes) => {
+          if (!attributes.align) return {};
+          return {
+            "data-align": attributes.align,
+          };
+        },
+      },
     };
   },
 });

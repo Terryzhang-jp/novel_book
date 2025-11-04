@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/tailwind/ui/button";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import DocumentEditor from "@/components/document-editor";
-import type { JSONContent } from "novel";
+import { PhotoSidebar } from "@/components/documents/photo-sidebar";
+import type { JSONContent, EditorInstance } from "novel";
 import { AppLayout } from "@/components/layout/app-layout";
 
 interface Document {
@@ -31,6 +32,8 @@ export default function EditDocumentPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const router = useRouter();
+  const editorRef = useRef<EditorInstance | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
     fetchDocument();
@@ -101,6 +104,36 @@ export default function EditDocumentPage({
     }
   };
 
+  const handleEditorReady = (editor: EditorInstance) => {
+    editorRef.current = editor;
+  };
+
+  const handlePhotoInsert = (photoUrl: string, align: 'left' | 'center' | 'right' = 'left') => {
+    if (!editorRef.current) {
+      console.warn("Editor not ready");
+      return;
+    }
+
+    const editor = editorRef.current;
+
+    // Insert image as a Tiptap node with alignment attribute
+    // Collapse selection to end before inserting to prevent replacing selected content
+    const { to } = editor.state.selection;
+    editor
+      .chain()
+      .focus()
+      .setTextSelection(to)
+      .insertContent({
+        type: 'image',
+        attrs: {
+          src: photoUrl,
+          align: align
+        }
+      })
+      .run();
+  };
+
+
   if (loading) {
     return (
       <AppLayout>
@@ -137,43 +170,53 @@ export default function EditDocumentPage({
   return (
     <AppLayout>
       <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card shadow-sm">
-        <div className="mx-auto max-w-screen-lg px-4 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/documents">
-              <Button variant="outline" className="flex items-center space-x-2">
-                <ArrowLeft className="h-4 w-4" />
-                <span>Back</span>
-              </Button>
-            </Link>
-            <div className="flex-1 mx-8">
-              <input
-                type="text"
-                value={document.title}
-                onChange={(e) => {
-                  const newTitle = e.target.value;
-                  setDocument((prev) =>
-                    prev ? { ...prev, title: newTitle } : null
-                  );
-                }}
-                onBlur={(e) => handleTitleChange(e.target.value)}
-                className="w-full border-none bg-transparent text-2xl font-bold text-foreground focus:outline-none focus:ring-0"
-                placeholder="Untitled"
-              />
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Editor */}
-      <main className="mx-auto max-w-screen-lg px-4 py-8">
-        <DocumentEditor
-          documentId={document.id}
-          initialContent={document.content}
-          onSave={handleContentSave}
+        {/* Photo Sidebar */}
+        <PhotoSidebar
+          onPhotoInsert={handlePhotoInsert}
+          onOpenChange={setSidebarOpen}
         />
-      </main>
+
+        {/* Main Content - with left margin for sidebar */}
+        <div className={`transition-all duration-300 ${sidebarOpen ? 'lg:ml-[320px]' : 'ml-0'}`}>
+          {/* Header */}
+          <header className="border-b bg-card shadow-sm">
+            <div className="mx-auto max-w-screen-lg px-4 py-4">
+              <div className="flex items-center justify-between">
+                <Link href="/documents">
+                  <Button variant="outline" className="flex items-center space-x-2">
+                    <ArrowLeft className="h-4 w-4" />
+                    <span>Back</span>
+                  </Button>
+                </Link>
+                <div className="flex-1 mx-8">
+                  <input
+                    type="text"
+                    value={document.title}
+                    onChange={(e) => {
+                      const newTitle = e.target.value;
+                      setDocument((prev) =>
+                        prev ? { ...prev, title: newTitle } : null
+                      );
+                    }}
+                    onBlur={(e) => handleTitleChange(e.target.value)}
+                    className="w-full border-none bg-transparent text-2xl font-bold text-foreground focus:outline-none focus:ring-0"
+                    placeholder="Untitled"
+                  />
+                </div>
+              </div>
+            </div>
+          </header>
+
+          {/* Editor */}
+          <main className="mx-auto max-w-screen-lg px-4 py-8">
+            <DocumentEditor
+              documentId={document.id}
+              initialContent={document.content}
+              onSave={handleContentSave}
+              onEditorReady={handleEditorReady}
+            />
+          </main>
+        </div>
       </div>
     </AppLayout>
   );

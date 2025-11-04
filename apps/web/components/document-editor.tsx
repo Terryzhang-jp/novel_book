@@ -14,20 +14,19 @@ import {
   handleImageDrop,
   handleImagePaste,
 } from "novel";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useDebouncedCallback } from "use-debounce";
 import { defaultExtensions } from "./tailwind/extensions";
 import { ColorSelector } from "./tailwind/selectors/color-selector";
 import { LinkSelector } from "./tailwind/selectors/link-selector";
 import { MathSelector } from "./tailwind/selectors/math-selector";
 import { NodeSelector } from "./tailwind/selectors/node-selector";
+import { ImageAlignSelector } from "./tailwind/selectors/image-align-selector";
 import { Separator } from "./tailwind/ui/separator";
 import GenerativeMenuSwitch from "./tailwind/generative/generative-menu-switch";
 import { uploadFn } from "./tailwind/image-upload";
 import { TextButtons } from "./tailwind/selectors/text-buttons";
 import { slashCommand, suggestionItems } from "./tailwind/slash-command";
-
-const hljs = require("highlight.js");
 
 const extensions = [...defaultExtensions, slashCommand];
 
@@ -35,12 +34,14 @@ interface DocumentEditorProps {
   documentId: string;
   initialContent: JSONContent;
   onSave: (content: JSONContent) => Promise<void>;
+  onEditorReady?: (editor: EditorInstance) => void;
 }
 
 const DocumentEditor = ({
   documentId,
   initialContent,
   onSave,
+  onEditorReady,
 }: DocumentEditorProps) => {
   const [saveStatus, setSaveStatus] = useState("Saved");
   const [charsCount, setCharsCount] = useState<number>();
@@ -49,17 +50,6 @@ const DocumentEditor = ({
   const [openColor, setOpenColor] = useState(false);
   const [openLink, setOpenLink] = useState(false);
   const [openAI, setOpenAI] = useState(false);
-
-  // Apply Codeblock Highlighting on the HTML from editor.getHTML()
-  const highlightCodeblocks = (content: string) => {
-    const doc = new DOMParser().parseFromString(content, "text/html");
-    doc.querySelectorAll("pre code").forEach((el) => {
-      // @ts-ignore
-      // https://highlightjs.readthedocs.io/en/latest/api.html?highlight=highlightElement#highlightelement
-      hljs.highlightElement(el);
-    });
-    return new XMLSerializer().serializeToString(doc);
-  };
 
   const debouncedUpdates = useDebouncedCallback(
     async (editor: EditorInstance) => {
@@ -98,6 +88,7 @@ const DocumentEditor = ({
           key={documentId}
           initialContent={initialContent}
           extensions={extensions}
+          immediatelyRender={false}
           className="relative min-h-[500px] w-full max-w-screen-lg border-muted bg-background sm:mb-[calc(20vh)] sm:rounded-lg sm:border sm:shadow-lg"
           editorProps={{
             handleDOMEvents: {
@@ -111,6 +102,9 @@ const DocumentEditor = ({
               class:
                 "prose prose-lg dark:prose-invert prose-headings:font-title font-default focus:outline-none max-w-full",
             },
+          }}
+          onCreate={({ editor }) => {
+            onEditorReady?.(editor);
           }}
           onUpdate={({ editor }) => {
             debouncedUpdates(editor);
@@ -150,6 +144,8 @@ const DocumentEditor = ({
             <Separator orientation="vertical" />
 
             <LinkSelector open={openLink} onOpenChange={setOpenLink} />
+            <Separator orientation="vertical" />
+            <ImageAlignSelector />
             <Separator orientation="vertical" />
             <MathSelector />
             <Separator orientation="vertical" />

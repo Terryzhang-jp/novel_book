@@ -21,6 +21,7 @@
 
 .ProseMirror img {
   transition: filter 0.1s ease-in-out;
+  display: block;
 
   &:hover {
     cursor: pointer;
@@ -31,6 +32,46 @@
     outline: 3px solid #5abbf7;
     filter: brightness(90%);
   }
+
+  /* Image alignment support */
+  &[data-align="left"] {
+    margin-right: auto;
+  }
+
+  &[data-align="center"] {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  &[data-align="right"] {
+    margin-left: auto;
+  }
+}
+
+/* Moveable control handles styling */
+.moveable-control-box {
+  --moveable-color: #5abbf7;
+}
+
+.moveable-control {
+  width: 12px !important;
+  height: 12px !important;
+  margin-top: -6px !important;
+  margin-left: -6px !important;
+  background: white !important;
+  border: 2px solid #5abbf7 !important;
+  border-radius: 50% !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+}
+
+.moveable-line {
+  background: #5abbf7 !important;
+  height: 2px !important;
+}
+
+.moveable-direction {
+  background: #5abbf7 !important;
+  border: 2px solid white !important;
 }
 
 .img-placeholder {

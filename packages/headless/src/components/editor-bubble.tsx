@@ -1,4 +1,4 @@
-import { BubbleMenu, isNodeSelection, useCurrentEditor } from "@tiptap/react";
+import { BubbleMenu, useCurrentEditor } from "@tiptap/react";
 import type { BubbleMenuProps } from "@tiptap/react";
 import { forwardRef, useEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
@@ -25,12 +25,11 @@ export const EditorBubble = forwardRef<HTMLDivElement, EditorBubbleProps>(
         const { selection } = state;
         const { empty } = selection;
 
-        // don't show bubble menu if:
-        // - the editor is not editable
-        // - the selected node is an image
-        // - the selection is empty
-        // - the selection is a node selection (for drag handles)
-        if (!editor.isEditable || editor.isActive("image") || empty || isNodeSelection(selection)) {
+        // Show bubble menu when:
+        // - the editor is editable
+        // - the selection is not empty (includes text selections and node selections like images)
+        // Note: Removed image and node selection checks to allow ImageAlignSelector to show for images
+        if (!editor.isEditable || empty) {
           return false;
         }
         return true;
