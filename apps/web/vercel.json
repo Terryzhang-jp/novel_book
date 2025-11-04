@@ -1,4 +1,6 @@
 {
+  "buildCommand": "cd ../.. && pnpm install && cd apps/web && pnpm build",
+  "installCommand": "echo 'Using custom build command'",
   "rewrites": [
     {
       "source": "/docs",
