@@ -14,7 +14,7 @@
   "dependencies": {
     "turbo": "^2.3.3"
   },
-  "packageManager": "pnpm@9.5.0",
+  "packageManager": "pnpm@10.20.0",
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "postcss": "^8.5.1"
