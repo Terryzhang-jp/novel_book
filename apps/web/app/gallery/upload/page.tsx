@@ -6,6 +6,7 @@ import { ArrowLeft, Upload, X, CheckCircle, XCircle } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { AppLayout } from "@/components/layout/app-layout";
+import imageCompression from "browser-image-compression";
 
 interface UploadingFile {
   file: File;
@@ -23,7 +24,7 @@ export default function UploadPage() {
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
 
-  const handleFilesSelect = (files: FileList | File[]) => {
+  const handleFilesSelect = async (files: FileList | File[]) => {
     const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp", "image/heic", "image/heif"];
     const maxSize = 10 * 1024 * 1024; // 10MB
 
@@ -37,10 +38,36 @@ export default function UploadPage() {
         continue;
       }
 
-      // Validate file size
+      // Validate original file size
       if (file.size > maxSize) {
         setError(`${file.name}: File size must be less than 10MB`);
         continue;
+      }
+
+      let processedFile = file;
+
+      // Compress image if it's larger than 1MB
+      if (file.size > 1 * 1024 * 1024) {
+        try {
+          const compressionOptions = {
+            maxSizeMB: 3,           // Target max size 3MB
+            maxWidthOrHeight: 4096, // Maintain 4K resolution
+            useWebWorker: true,     // Use Web Worker to avoid blocking UI
+            quality: 0.85,          // 85% quality (visually lossless)
+          };
+
+          processedFile = await imageCompression(file, compressionOptions);
+
+          // Show compression result in console for debugging
+          console.log(
+            `Compressed ${file.name}: ${(file.size / 1024 / 1024).toFixed(2)}MB → ${(processedFile.size / 1024 / 1024).toFixed(2)}MB`
+          );
+        } catch (error) {
+          console.error("Compression error:", error);
+          setError(`${file.name}: Failed to compress image. Using original file.`);
+          // If compression fails, use original file
+          processedFile = file;
+        }
       }
 
       // Create preview
@@ -56,10 +83,10 @@ export default function UploadPage() {
           return prev;
         });
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(processedFile);
 
       newFiles.push({
-        file,
+        file: processedFile,
         preview: "",
         status: "pending",
       });
@@ -233,6 +260,7 @@ export default function UploadPage() {
               <div className="text-sm text-muted-foreground space-y-1">
                 <p>Supported: JPEG, PNG, GIF, WebP, HEIC</p>
                 <p>Max size: 10MB per file</p>
+                <p className="font-medium">Photos larger than 1MB will be auto-compressed</p>
                 <p className="font-medium">You can select multiple files</p>
               </div>
             </div>

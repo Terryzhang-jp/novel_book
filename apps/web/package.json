@@ -34,6 +34,7 @@
     "ai": "^3.0.12",
     "autoprefixer": "^10.4.17",
     "bcryptjs": "^3.0.2",
+    "browser-image-compression": "^2.0.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "cmdk": "^1.0.4",
