@@ -167,6 +167,141 @@ export const supabaseAdmin = new Proxy({} as SupabaseClient, {
 
 ---
 
+### 问题 5: Vercel 部署保护导致所有请求需要验证
+
+**症状**:
+访问部署 URL 时，所有页面（包括 API 路由）都重定向到 Vercel 验证页面。
+
+**错误页面**:
+```
+Authentication Required
+Vercel Authentication
+```
+
+**原因**:
+Vercel 项目默认启用了**部署保护（Deployment Protection）**，要求所有访问者进行身份验证。这会影响：
+- 所有页面路由
+- 所有 API 路由
+- 静态资源
+
+**解决方案**:
+1. 访问 Vercel 项目设置：
+   ```
+   https://vercel.com/<your-team>/<project>/settings/deployment-protection
+   ```
+
+2. 找到 "Vercel Authentication" 或 "Standard Protection"
+
+3. 将其设置为 **"Disabled"**
+
+4. 保存设置
+
+**注意**:
+- 如果你的应用需要公开访问，必须禁用部署保护
+- 如果只想保护某些路由，在应用层实现认证而不是 Vercel 层
+
+---
+
+### 问题 6: 环境变量包含换行符导致运行时错误（最关键！）
+
+**错误信息**:
+```
+Error: supabaseUrl is required.
+GET /api/auth/login 500 Internal Server Error
+GET /api/public/photos 500 Internal Server Error
+```
+
+**原因**:
+使用 `echo` 命令通过管道添加环境变量时，`echo` 会在值的末尾自动添加换行符 `\n`。
+
+例如：
+```bash
+echo "https://xxx.supabase.co" | vercel env add NEXT_PUBLIC_SUPABASE_URL production
+```
+
+实际存储的值：
+```
+"https://xxx.supabase.co\n"  # 注意末尾的换行符！
+```
+
+这导致 Supabase 客户端初始化时认为 URL 是空的或无效的。
+
+**诊断方法**:
+创建测试端点检查环境变量：
+
+```typescript
+// app/api/test-env/route.ts
+import { NextResponse } from 'next/server';
+
+export async function GET() {
+  return NextResponse.json({
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY?.substring(0, 20),
+  });
+}
+```
+
+如果看到类似 `"Set (\n)"` 的输出，说明环境变量有换行符。
+
+**解决方案**:
+
+**❌ 错误的方式：**
+```bash
+echo "value" | vercel env add VAR_NAME production
+```
+
+**✅ 正确的方式：**
+```bash
+# 使用 printf 代替 echo（推荐）
+printf "value" | vercel env add VAR_NAME production
+
+# 或者使用 echo -n（不添加换行符）
+echo -n "value" | vercel env add VAR_NAME production
+```
+
+**修复步骤**:
+1. 删除所有受影响的环境变量：
+   ```bash
+   vercel env rm NEXT_PUBLIC_SUPABASE_URL production --yes
+   vercel env rm NEXT_PUBLIC_SUPABASE_URL preview --yes
+   vercel env rm NEXT_PUBLIC_SUPABASE_URL development --yes
+
+   vercel env rm SUPABASE_SERVICE_ROLE_KEY production --yes
+   vercel env rm SUPABASE_SERVICE_ROLE_KEY preview --yes
+   vercel env rm SUPABASE_SERVICE_ROLE_KEY development --yes
+   ```
+
+2. 使用 `printf` 重新添加（不带换行符）：
+   ```bash
+   # Supabase URL
+   printf "https://xxx.supabase.co" | vercel env add NEXT_PUBLIC_SUPABASE_URL production
+   printf "https://xxx.supabase.co" | vercel env add NEXT_PUBLIC_SUPABASE_URL preview
+   printf "https://xxx.supabase.co" | vercel env add NEXT_PUBLIC_SUPABASE_URL development
+
+   # Service Role Key
+   printf "your-service-role-key" | vercel env add SUPABASE_SERVICE_ROLE_KEY production
+   printf "your-service-role-key" | vercel env add SUPABASE_SERVICE_ROLE_KEY preview
+   printf "your-service-role-key" | vercel env add SUPABASE_SERVICE_ROLE_KEY development
+   ```
+
+3. 验证环境变量已正确设置：
+   ```bash
+   vercel env ls
+   ```
+
+4. 重新部署：
+   ```bash
+   vercel --prod --yes
+   ```
+
+**关键要点**:
+- **永远使用 `printf` 而不是 `echo`** 来添加 Vercel 环境变量
+- 环境变量的值必须精确匹配，任何额外的空格或换行符都会导致问题
+- 这个问题特别隐蔽，因为在 Vercel UI 中看不到换行符
+- 环境变量必须在**所有三个环境**（Production, Preview, Development）中都正确配置
+
+---
+
 ## 最终成功的配置
 
 ### 1. vercel.json（根目录）
