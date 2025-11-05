@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Upload, Trash2, X, MapPin } from "lucide-react";
@@ -10,6 +10,12 @@ import { PhotoGrid } from "@/components/gallery/photo-grid";
 import { PhotoDetailModal } from "@/components/photos/photo-detail-modal";
 import { BatchLocationAssignment } from "@/components/photos/batch-location-assignment";
 import { AppLayout } from "@/components/layout/app-layout";
+import { ClusterSection } from "@/components/gallery/cluster-section";
+import { ClusterSettings } from "@/components/gallery/cluster-settings";
+import {
+  clusterPhotosByTime,
+  DEFAULT_CLUSTER_THRESHOLD,
+} from "@/lib/utils/photo-clustering";
 
 const PAGE_SIZE = 50; // 每次加载50张照片
 
@@ -30,6 +36,9 @@ export default function GalleryPage() {
   const [showBatchLocationModal, setShowBatchLocationModal] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  // 聚类阈值（分钟）
+  const [clusterThreshold, setClusterThreshold] = useState(DEFAULT_CLUSTER_THRESHOLD);
 
   // 初始加载
   useEffect(() => {
@@ -216,6 +225,14 @@ export default function GalleryPage() {
   const filteredPhotos = photos;
 
   /**
+   * 对照片进行时间聚类
+   * 使用 useMemo 缓存结果，仅在 photos 或 clusterThreshold 变化时重新计算
+   */
+  const photoClusters = useMemo(() => {
+    return clusterPhotosByTime(filteredPhotos, clusterThreshold);
+  }, [filteredPhotos, clusterThreshold]);
+
+  /**
    * Handle photo click to open detail modal
    */
   const handlePhotoClick = (photoId: string) => {
@@ -277,6 +294,9 @@ export default function GalleryPage() {
             <div className="flex items-center gap-4">
               {!selectionMode ? (
                 <>
+                  {/* 聚类设置 */}
+                  <ClusterSettings onChange={setClusterThreshold} />
+
                   <button
                     onClick={toggleSelectionMode}
                     className="flex items-center gap-2 px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-accent transition-colors"
@@ -350,19 +370,23 @@ export default function GalleryPage() {
         </div>
       </div>
 
-      {/* Photo Grid */}
+      {/* Photo Clusters */}
       <div className="max-w-7xl mx-auto px-8 py-8">
         {userId ? (
           <>
-            <PhotoGrid
-              photos={filteredPhotos}
-              userId={userId}
-              onPhotoDelete={handlePhotoDelete}
-              selectionMode={selectionMode}
-              selectedPhotos={selectedPhotos}
-              onPhotoToggle={togglePhotoSelection}
-              onPhotoClick={handlePhotoClick}
-            />
+            {/* 渲染所有聚类组 */}
+            {photoClusters.map((cluster) => (
+              <ClusterSection
+                key={cluster.id}
+                cluster={cluster}
+                userId={userId}
+                onPhotoDelete={handlePhotoDelete}
+                selectionMode={selectionMode}
+                selectedPhotos={selectedPhotos}
+                onPhotoToggle={togglePhotoSelection}
+                onPhotoClick={handlePhotoClick}
+              />
+            ))}
 
             {/* Loading More Indicator */}
             {loadingMore && (
