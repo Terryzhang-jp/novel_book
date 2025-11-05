@@ -239,13 +239,28 @@ export class PhotoStorage {
 
   /**
    * 获取用户的所有照片（返回完整照片列表）
+   * @param userId 用户ID
+   * @param options 分页选项 { limit?: number, offset?: number }
    */
-  async findByUserId(userId: string): Promise<Photo[]> {
-    const { data, error } = await supabaseAdmin
+  async findByUserId(
+    userId: string,
+    options?: { limit?: number; offset?: number }
+  ): Promise<Photo[]> {
+    let query = supabaseAdmin
       .from('photos')
       .select('*')
       .eq('user_id', userId)
       .order('updated_at', { ascending: false });
+
+    // 添加分页参数
+    if (options?.limit !== undefined) {
+      query = query.limit(options.limit);
+    }
+    if (options?.offset !== undefined) {
+      query = query.range(options.offset, options.offset + (options.limit || 50) - 1);
+    }
+
+    const { data, error } = await query;
 
     if (error || !data) {
       return [];
@@ -271,17 +286,31 @@ export class PhotoStorage {
 
   /**
    * 按分类获取照片（返回完整照片列表）
+   * @param userId 用户ID
+   * @param category 照片分类
+   * @param options 分页选项 { limit?: number, offset?: number }
    */
   async findByCategory(
     userId: string,
-    category: PhotoCategory
+    category: PhotoCategory,
+    options?: { limit?: number; offset?: number }
   ): Promise<Photo[]> {
-    const { data, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('photos')
       .select('*')
       .eq('user_id', userId)
       .eq('category', category)
       .order('updated_at', { ascending: false });
+
+    // 添加分页参数
+    if (options?.limit !== undefined) {
+      query = query.limit(options.limit);
+    }
+    if (options?.offset !== undefined) {
+      query = query.range(options.offset, options.offset + (options.limit || 50) - 1);
+    }
+
+    const { data, error } = await query;
 
     if (error || !data) {
       return [];

@@ -81,6 +81,8 @@ export async function POST(req: Request) {
  * GET /api/photos - 获取照片列表
  * Query params:
  *   - category?: PhotoCategory (可选：按分类过滤)
+ *   - limit?: number (可选：每页数量，默认50)
+ *   - offset?: number (可选：偏移量，默认0)
  */
 export async function GET(req: Request) {
   try {
@@ -91,14 +93,20 @@ export async function GET(req: Request) {
     // 获取查询参数
     const { searchParams } = new URL(req.url);
     const category = searchParams.get("category") as PhotoCategory | null;
-    console.log("[GET /api/photos] Category filter:", category);
+    const limit = Number.parseInt(searchParams.get("limit") || "50", 10);
+    const offset = Number.parseInt(searchParams.get("offset") || "0", 10);
+
+    console.log("[GET /api/photos] Query params:", { category, limit, offset });
+
+    // 分页选项
+    const paginationOptions = { limit, offset };
 
     // 获取照片列表（现在返回完整Photo[]，包含fileUrl）
     let photos;
     if (category) {
-      photos = await photoStorage.findByCategory(session.userId, category);
+      photos = await photoStorage.findByCategory(session.userId, category, paginationOptions);
     } else {
-      photos = await photoStorage.findByUserId(session.userId);
+      photos = await photoStorage.findByUserId(session.userId, paginationOptions);
     }
     console.log("[GET /api/photos] Found photos:", photos.length);
 

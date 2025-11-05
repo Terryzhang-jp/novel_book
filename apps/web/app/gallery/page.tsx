@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Upload, Trash2, X, MapPin } from "lucide-react";
@@ -11,27 +11,51 @@ import { PhotoDetailModal } from "@/components/photos/photo-detail-modal";
 import { BatchLocationAssignment } from "@/components/photos/batch-location-assignment";
 import { AppLayout } from "@/components/layout/app-layout";
 
+const PAGE_SIZE = 50; // 每次加载50张照片
+
 export default function GalleryPage() {
   const router = useRouter();
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [stats, setStats] = useState<PhotoStats | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<PhotoCategory | "all">("all");
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [detailPhotoId, setDetailPhotoId] = useState<string | null>(null);
   const [showBatchLocationModal, setShowBatchLocationModal] = useState(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
+  // 初始加载
   useEffect(() => {
-    fetchPhotos();
+    fetchPhotos(true);
   }, []);
 
-  const fetchPhotos = async () => {
+  // 当分类改变时，重置并重新加载
+  useEffect(() => {
+    fetchPhotos(true);
+  }, [selectedCategory]);
+
+  const fetchPhotos = async (reset = false) => {
     try {
-      setLoading(true);
-      const response = await fetch("/api/photos");
+      if (reset) {
+        setLoading(true);
+        setOffset(0);
+        setHasMore(true);
+      } else {
+        setLoadingMore(true);
+      }
+
+      const currentOffset = reset ? 0 : offset;
+      const categoryParam = selectedCategory === "all" ? "" : `&category=${selectedCategory}`;
+      const response = await fetch(
+        `/api/photos?limit=${PAGE_SIZE}&offset=${currentOffset}${categoryParam}`
+      );
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -42,15 +66,52 @@ export default function GalleryPage() {
       }
 
       const data = await response.json();
-      setPhotos(data.photos);
-      setStats(data.stats);
-      setUserId(data.userId);
+
+      if (reset) {
+        setPhotos(data.photos);
+        setStats(data.stats);
+        setUserId(data.userId);
+      } else {
+        setPhotos(prev => [...prev, ...data.photos]);
+      }
+
+      // 如果返回的照片数量少于 PAGE_SIZE，说明没有更多了
+      setHasMore(data.photos.length === PAGE_SIZE);
+      setOffset(currentOffset + data.photos.length);
     } catch (error) {
       console.error("Error fetching photos:", error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
+
+  // 无限滚动：监听底部元素
+  useEffect(() => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        const target = entries[0];
+        if (target.isIntersecting && hasMore && !loadingMore && !loading) {
+          fetchPhotos(false);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (loadMoreRef.current) {
+      observerRef.current.observe(loadMoreRef.current);
+    }
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [hasMore, loadingMore, loading, offset]);
 
   const handlePhotoDelete = async (photoId: string) => {
     try {
@@ -62,8 +123,8 @@ export default function GalleryPage() {
         throw new Error("Failed to delete photo");
       }
 
-      // Refresh photos
-      await fetchPhotos();
+      // Refresh photos (reset to first page)
+      await fetchPhotos(true);
     } catch (error) {
       console.error("Error deleting photo:", error);
       throw error;
@@ -115,8 +176,8 @@ export default function GalleryPage() {
         });
       }
 
-      // Refresh photos
-      await fetchPhotos();
+      // Refresh photos (reset to first page)
+      await fetchPhotos(true);
       setSelectedPhotos(new Set());
       setSelectionMode(false);
     } catch (error) {
@@ -142,8 +203,8 @@ export default function GalleryPage() {
     // Close the modal
     setShowBatchLocationModal(false);
 
-    // Refresh photos to show updated location data
-    await fetchPhotos();
+    // Refresh photos to show updated location data (reset to first page)
+    await fetchPhotos(true);
 
     // Optionally: clear selection and exit selection mode
     // Commenting this out so users can continue selecting if needed
@@ -151,10 +212,8 @@ export default function GalleryPage() {
     // setSelectionMode(false);
   };
 
-  const filteredPhotos =
-    selectedCategory === "all"
-      ? photos
-      : photos.filter((photo) => photo.category === selectedCategory);
+  // 由于API已经按category过滤，photos就是过滤后的结果
+  const filteredPhotos = photos;
 
   /**
    * Handle photo click to open detail modal
@@ -294,15 +353,37 @@ export default function GalleryPage() {
       {/* Photo Grid */}
       <div className="max-w-7xl mx-auto px-8 py-8">
         {userId ? (
-          <PhotoGrid
-            photos={filteredPhotos}
-            userId={userId}
-            onPhotoDelete={handlePhotoDelete}
-            selectionMode={selectionMode}
-            selectedPhotos={selectedPhotos}
-            onPhotoToggle={togglePhotoSelection}
-            onPhotoClick={handlePhotoClick}
-          />
+          <>
+            <PhotoGrid
+              photos={filteredPhotos}
+              userId={userId}
+              onPhotoDelete={handlePhotoDelete}
+              selectionMode={selectionMode}
+              selectedPhotos={selectedPhotos}
+              onPhotoToggle={togglePhotoSelection}
+              onPhotoClick={handlePhotoClick}
+            />
+
+            {/* Loading More Indicator */}
+            {loadingMore && (
+              <div className="flex justify-center items-center py-8">
+                <div className="text-center">
+                  <div className="inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-2" />
+                  <p className="text-sm text-muted-foreground">Loading more photos...</p>
+                </div>
+              </div>
+            )}
+
+            {/* Intersection Observer Target */}
+            <div ref={loadMoreRef} className="h-20" />
+
+            {/* No More Photos Indicator */}
+            {!hasMore && photos.length > 0 && (
+              <div className="flex justify-center items-center py-8">
+                <p className="text-sm text-muted-foreground">You've reached the end</p>
+              </div>
+            )}
+          </>
         ) : (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="text-6xl mb-4">📷</div>
