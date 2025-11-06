@@ -14,11 +14,12 @@ interface QuickDeleteModalProps {
 }
 
 /**
- * 快速删除模式 - 全屏照片浏览+左右键快速筛选
+ * 快速删除模式 - 全屏照片浏览+快速筛选
  *
- * 左键/左箭头 → 移入回收站
- * 右键/右箭头 → 保留（跳到下一张）
- * ESC → 关闭
+ * 左箭头 (←) → 上一张照片
+ * 右箭头 (→) → 下一张照片
+ * 空格键 (Space) → 标记删除
+ * ESC → 关闭（批量处理标记的照片）
  */
 export function QuickDeleteModal({
   isOpen,
@@ -106,10 +107,14 @@ export function QuickDeleteModal({
     const handleKeyDown = (e: KeyboardEvent) => {
       switch (e.key) {
         case "ArrowLeft":
-          handleMarkForDeletion(); // 左键 = 标记删除
+          goToPrevious(); // 左键 = 上一张
           break;
         case "ArrowRight":
-          goToNext(); // 右键 = 保留
+          goToNext(); // 右键 = 下一张
+          break;
+        case " ": // 空格键
+          e.preventDefault(); // 防止页面滚动
+          handleMarkForDeletion(); // 空格 = 标记删除
           break;
         case "Escape":
           handleClose(); // ESC = 关闭（会触发批量处理）
@@ -119,7 +124,7 @@ export function QuickDeleteModal({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, handleMarkForDeletion, goToNext, handleClose]);
+  }, [isOpen, goToPrevious, goToNext, handleMarkForDeletion, handleClose]);
 
   if (!isOpen || !currentPhoto) return null;
 
@@ -165,22 +170,32 @@ export function QuickDeleteModal({
       {/* 底部操作按钮 */}
       <div className="absolute bottom-0 left-0 right-0 z-10 flex items-center justify-center gap-4 p-8 bg-gradient-to-t from-black/80 to-transparent">
         <button
+          onClick={goToPrevious}
+          disabled={currentIndex === 0}
+          className="flex items-center gap-3 px-8 py-4 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
+          title="Previous (←)"
+        >
+          <ChevronLeft className="w-6 h-6" />
+          <span>Previous (←)</span>
+        </button>
+
+        <button
           onClick={handleMarkForDeletion}
           disabled={markedForDeletion.has(currentPhoto.id)}
           className="flex items-center gap-3 px-8 py-4 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
-          title="Mark for Deletion (←)"
+          title="Mark for Deletion (Space)"
         >
           <Trash2 className="w-6 h-6" />
-          <span>{markedForDeletion.has(currentPhoto.id) ? 'Marked ✓' : 'Mark for Deletion (←)'}</span>
+          <span>{markedForDeletion.has(currentPhoto.id) ? 'Marked ✓' : 'Mark (Space)'}</span>
         </button>
 
         <button
           onClick={goToNext}
           disabled={currentIndex >= availablePhotos.length - 1}
           className="flex items-center gap-3 px-8 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
-          title="Keep (→)"
+          title="Next (→)"
         >
-          <span>Keep (→)</span>
+          <span>Next (→)</span>
           <ChevronRight className="w-6 h-6" />
         </button>
       </div>
