@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type { Photo } from "@/types/storage";
 import Image from "next/image";
 import { X, ChevronLeft, ChevronRight, Trash2} from "lucide-react";
@@ -28,19 +28,21 @@ export function QuickDeleteModal({
   onTrash,
 }: QuickDeleteModalProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [trashedIds, setTrashedIds] = useState<Set<string>>(new Set());
-  const [processing, setProcessing] = useState(false);
+  const [markedForDeletion, setMarkedForDeletion] = useState<Set<string>>(new Set());
 
   // 当modal打开时重置索引
   useEffect(() => {
     if (isOpen) {
       setCurrentIndex(initialIndex);
-      setTrashedIds(new Set());
+      setMarkedForDeletion(new Set());
     }
   }, [isOpen, initialIndex]);
 
-  // 过滤掉已在本次会话中移入回收站的照片
-  const availablePhotos = photos.filter(p => !trashedIds.has(p.id));
+  // 使用 useMemo 优化过滤性能 - 仅在依赖变化时重新计算
+  const availablePhotos = useMemo(() =>
+    photos.filter(p => !markedForDeletion.has(p.id)),
+    [photos, markedForDeletion]
+  );
   const currentPhoto = availablePhotos[currentIndex];
 
   // 导航到上一张
@@ -57,55 +59,67 @@ export function QuickDeleteModal({
     }
   }, [currentIndex, availablePhotos.length]);
 
-  // 移入回收站（向左）
-  const handleTrash = useCallback(async () => {
-    if (!currentPhoto || processing) return;
+  // 标记删除（向左）- 仅本地状态，无 API 调用
+  const handleMarkForDeletion = useCallback(() => {
+    if (!currentPhoto) return;
 
-    setProcessing(true);
+    // 标记照片为待删除
+    setMarkedForDeletion(prev => new Set([...prev, currentPhoto.id]));
 
-    try {
-      // 调用回调函数
-      await onTrash([currentPhoto.id]);
-
-      // 本地标记为已删除
-      setTrashedIds(prev => new Set([...prev, currentPhoto.id]));
-
-      // 如果还有照片，保持当前索引（因为数组会变短）
-      // 如果当前是最后一张，索引减1
-      if (currentIndex >= availablePhotos.length - 1 && currentIndex > 0) {
-        setCurrentIndex(currentIndex - 1);
-      }
-    } catch (error) {
-      console.error("Failed to trash photo:", error);
-      alert("Failed to move photo to trash. Please try again.");
-    } finally {
-      setProcessing(false);
+    // 导航逻辑：如果当前是最后一张，返回上一张
+    if (currentIndex >= availablePhotos.length - 1 && currentIndex > 0) {
+      setCurrentIndex(currentIndex - 1);
     }
-  }, [currentPhoto, currentIndex, availablePhotos.length, onTrash, processing]);
+  }, [currentPhoto, currentIndex, availablePhotos.length]);
+
+  // 关闭时批量处理
+  const handleClose = useCallback(async () => {
+    // 如果有标记的照片，批量处理
+    if (markedForDeletion.size > 0) {
+      const confirmed = confirm(
+        `Move ${markedForDeletion.size} photo${markedForDeletion.size > 1 ? 's' : ''} to trash?`
+      );
+
+      if (!confirmed) {
+        onClose();
+        return;
+      }
+
+      try {
+        await onTrash(Array.from(markedForDeletion));
+        onClose();
+      } catch (error) {
+        console.error('Failed to trash photos:', error);
+        alert('Failed to move photos to trash. Please try again.');
+        // 不关闭模态框，让用户重试
+      }
+    } else {
+      // 没有标记，直接关闭
+      onClose();
+    }
+  }, [markedForDeletion, onTrash, onClose]);
 
   // 键盘事件
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (processing) return;
-
       switch (e.key) {
         case "ArrowLeft":
-          handleTrash(); // 左键 = 移入回收站
+          handleMarkForDeletion(); // 左键 = 标记删除
           break;
         case "ArrowRight":
           goToNext(); // 右键 = 保留
           break;
         case "Escape":
-          onClose();
+          handleClose(); // ESC = 关闭（会触发批量处理）
           break;
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, processing, handleTrash, goToNext, onClose]);
+  }, [isOpen, handleMarkForDeletion, goToNext, handleClose]);
 
   if (!isOpen || !currentPhoto) return null;
 
@@ -113,11 +127,16 @@ export function QuickDeleteModal({
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
       {/* 顶部状态栏 */}
       <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent">
-        <div className="text-white text-sm font-medium">
-          {currentIndex + 1} / {availablePhotos.length}
+        <div className="text-white text-sm font-medium flex items-center gap-4">
+          <span>{currentIndex + 1} / {availablePhotos.length}</span>
+          {markedForDeletion.size > 0 && (
+            <span className="bg-red-600 px-3 py-1 rounded-full font-bold">
+              {markedForDeletion.size} marked
+            </span>
+          )}
         </div>
         <button
-          onClick={onClose}
+          onClick={handleClose}
           className="text-white hover:bg-white/20 rounded-full p-2 transition-colors"
           title="Close (ESC)"
         >
@@ -133,25 +152,31 @@ export function QuickDeleteModal({
           fill
           className="object-contain"
           sizes="100vw"
-          priority
         />
+
+        {/* 标记指示器 */}
+        {markedForDeletion.has(currentPhoto.id) && (
+          <div className="absolute top-12 left-12 bg-red-600 text-white px-6 py-3 rounded-lg font-bold text-lg shadow-lg">
+            ✓ Marked for Deletion
+          </div>
+        )}
       </div>
 
       {/* 底部操作按钮 */}
       <div className="absolute bottom-0 left-0 right-0 z-10 flex items-center justify-center gap-4 p-8 bg-gradient-to-t from-black/80 to-transparent">
         <button
-          onClick={handleTrash}
-          disabled={processing}
+          onClick={handleMarkForDeletion}
+          disabled={markedForDeletion.has(currentPhoto.id)}
           className="flex items-center gap-3 px-8 py-4 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
-          title="Move to Trash (←)"
+          title="Mark for Deletion (←)"
         >
           <Trash2 className="w-6 h-6" />
-          <span>Move to Trash (←)</span>
+          <span>{markedForDeletion.has(currentPhoto.id) ? 'Marked ✓' : 'Mark for Deletion (←)'}</span>
         </button>
 
         <button
           onClick={goToNext}
-          disabled={processing || currentIndex >= availablePhotos.length - 1}
+          disabled={currentIndex >= availablePhotos.length - 1}
           className="flex items-center gap-3 px-8 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-lg font-medium"
           title="Keep (→)"
         >
@@ -167,10 +192,10 @@ export function QuickDeleteModal({
             <div className="text-4xl mb-4">✅</div>
             <h3 className="text-2xl font-bold mb-2">All Done!</h3>
             <p className="text-gray-300 mb-6">
-              You've reviewed all photos. {trashedIds.size} moved to trash.
+              You've reviewed all photos. {markedForDeletion.size} marked for deletion.
             </p>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="px-6 py-3 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-medium"
             >
               Close
