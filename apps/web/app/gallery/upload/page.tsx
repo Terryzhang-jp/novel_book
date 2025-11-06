@@ -123,6 +123,7 @@ export default function UploadPage() {
         maxWidthOrHeight: 4096,
         useWebWorker: true,
         initialQuality: 0.85,
+        preserveExif: true, // 保留 EXIF 元数据（时间、地点、相机信息等）
       });
 
       console.log(
