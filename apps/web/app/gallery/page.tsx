@@ -3,12 +3,14 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Upload, Trash2, X, MapPin } from "lucide-react";
+import { Upload, Trash2, X, MapPin, Zap } from "lucide-react";
 import type { Photo, PhotoCategory, PhotoStats } from "@/types/storage";
 import { CategoryFilter } from "@/components/gallery/category-filter";
 import { PhotoGrid } from "@/components/gallery/photo-grid";
 import { PhotoDetailModal } from "@/components/photos/photo-detail-modal";
 import { BatchLocationAssignment } from "@/components/photos/batch-location-assignment";
+import { QuickDeleteModal } from "@/components/gallery/quick-delete-modal";
+import { TrashBinModal } from "@/components/gallery/trash-bin-modal";
 import { AppLayout } from "@/components/layout/app-layout";
 import { ClusterSection } from "@/components/gallery/cluster-section";
 import { ClusterSettings } from "@/components/gallery/cluster-settings";
@@ -39,6 +41,11 @@ export default function GalleryPage() {
 
   // 聚类阈值（分钟）
   const [clusterThreshold, setClusterThreshold] = useState(DEFAULT_CLUSTER_THRESHOLD);
+
+  // 快速删除模式 & 回收站
+  const [showQuickDeleteModal, setShowQuickDeleteModal] = useState(false);
+  const [showTrashBinModal, setShowTrashBinModal] = useState(false);
+  const [trashedCount, setTrashedCount] = useState(0);
 
   // 初始加载
   useEffect(() => {
@@ -80,6 +87,9 @@ export default function GalleryPage() {
         setPhotos(data.photos);
         setStats(data.stats);
         setUserId(data.userId);
+
+        // 同时获取回收站数量
+        fetchTrashedCount();
       } else {
         setPhotos(prev => [...prev, ...data.photos]);
       }
@@ -92,6 +102,40 @@ export default function GalleryPage() {
     } finally {
       setLoading(false);
       setLoadingMore(false);
+    }
+  };
+
+  // 获取回收站照片数量
+  const fetchTrashedCount = async () => {
+    try {
+      const response = await fetch("/api/photos/trash");
+      if (!response.ok) return;
+
+      const data = await response.json();
+      setTrashedCount(data.count || 0);
+    } catch (error) {
+      console.error("Error fetching trashed count:", error);
+    }
+  };
+
+  // 移入回收站（用于快速删除模式）
+  const handleTrashPhotos = async (photoIds: string[]) => {
+    try {
+      const response = await fetch("/api/photos/trash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoIds }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to trash photos");
+      }
+
+      // 刷新照片列表和回收站数量
+      await fetchPhotos(true);
+    } catch (error) {
+      console.error("Error trashing photos:", error);
+      throw error;
     }
   };
 
@@ -355,6 +399,31 @@ export default function GalleryPage() {
                   {/* 聚类设置 */}
                   <ClusterSettings onChange={setClusterThreshold} />
 
+                  {/* 快速删除模式 */}
+                  <button
+                    onClick={() => setShowQuickDeleteModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                    disabled={photos.length === 0}
+                    title="快速删除模式：左键移入回收站，右键保留"
+                  >
+                    <Zap className="w-4 h-4" />
+                    <span>Quick Delete</span>
+                  </button>
+
+                  {/* 回收站 */}
+                  <button
+                    onClick={() => setShowTrashBinModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-accent transition-colors relative"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Trash</span>
+                    {trashedCount > 0 && (
+                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                        {trashedCount > 99 ? '99+' : trashedCount}
+                      </span>
+                    )}
+                  </button>
+
                   <button
                     onClick={toggleSelectionMode}
                     className="flex items-center gap-2 px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-accent transition-colors"
@@ -504,6 +573,22 @@ export default function GalleryPage() {
         photoIds={Array.from(selectedPhotos)}
         onClose={() => setShowBatchLocationModal(false)}
         onComplete={handleBatchLocationComplete}
+      />
+
+      {/* Quick Delete Modal */}
+      <QuickDeleteModal
+        isOpen={showQuickDeleteModal}
+        photos={filteredPhotos}
+        initialIndex={0}
+        onClose={() => setShowQuickDeleteModal(false)}
+        onTrash={handleTrashPhotos}
+      />
+
+      {/* Trash Bin Modal */}
+      <TrashBinModal
+        isOpen={showTrashBinModal}
+        onClose={() => setShowTrashBinModal(false)}
+        onComplete={() => fetchPhotos(true)}
       />
       </div>
     </AppLayout>

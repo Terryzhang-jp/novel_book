@@ -118,6 +118,10 @@ export interface Photo {
   // 公开设置
   isPublic?: boolean; // 是否公开（默认 true）- 用于公共地图展示
 
+  // 回收站状态
+  trashed?: boolean; // 是否在回收站（默认 false）
+  trashedAt?: string; // 移入回收站的时间 (ISO 8601)
+
   // 时间戳
   createdAt: string; // 上传时间 (ISO 8601)
   updatedAt: string; // 更新时间

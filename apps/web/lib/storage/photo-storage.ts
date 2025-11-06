@@ -200,6 +200,8 @@ export class PhotoStorage {
       description: data.description,
       tags: data.tags,
       isPublic: data.is_public,
+      trashed: data.trashed,
+      trashedAt: data.trashed_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -232,6 +234,8 @@ export class PhotoStorage {
       description: data.description,
       tags: data.tags,
       isPublic: data.is_public,
+      trashed: data.trashed,
+      trashedAt: data.trashed_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -250,6 +254,7 @@ export class PhotoStorage {
       .from('photos')
       .select('*')
       .eq('user_id', userId)
+      .is('trashed', false) // 过滤掉回收站照片
       .order('updated_at', { ascending: false });
 
     // 添加分页参数
@@ -300,6 +305,7 @@ export class PhotoStorage {
       .select('*')
       .eq('user_id', userId)
       .eq('category', category)
+      .is('trashed', false) // 过滤掉回收站照片
       .order('updated_at', { ascending: false });
 
     // 添加分页参数
@@ -376,7 +382,8 @@ export class PhotoStorage {
     const { data, error } = await supabaseAdmin
       .from('photos')
       .select('category')
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .is('trashed', false); // 排除回收站照片
 
     if (error || !data) {
       return {
@@ -493,6 +500,8 @@ export class PhotoStorage {
       description: data.description,
       tags: data.tags,
       isPublic: data.is_public,
+      trashed: data.trashed,
+      trashedAt: data.trashed_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -578,6 +587,8 @@ export class PhotoStorage {
       description: data.description,
       tags: data.tags,
       isPublic: data.is_public,
+      trashed: data.trashed,
+      trashedAt: data.trashed_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -653,6 +664,8 @@ export class PhotoStorage {
       description: data.description,
       tags: data.tags,
       isPublic: data.is_public,
+      trashed: data.trashed,
+      trashedAt: data.trashed_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -713,6 +726,8 @@ export class PhotoStorage {
       description: data.description,
       tags: data.tags,
       isPublic: data.is_public,
+      trashed: data.trashed,
+      trashedAt: data.trashed_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -799,6 +814,118 @@ export class PhotoStorage {
       createdAt: photo.created_at,
       updatedAt: photo.updated_at,
     }));
+  }
+
+  /**
+   * 移入回收站
+   */
+  async trash(photoId: string, userId: string): Promise<void> {
+    const photo = await this.findById(photoId);
+    if (!photo) {
+      throw new NotFoundError("Photo");
+    }
+
+    // 权限检查
+    if (photo.userId !== userId) {
+      throw new UnauthorizedError(
+        "You don't have permission to trash this photo"
+      );
+    }
+
+    // 更新数据库记录
+    const now = new Date().toISOString();
+    const { error } = await supabaseAdmin
+      .from('photos')
+      .update({
+        trashed: true,
+        trashed_at: now,
+        updated_at: now,
+      })
+      .eq('id', photoId);
+
+    if (error) {
+      throw new Error(`Failed to trash photo: ${error.message}`);
+    }
+  }
+
+  /**
+   * 从回收站恢复
+   */
+  async restore(photoId: string, userId: string): Promise<void> {
+    const photo = await this.findById(photoId);
+    if (!photo) {
+      throw new NotFoundError("Photo");
+    }
+
+    // 权限检查
+    if (photo.userId !== userId) {
+      throw new UnauthorizedError(
+        "You don't have permission to restore this photo"
+      );
+    }
+
+    // 更新数据库记录
+    const now = new Date().toISOString();
+    const { error } = await supabaseAdmin
+      .from('photos')
+      .update({
+        trashed: false,
+        trashed_at: null,
+        updated_at: now,
+      })
+      .eq('id', photoId);
+
+    if (error) {
+      throw new Error(`Failed to restore photo: ${error.message}`);
+    }
+  }
+
+  /**
+   * 获取回收站照片列表
+   */
+  async getTrashedPhotos(userId: string): Promise<Photo[]> {
+    const { data, error } = await supabaseAdmin
+      .from('photos')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('trashed', true)
+      .order('trashed_at', { ascending: false });
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data.map(photo => ({
+      id: photo.id,
+      userId: photo.user_id,
+      fileName: photo.file_name,
+      originalName: photo.original_name,
+      fileUrl: photo.file_url,
+      metadata: photo.metadata,
+      category: photo.category,
+      locationId: photo.location_id,
+      title: photo.title,
+      description: photo.description,
+      tags: photo.tags,
+      isPublic: photo.is_public,
+      trashed: photo.trashed,
+      trashedAt: photo.trashed_at,
+      createdAt: photo.created_at,
+      updatedAt: photo.updated_at,
+    }));
+  }
+
+  /**
+   * 清空回收站（永久删除所有回收站照片）
+   */
+  async emptyTrash(userId: string): Promise<void> {
+    // 获取所有回收站照片
+    const trashedPhotos = await this.getTrashedPhotos(userId);
+
+    // 逐个永久删除
+    for (const photo of trashedPhotos) {
+      await this.delete(photo.id, userId);
+    }
   }
 }
 
