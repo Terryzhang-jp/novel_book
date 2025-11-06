@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Upload, Trash2, X, MapPin, Zap } from "lucide-react";
+import { Upload, Trash2, X, MapPin, Zap, ArrowUpDown } from "lucide-react";
 import type { Photo, PhotoCategory, PhotoStats } from "@/types/storage";
 import { CategoryFilter } from "@/components/gallery/category-filter";
 import { PhotoGrid } from "@/components/gallery/photo-grid";
@@ -46,6 +46,9 @@ export default function GalleryPage() {
   const [showQuickDeleteModal, setShowQuickDeleteModal] = useState(false);
   const [showTrashBinModal, setShowTrashBinModal] = useState(false);
   const [trashedCount, setTrashedCount] = useState(0);
+
+  // 排序方式：'newest' = 最新在前，'oldest' = 最旧在前
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
 
   // 初始加载
   useEffect(() => {
@@ -224,7 +227,7 @@ export default function GalleryPage() {
   };
 
   const selectAll = () => {
-    const allPhotoIds = new Set(filteredPhotos.map((p) => p.id));
+    const allPhotoIds = new Set(sortedPhotos.map((p) => p.id));
     setSelectedPhotos(allPhotoIds);
   };
 
@@ -327,12 +330,39 @@ export default function GalleryPage() {
   const filteredPhotos = photos;
 
   /**
+   * 对照片进行排序
+   * 使用 useMemo 缓存结果，仅在 photos 或 sortOrder 变化时重新计算
+   */
+  const sortedPhotos = useMemo(() => {
+    return [...filteredPhotos].sort((a, b) => {
+      // 获取照片时间：优先使用拍摄时间，否则使用创建时间
+      const getPhotoTime = (photo: Photo): Date => {
+        const dateTime = photo.metadata?.dateTime;
+        if (dateTime) {
+          return new Date(dateTime);
+        }
+        return new Date(photo.createdAt);
+      };
+
+      const timeA = getPhotoTime(a).getTime();
+      const timeB = getPhotoTime(b).getTime();
+
+      // 根据排序方式决定升序或降序
+      if (sortOrder === 'newest') {
+        return timeB - timeA; // 降序：新的在前
+      } else {
+        return timeA - timeB; // 升序：旧的在前
+      }
+    });
+  }, [filteredPhotos, sortOrder]);
+
+  /**
    * 对照片进行时间聚类
-   * 使用 useMemo 缓存结果，仅在 photos 或 clusterThreshold 变化时重新计算
+   * 使用 useMemo 缓存结果，仅在 sortedPhotos 或 clusterThreshold 变化时重新计算
    */
   const photoClusters = useMemo(() => {
-    return clusterPhotosByTime(filteredPhotos, clusterThreshold);
-  }, [filteredPhotos, clusterThreshold]);
+    return clusterPhotosByTime(sortedPhotos, clusterThreshold);
+  }, [sortedPhotos, clusterThreshold]);
 
   /**
    * Handle photo click to open detail modal
@@ -347,13 +377,13 @@ export default function GalleryPage() {
   const handleDetailNavigate = (direction: 'prev' | 'next') => {
     if (!detailPhotoId) return;
 
-    const currentIndex = filteredPhotos.findIndex((p) => p.id === detailPhotoId);
+    const currentIndex = sortedPhotos.findIndex((p) => p.id === detailPhotoId);
     if (currentIndex === -1) return;
 
     if (direction === 'prev' && currentIndex > 0) {
-      setDetailPhotoId(filteredPhotos[currentIndex - 1].id);
-    } else if (direction === 'next' && currentIndex < filteredPhotos.length - 1) {
-      setDetailPhotoId(filteredPhotos[currentIndex + 1].id);
+      setDetailPhotoId(sortedPhotos[currentIndex - 1].id);
+    } else if (direction === 'next' && currentIndex < sortedPhotos.length - 1) {
+      setDetailPhotoId(sortedPhotos[currentIndex + 1].id);
     }
   };
 
@@ -363,12 +393,12 @@ export default function GalleryPage() {
   const getNavigationState = () => {
     if (!detailPhotoId) return { hasPrev: false, hasNext: false };
 
-    const currentIndex = filteredPhotos.findIndex((p) => p.id === detailPhotoId);
+    const currentIndex = sortedPhotos.findIndex((p) => p.id === detailPhotoId);
     if (currentIndex === -1) return { hasPrev: false, hasNext: false };
 
     return {
       hasPrev: currentIndex > 0,
-      hasNext: currentIndex < filteredPhotos.length - 1,
+      hasNext: currentIndex < sortedPhotos.length - 1,
     };
   };
 
@@ -398,6 +428,16 @@ export default function GalleryPage() {
                 <>
                   {/* 聚类设置 */}
                   <ClusterSettings onChange={setClusterThreshold} />
+
+                  {/* 排序方式 */}
+                  <button
+                    onClick={() => setSortOrder(sortOrder === 'newest' ? 'oldest' : 'newest')}
+                    className="flex items-center gap-2 px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-accent transition-colors"
+                    title={sortOrder === 'newest' ? "当前：最新在前，点击切换到最旧在前" : "当前：最旧在前，点击切换到最新在前"}
+                  >
+                    <ArrowUpDown className="w-4 h-4" />
+                    <span>{sortOrder === 'newest' ? '最新在前' : '最旧在前'}</span>
+                  </button>
 
                   {/* 快速删除模式 */}
                   <button
@@ -578,7 +618,7 @@ export default function GalleryPage() {
       {/* Quick Delete Modal */}
       <QuickDeleteModal
         isOpen={showQuickDeleteModal}
-        photos={filteredPhotos}
+        photos={sortedPhotos}
         initialIndex={0}
         onClose={() => setShowQuickDeleteModal(false)}
         onTrash={handleTrashPhotos}
