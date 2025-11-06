@@ -334,7 +334,9 @@ export default function GalleryPage() {
    * 使用 useMemo 缓存结果，仅在 photos 或 sortOrder 变化时重新计算
    */
   const sortedPhotos = useMemo(() => {
-    return [...filteredPhotos].sort((a, b) => {
+    console.log('[Gallery] Sorting photos, sortOrder:', sortOrder, 'photo count:', filteredPhotos.length);
+
+    const sorted = [...filteredPhotos].sort((a, b) => {
       // 获取照片时间：优先使用拍摄时间，否则使用创建时间
       const getPhotoTime = (photo: Photo): Date => {
         const dateTime = photo.metadata?.dateTime;
@@ -354,6 +356,17 @@ export default function GalleryPage() {
         return timeA - timeB; // 升序：旧的在前
       }
     });
+
+    // 输出前3张照片的时间用于调试
+    if (sorted.length > 0) {
+      console.log('[Gallery] First 3 photos after sorting:');
+      sorted.slice(0, 3).forEach((photo, idx) => {
+        const time = photo.metadata?.dateTime || photo.createdAt;
+        console.log(`  ${idx + 1}. ${photo.originalName} - ${time}`);
+      });
+    }
+
+    return sorted;
   }, [filteredPhotos, sortOrder]);
 
   /**
@@ -431,7 +444,11 @@ export default function GalleryPage() {
 
                   {/* 排序方式 */}
                   <button
-                    onClick={() => setSortOrder(sortOrder === 'newest' ? 'oldest' : 'newest')}
+                    onClick={() => {
+                      const newOrder = sortOrder === 'newest' ? 'oldest' : 'newest';
+                      console.log('[Gallery] Changing sort order from', sortOrder, 'to', newOrder);
+                      setSortOrder(newOrder);
+                    }}
                     className="flex items-center gap-2 px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-accent transition-colors"
                     title={sortOrder === 'newest' ? "当前：最新在前，点击切换到最旧在前" : "当前：最旧在前，点击切换到最新在前"}
                   >
