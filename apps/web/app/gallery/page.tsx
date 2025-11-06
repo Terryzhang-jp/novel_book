@@ -389,7 +389,7 @@ export default function GalleryPage() {
     <AppLayout>
       <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="border-b border-border bg-card">
+      <div className="sticky top-0 z-10 border-b border-border bg-card shadow-sm">
         <div className="max-w-7xl mx-auto px-8 py-6">
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-3xl font-bold text-foreground">Photo Gallery</h1>
