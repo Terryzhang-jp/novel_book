@@ -49,7 +49,7 @@ export function PhotoGrid({
       columnClassName="pl-4 bg-clip-padding"
     >
       {photos.map((photo) => (
-        <div key={photo.id} className="mb-4">
+        <div key={photo.id} className="mb-4 transition-all duration-300">
           <PhotoCard
             photo={photo}
             userId={userId}

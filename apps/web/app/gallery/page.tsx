@@ -123,6 +123,10 @@ export default function GalleryPage() {
   }, [hasMore, loadingMore, loading, offset]);
 
   const handlePhotoDelete = async (photoId: string) => {
+    // 乐观更新：立即从 UI 中移除照片
+    const previousPhotos = photos;
+    setPhotos((prev) => prev.filter((p) => p.id !== photoId));
+
     try {
       const response = await fetch(`/api/photos/${photoId}`, {
         method: "DELETE",
@@ -132,10 +136,25 @@ export default function GalleryPage() {
         throw new Error("Failed to delete photo");
       }
 
-      // Refresh photos (reset to first page)
-      await fetchPhotos(true);
+      // 成功后更新统计信息
+      if (stats) {
+        const deletedPhoto = previousPhotos.find((p) => p.id === photoId);
+        if (deletedPhoto) {
+          setStats({
+            ...stats,
+            total: stats.total - 1,
+            byCategory: {
+              ...stats.byCategory,
+              [deletedPhoto.category]: Math.max(0, (stats.byCategory[deletedPhoto.category] || 0) - 1),
+            },
+          });
+        }
+      }
     } catch (error) {
       console.error("Error deleting photo:", error);
+      // 失败时恢复照片并显示错误
+      setPhotos(previousPhotos);
+      alert("Failed to delete photo. Please try again.");
       throw error;
     }
   };
@@ -177,20 +196,48 @@ export default function GalleryPage() {
 
     setDeleting(true);
 
+    // 乐观更新：立即从 UI 中移除所有选中的照片
+    const previousPhotos = photos;
+    const deletedPhotos = photos.filter((p) => selectedPhotos.has(p.id));
+    setPhotos((prev) => prev.filter((p) => !selectedPhotos.has(p.id)));
+
     try {
       // Delete photos sequentially
       for (const photoId of selectedPhotos) {
-        await fetch(`/api/photos/${photoId}`, {
+        const response = await fetch(`/api/photos/${photoId}`, {
           method: "DELETE",
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to delete photo ${photoId}`);
+        }
+      }
+
+      // 成功后更新统计信息
+      if (stats) {
+        const categoryCounts: Record<string, number> = {};
+        deletedPhotos.forEach((photo) => {
+          categoryCounts[photo.category] = (categoryCounts[photo.category] || 0) + 1;
+        });
+
+        const newByCategory = { ...stats.byCategory };
+        Object.entries(categoryCounts).forEach(([category, count]) => {
+          newByCategory[category] = Math.max(0, (newByCategory[category] || 0) - count);
+        });
+
+        setStats({
+          ...stats,
+          total: stats.total - selectedPhotos.size,
+          byCategory: newByCategory,
         });
       }
 
-      // Refresh photos (reset to first page)
-      await fetchPhotos(true);
       setSelectedPhotos(new Set());
       setSelectionMode(false);
     } catch (error) {
       console.error("Error deleting photos:", error);
+      // 失败时恢复照片并显示错误
+      setPhotos(previousPhotos);
       alert("Failed to delete some photos. Please try again.");
     } finally {
       setDeleting(false);

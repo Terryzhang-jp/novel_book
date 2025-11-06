@@ -67,9 +67,9 @@ export function PhotoCard({
 
   return (
     <div
-      className={`group relative bg-card rounded-lg overflow-hidden shadow-md transition-all duration-200 ${
+      className={`group relative bg-card rounded-lg overflow-hidden shadow-md transition-all duration-300 ${
         selectionMode || onClick ? "cursor-pointer" : "hover:shadow-xl hover:-translate-y-1"
-      } ${isSelected ? "ring-4 ring-primary" : ""}`}
+      } ${isSelected ? "ring-4 ring-primary" : ""} ${isDeleting ? "opacity-50 scale-95" : "opacity-100 scale-100"}`}
       onClick={handleClick}
     >
       {/* Image */}
