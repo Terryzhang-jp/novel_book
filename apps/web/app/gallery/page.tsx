@@ -320,10 +320,9 @@ export default function GalleryPage() {
     // Refresh photos to show updated location data (reset to first page)
     await fetchPhotos(true);
 
-    // Optionally: clear selection and exit selection mode
-    // Commenting this out so users can continue selecting if needed
-    // setSelectedPhotos(new Set());
-    // setSelectionMode(false);
+    // Clear selection and exit selection mode
+    setSelectedPhotos(new Set());
+    setSelectionMode(false);
   };
 
   // 由于API已经按category过滤，photos就是过滤后的结果
