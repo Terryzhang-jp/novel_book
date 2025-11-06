@@ -33,31 +33,28 @@ export function clusterPhotosByTime(
   const withTime = photos.filter((p) => p.metadata?.dateTime);
   const withoutTime = photos.filter((p) => !p.metadata?.dateTime);
 
-  // 2. 按时间排序（降序：最新的在前）
-  const sorted = withTime.sort((a, b) => {
-    const timeA = new Date(a.metadata.dateTime!).getTime();
-    const timeB = new Date(b.metadata.dateTime!).getTime();
-    return timeB - timeA; // 降序
-  });
+  // 2. 保持输入顺序，不再重新排序（由调用方决定排序）
+  // 注意：照片已经在调用前按照用户选择的顺序排好序了
+  console.log('[Clustering] Processing photos in the order they were passed:', withTime.length);
 
   // 3. 基于时间间隔分组
   const clusters: PhotoCluster[] = [];
 
-  if (sorted.length > 0) {
-    let currentGroup: Photo[] = [sorted[0]];
+  if (withTime.length > 0) {
+    let currentGroup: Photo[] = [withTime[0]];
 
-    for (let i = 1; i < sorted.length; i++) {
+    for (let i = 1; i < withTime.length; i++) {
       const gapMinutes = getMinutesDifference(
-        sorted[i].metadata.dateTime!,
-        sorted[i - 1].metadata.dateTime!
+        withTime[i].metadata.dateTime!,
+        withTime[i - 1].metadata.dateTime!
       );
 
       if (gapMinutes > thresholdMinutes) {
         // 超过阈值 → 创建新cluster
         clusters.push(buildCluster(currentGroup, burstThresholdSeconds));
-        currentGroup = [sorted[i]];
+        currentGroup = [withTime[i]];
       } else {
-        currentGroup.push(sorted[i]);
+        currentGroup.push(withTime[i]);
       }
     }
 
@@ -89,19 +86,16 @@ function buildCluster(
   photos: Photo[],
   burstThresholdSeconds: number
 ): PhotoCluster {
-  // 按时间排序（升序，用于确定startTime和endTime）
-  const sorted = photos.sort((a, b) => {
-    const timeA = new Date(a.metadata.dateTime!).getTime();
-    const timeB = new Date(b.metadata.dateTime!).getTime();
-    return timeA - timeB;
-  });
+  // 找出时间范围的最小和最大值（不改变照片顺序）
+  const times = photos.map(p => new Date(p.metadata.dateTime!).getTime());
+  const minTime = Math.min(...times);
+  const maxTime = Math.max(...times);
 
-  const startTime = sorted[0].metadata.dateTime!;
-  const endTime = sorted[sorted.length - 1].metadata.dateTime!;
+  const startTime = new Date(minTime).toISOString();
+  const endTime = new Date(maxTime).toISOString();
 
   // 计算时间跨度（秒）
-  const durationSeconds =
-    (new Date(endTime).getTime() - new Date(startTime).getTime()) / 1000;
+  const durationSeconds = (maxTime - minTime) / 1000;
 
   // 连拍判断：时间跨度 ≤ burstThresholdSeconds 且 照片数量 ≥ 3
   const isBurst = durationSeconds <= burstThresholdSeconds && photos.length >= 3;
@@ -110,7 +104,7 @@ function buildCluster(
     id: generateClusterId(startTime, photos.length),
     startTime,
     endTime,
-    photos,
+    photos, // 保持传入的顺序
     isBurst,
     displayTitle: formatClusterTitle(startTime, endTime, photos.length, isBurst),
   };
