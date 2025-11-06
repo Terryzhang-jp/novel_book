@@ -154,7 +154,10 @@ export default function GalleryPage() {
       console.error("Error deleting photo:", error);
       // 失败时恢复照片并显示错误
       setPhotos(previousPhotos);
-      alert("Failed to delete photo. Please try again.");
+
+      // 提供更详细的错误信息
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      alert(`Failed to delete photo: ${errorMessage}\n\nPlease check your connection and try again.`);
       throw error;
     }
   };
@@ -202,16 +205,21 @@ export default function GalleryPage() {
     setPhotos((prev) => prev.filter((p) => !selectedPhotos.has(p.id)));
 
     try {
-      // Delete photos sequentially
-      for (const photoId of selectedPhotos) {
+      // Delete photos in parallel (much faster)
+      const deletePromises = Array.from(selectedPhotos).map(async (photoId) => {
         const response = await fetch(`/api/photos/${photoId}`, {
           method: "DELETE",
         });
 
         if (!response.ok) {
-          throw new Error(`Failed to delete photo ${photoId}`);
+          const errorText = await response.text().catch(() => 'Unknown error');
+          throw new Error(`Failed to delete photo ${photoId}: ${errorText}`);
         }
-      }
+        return photoId;
+      });
+
+      // Wait for all deletions to complete
+      await Promise.all(deletePromises);
 
       // 成功后更新统计信息
       if (stats) {
@@ -238,7 +246,10 @@ export default function GalleryPage() {
       console.error("Error deleting photos:", error);
       // 失败时恢复照片并显示错误
       setPhotos(previousPhotos);
-      alert("Failed to delete some photos. Please try again.");
+
+      // 提供更详细的错误信息
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      alert(`Failed to delete photos: ${errorMessage}\n\nPlease check your connection and try again.`);
     } finally {
       setDeleting(false);
     }
