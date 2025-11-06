@@ -561,7 +561,7 @@ export default function GalleryPage() {
             {/* 渲染所有聚类组 */}
             {photoClusters.map((cluster) => (
               <ClusterSection
-                key={cluster.id}
+                key={`${cluster.id}-${sortOrder}`}
                 cluster={cluster}
                 userId={userId}
                 onPhotoDelete={handlePhotoDelete}
