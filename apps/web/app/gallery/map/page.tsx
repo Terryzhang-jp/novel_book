@@ -43,7 +43,8 @@ export default function GalleryMapPage() {
   const fetchPhotos = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/photos');
+      // 获取所有照片（用于地图显示，需要完整数据集）
+      const response = await fetch('/api/photos?limit=10000');
 
       if (!response.ok) {
         if (response.status === 401) {
