@@ -122,6 +122,11 @@ export interface Photo {
   trashed?: boolean; // 是否在回收站（默认 false）
   trashedAt?: string; // 移入回收站的时间 (ISO 8601)
 
+  // 编辑状态
+  originalFileUrl?: string; // 原始照片URL（编辑前），null表示从未编辑
+  edited?: boolean; // 是否已编辑（默认 false）
+  editedAt?: string; // 最后编辑时间 (ISO 8601)
+
   // 时间戳
   createdAt: string; // 上传时间 (ISO 8601)
   updatedAt: string; // 更新时间

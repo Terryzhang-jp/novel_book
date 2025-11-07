@@ -1,0 +1,308 @@
+/* 简洁白色照片编辑器样式 */
+
+/* ============================================
+   设计原则：
+   - 白色背景，干净清爽
+   - 简洁布局，无多余空白
+   - 蓝色强调色 (#0066ff)
+   - 清晰可见的图片
+   ============================================ */
+
+/* 全局白色背景 */
+.tui-image-editor-container {
+  background-color: #ffffff !important;
+}
+
+.tui-image-editor-main {
+  background-color: #f8f9fa !important;
+}
+
+/* 移除顶部空白 */
+.tui-image-editor-header {
+  display: none !important;
+}
+
+/* 菜单栏 - 左侧 */
+.tui-image-editor-menu {
+  background: #ffffff !important;
+  border-right: 1px solid #e0e0e0 !important;
+  padding: 12px 6px !important;
+}
+
+/* 子菜单 - 右侧 */
+.tui-image-editor-submenu {
+  background: #ffffff !important;
+  border-left: 1px solid #e0e0e0 !important;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05) !important;
+  padding: 20px !important;
+}
+
+/* 菜单按钮 */
+.tui-image-editor-menu > .tui-image-editor-item {
+  margin: 4px 0 !important;
+  padding: 10px !important;
+  border-radius: 8px !important;
+  transition: all 0.2s ease !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+.tui-image-editor-menu > .tui-image-editor-item:hover {
+  background: #f0f0f0 !important;
+}
+
+.tui-image-editor-menu > .tui-image-editor-item.active {
+  background: #e6f0ff !important;
+}
+
+/* 按钮样式 */
+.tui-image-editor-button,
+.tui-image-editor-controls button {
+  background: #f0f0f0 !important;
+  border: 1px solid #e0e0e0 !important;
+  border-radius: 6px !important;
+  color: #333333 !important;
+  font-weight: 500 !important;
+  padding: 8px 16px !important;
+  transition: all 0.2s ease !important;
+}
+
+.tui-image-editor-button:hover,
+.tui-image-editor-controls button:hover {
+  background: #e8e8e8 !important;
+  border-color: #d0d0d0 !important;
+}
+
+.tui-image-editor-button.active,
+.tui-image-editor-controls button.active {
+  background: #0066ff !important;
+  border-color: #0066ff !important;
+  color: #ffffff !important;
+}
+
+/* 滑块 */
+.tui-image-editor-range {
+  height: 4px !important;
+  background: #e0e0e0 !important;
+  border-radius: 2px !important;
+  margin: 16px 0 !important;
+}
+
+.tui-image-editor-virtual-range-bar {
+  background: #0066ff !important;
+  border-radius: 2px !important;
+}
+
+.tui-image-editor-virtual-range-pointer {
+  width: 20px !important;
+  height: 20px !important;
+  background: #0066ff !important;
+  border-radius: 50% !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+  transition: transform 0.1s ease !important;
+}
+
+.tui-image-editor-virtual-range-pointer:hover {
+  transform: scale(1.1);
+}
+
+/* 滑块数值 */
+.tui-image-editor-range-value {
+  background: transparent !important;
+  color: #333333 !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+}
+
+/* 标签文字 */
+.tui-image-editor-newline label,
+.tui-image-editor-range-wrap label {
+  color: #666666 !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+/* 输入框 */
+.tui-image-editor-controls input[type="text"],
+.tui-image-editor-controls input[type="number"],
+.tui-colorpicker-palette-hex {
+  background: #ffffff !important;
+  border: 1px solid #e0e0e0 !important;
+  border-radius: 6px !important;
+  color: #333333 !important;
+  padding: 8px 12px !important;
+  font-size: 14px !important;
+  transition: all 0.2s ease !important;
+}
+
+.tui-image-editor-controls input:focus,
+.tui-colorpicker-palette-hex:focus {
+  border-color: #0066ff !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1) !important;
+}
+
+/* 颜色选择器 */
+.tui-colorpicker-container {
+  background: #ffffff !important;
+  border: 1px solid #e0e0e0 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
+.tui-colorpicker-palette-button {
+  border: 2px solid #e0e0e0 !important;
+  border-radius: 6px !important;
+  transition: all 0.15s ease !important;
+}
+
+.tui-colorpicker-palette-button:hover {
+  transform: scale(1.05);
+  border-color: #999999 !important;
+}
+
+.tui-colorpicker-palette-button.active {
+  border-color: #0066ff !important;
+  box-shadow: 0 0 0 2px rgba(0, 102, 255, 0.2) !important;
+}
+
+/* 分隔线 */
+.tui-image-editor-partition,
+.tui-image-editor-icpartition {
+  background-color: #e0e0e0 !important;
+  height: 1px !important;
+  margin: 12px 0 !important;
+}
+
+/* 隐藏帮助菜单 */
+.tui-image-editor-help-menu {
+  display: none !important;
+}
+
+/* 隐藏Logo */
+.tui-image-editor-header-logo {
+  display: none !important;
+}
+
+/* 隐藏顶部按钮 */
+.tui-image-editor-header-buttons {
+  display: none !important;
+}
+
+/* 下载按钮 */
+.tui-image-editor-download-btn {
+  background: #0066ff !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  border-radius: 6px !important;
+  padding: 8px 20px !important;
+  border: none !important;
+}
+
+.tui-image-editor-download-btn:hover {
+  background: #0052cc !important;
+}
+
+/* 加载按钮 */
+.tui-image-editor-load-btn {
+  background: #f0f0f0 !important;
+  color: #333333 !important;
+  border: 1px solid #e0e0e0 !important;
+  border-radius: 6px !important;
+}
+
+.tui-image-editor-load-btn:hover {
+  background: #e8e8e8 !important;
+}
+
+/* Canvas容器 */
+.tui-image-editor-canvas-container {
+  background-color: #f8f9fa !important;
+}
+
+/* 确保图片可见 */
+.lower-canvas,
+.upper-canvas {
+  display: block !important;
+}
+
+/* 滚动条 */
+.tui-image-editor-submenu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tui-image-editor-submenu::-webkit-scrollbar-track {
+  background: #f0f0f0;
+}
+
+.tui-image-editor-submenu::-webkit-scrollbar-thumb {
+  background: #c0c0c0;
+  border-radius: 3px;
+}
+
+.tui-image-editor-submenu::-webkit-scrollbar-thumb:hover {
+  background: #a0a0a0;
+}
+
+/* Checkbox */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  background: #ffffff;
+  border: 2px solid #d0d0d0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+input[type="checkbox"]:checked {
+  background: #0066ff;
+  border-color: #0066ff;
+}
+
+input[type="checkbox"]:checked::after {
+  content: "✓";
+  display: block;
+  text-align: center;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 14px;
+}
+
+/* 文字输入框 */
+.tui-image-editor-controls textarea {
+  background: #ffffff !important;
+  border: 1px solid #e0e0e0 !important;
+  border-radius: 6px !important;
+  color: #333333 !important;
+  padding: 10px !important;
+  font-family: system-ui, -apple-system, sans-serif !important;
+  resize: vertical !important;
+}
+
+.tui-image-editor-controls textarea:focus {
+  border-color: #0066ff !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1) !important;
+}
+
+/* 聚焦视觉反馈 */
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid #0066ff !important;
+  outline-offset: 2px !important;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .tui-image-editor-menu {
+    width: 50px !important;
+  }
+
+  .tui-image-editor-submenu {
+    width: 260px !important;
+  }
+}

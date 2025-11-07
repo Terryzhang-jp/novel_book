@@ -202,6 +202,9 @@ export class PhotoStorage {
       isPublic: data.is_public,
       trashed: data.trashed,
       trashedAt: data.trashed_at,
+      originalFileUrl: data.original_file_url,
+      edited: data.edited,
+      editedAt: data.edited_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -236,6 +239,9 @@ export class PhotoStorage {
       isPublic: data.is_public,
       trashed: data.trashed,
       trashedAt: data.trashed_at,
+      originalFileUrl: data.original_file_url,
+      edited: data.edited,
+      editedAt: data.edited_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -294,6 +300,11 @@ export class PhotoStorage {
       description: photo.description,
       tags: photo.tags,
       isPublic: photo.is_public,
+      trashed: photo.trashed,
+      trashedAt: photo.trashed_at,
+      originalFileUrl: photo.original_file_url,
+      edited: photo.edited,
+      editedAt: photo.edited_at,
       createdAt: photo.created_at,
       updatedAt: photo.updated_at,
     }));
@@ -352,6 +363,11 @@ export class PhotoStorage {
       description: photo.description,
       tags: photo.tags,
       isPublic: photo.is_public,
+      trashed: photo.trashed,
+      trashedAt: photo.trashed_at,
+      originalFileUrl: photo.original_file_url,
+      edited: photo.edited,
+      editedAt: photo.edited_at,
       createdAt: photo.created_at,
       updatedAt: photo.updated_at,
     }));
@@ -519,6 +535,9 @@ export class PhotoStorage {
       isPublic: data.is_public,
       trashed: data.trashed,
       trashedAt: data.trashed_at,
+      originalFileUrl: data.original_file_url,
+      edited: data.edited,
+      editedAt: data.edited_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -606,6 +625,9 @@ export class PhotoStorage {
       isPublic: data.is_public,
       trashed: data.trashed,
       trashedAt: data.trashed_at,
+      originalFileUrl: data.original_file_url,
+      edited: data.edited,
+      editedAt: data.edited_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -683,6 +705,9 @@ export class PhotoStorage {
       isPublic: data.is_public,
       trashed: data.trashed,
       trashedAt: data.trashed_at,
+      originalFileUrl: data.original_file_url,
+      edited: data.edited,
+      editedAt: data.edited_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -745,6 +770,109 @@ export class PhotoStorage {
       isPublic: data.is_public,
       trashed: data.trashed,
       trashedAt: data.trashed_at,
+      originalFileUrl: data.original_file_url,
+      edited: data.edited,
+      editedAt: data.edited_at,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  }
+
+  /**
+   * 替换照片文件（编辑照片）
+   * 保留原始照片，上传编辑后的新版本
+   */
+  async replacePhoto(
+    photoId: string,
+    userId: string,
+    editedFile: File
+  ): Promise<Photo> {
+    // 获取现有照片记录
+    const photo = await this.findById(photoId);
+    if (!photo) {
+      throw new NotFoundError("Photo");
+    }
+
+    // 权限检查
+    if (photo.userId !== userId) {
+      throw new UnauthorizedError(
+        "You don't have permission to edit this photo"
+      );
+    }
+
+    // 读取编辑后的文件
+    const arrayBuffer = await editedFile.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // 生成新文件名（保持相同扩展名）
+    const timestamp = Date.now();
+    const randomString = Math.random().toString(36).substring(7);
+    const fileExtension = photo.fileName.split(".").pop();
+    const newFileName = `${timestamp}-${randomString}.${fileExtension}`;
+
+    // 如果是第一次编辑，保存原始文件URL
+    const originalFileUrl = photo.originalFileUrl || photo.fileUrl;
+    const wasEdited = photo.edited || false;
+
+    // 上传新文件到 Supabase Storage
+    const newStoragePath = `${userId}/gallery/${newFileName}`;
+    await uploadFile('photos', newStoragePath, buffer, {
+      contentType: editedFile.type,
+      upsert: false,
+    });
+
+    // 获取新文件的公开 URL
+    const newFileUrl = getPublicUrl('photos', newStoragePath);
+
+    // 如果之前已经编辑过，删除旧的编辑版本文件
+    if (wasEdited && photo.fileName !== photo.originalFileUrl?.split('/').pop()) {
+      const oldEditedPath = `${userId}/gallery/${photo.fileName}`;
+      try {
+        await deleteStorageFile('photos', oldEditedPath);
+      } catch (error) {
+        console.error(`Failed to delete old edited file: ${error}`);
+        // 继续执行，不阻塞流程
+      }
+    }
+
+    // 更新数据库记录
+    const now = new Date().toISOString();
+    const { data, error } = await supabaseAdmin
+      .from('photos')
+      .update({
+        file_name: newFileName,
+        file_url: newFileUrl,
+        original_file_url: originalFileUrl,
+        edited: true,
+        edited_at: now,
+        updated_at: now,
+      })
+      .eq('id', photoId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update photo: ${error.message}`);
+    }
+
+    return {
+      id: data.id,
+      userId: data.user_id,
+      fileName: data.file_name,
+      originalName: data.original_name,
+      fileUrl: data.file_url,
+      metadata: data.metadata,
+      category: data.category,
+      locationId: data.location_id,
+      title: data.title,
+      description: data.description,
+      tags: data.tags,
+      isPublic: data.is_public,
+      trashed: data.trashed,
+      trashedAt: data.trashed_at,
+      originalFileUrl: data.original_file_url,
+      edited: data.edited,
+      editedAt: data.edited_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -828,6 +956,11 @@ export class PhotoStorage {
       description: photo.description,
       tags: photo.tags,
       isPublic: photo.is_public,
+      trashed: photo.trashed,
+      trashedAt: photo.trashed_at,
+      originalFileUrl: photo.original_file_url,
+      edited: photo.edited,
+      editedAt: photo.edited_at,
       createdAt: photo.created_at,
       updatedAt: photo.updated_at,
     }));

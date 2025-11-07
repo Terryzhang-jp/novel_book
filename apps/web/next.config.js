@@ -15,6 +15,16 @@ const nextConfig = {
       bodySizeLimit: '10mb',
     },
   },
+  webpack: (config, { isServer }) => {
+    // Ignore canvas module for browser builds (needed for Filerobot/Konva)
+    if (!isServer) {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        canvas: false,
+      };
+    }
+    return config;
+  },
   redirects: async () => {
     return [
       {

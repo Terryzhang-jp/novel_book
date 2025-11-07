@@ -17,7 +17,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { X, ChevronLeft, ChevronRight, Camera, Loader2, BookOpen, FileText } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { X, ChevronLeft, ChevronRight, Camera, Loader2, BookOpen, FileText, Edit2 } from 'lucide-react';
 import { LocationAssignment } from './location-assignment';
 import { DateTimeAssignment } from './datetime-assignment';
 import type { Photo } from '@/types/storage';
@@ -50,6 +51,7 @@ export function PhotoDetailModal({
   hasNext = false,
   onPhotoUpdate,
 }: PhotoDetailModalProps) {
+  const router = useRouter();
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -147,15 +149,33 @@ export function PhotoDetailModal({
 
   return (
     <div className="fixed inset-0 z-[9999] bg-background/95 backdrop-blur-sm">
-      {/* Close Button */}
-      <button
-        type="button"
-        onClick={onClose}
-        className="fixed top-4 right-4 z-[10000] p-2 bg-card border border-border rounded-full hover:bg-accent transition-colors"
-        aria-label="Close"
-      >
-        <X className="w-6 h-6" />
-      </button>
+      {/* Action Buttons */}
+      <div className="fixed top-4 right-4 z-[10000] flex gap-2">
+        {/* Edit Button */}
+        {photo && (
+          <button
+            type="button"
+            onClick={() => {
+              router.push(`/gallery/photos/${photoId}/edit`);
+            }}
+            className="p-2 bg-card border border-border rounded-full hover:bg-accent transition-colors"
+            aria-label="Edit photo"
+            title="编辑照片"
+          >
+            <Edit2 className="w-6 h-6" />
+          </button>
+        )}
+
+        {/* Close Button */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-2 bg-card border border-border rounded-full hover:bg-accent transition-colors"
+          aria-label="Close"
+        >
+          <X className="w-6 h-6" />
+        </button>
+      </div>
 
       {/* Navigation Buttons */}
       {onNavigate && (
