@@ -261,10 +261,10 @@ export class PhotoStorage {
 
     // 多级排序：
     // 1. 优先按照片拍摄时间（metadata.dateTime）排序
-    // 2. 没有拍摄时间的照片排在后面（nullsLast）
+    // 2. 没有拍摄时间的照片排在后面（nullsFirst: false）
     // 3. 然后按创建时间（created_at）排序
     query = query
-      .order('metadata->dateTime', { ascending, nullsLast: true })
+      .order('metadata->dateTime', { ascending, nullsFirst: false })
       .order('created_at', { ascending });
 
     // 添加分页参数
@@ -322,7 +322,7 @@ export class PhotoStorage {
 
     // 多级排序：优先按拍摄时间，然后按创建时间
     query = query
-      .order('metadata->dateTime', { ascending, nullsLast: true })
+      .order('metadata->dateTime', { ascending, nullsFirst: false })
       .order('created_at', { ascending });
 
     // 添加分页参数
