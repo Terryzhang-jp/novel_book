@@ -244,18 +244,28 @@ export class PhotoStorage {
   /**
    * 获取用户的所有照片（返回完整照片列表）
    * @param userId 用户ID
-   * @param options 分页选项 { limit?: number, offset?: number }
+   * @param options 分页选项 { limit?: number, offset?: number, sortOrder?: 'newest' | 'oldest' }
    */
   async findByUserId(
     userId: string,
-    options?: { limit?: number; offset?: number }
+    options?: { limit?: number; offset?: number; sortOrder?: 'newest' | 'oldest' }
   ): Promise<Photo[]> {
+    // 确定排序方向
+    const ascending = options?.sortOrder === 'oldest';
+
     let query = supabaseAdmin
       .from('photos')
       .select('*')
       .eq('user_id', userId)
-      .is('trashed', false) // 过滤掉回收站照片
-      .order('updated_at', { ascending: false });
+      .is('trashed', false); // 过滤掉回收站照片
+
+    // 多级排序：
+    // 1. 优先按照片拍摄时间（metadata.dateTime）排序
+    // 2. 没有拍摄时间的照片排在后面（nullsLast）
+    // 3. 然后按创建时间（created_at）排序
+    query = query
+      .order('metadata->dateTime', { ascending, nullsLast: true })
+      .order('created_at', { ascending });
 
     // 添加分页参数
     if (options?.limit !== undefined) {
@@ -293,20 +303,27 @@ export class PhotoStorage {
    * 按分类获取照片（返回完整照片列表）
    * @param userId 用户ID
    * @param category 照片分类
-   * @param options 分页选项 { limit?: number, offset?: number }
+   * @param options 分页选项 { limit?: number, offset?: number, sortOrder?: 'newest' | 'oldest' }
    */
   async findByCategory(
     userId: string,
     category: PhotoCategory,
-    options?: { limit?: number; offset?: number }
+    options?: { limit?: number; offset?: number; sortOrder?: 'newest' | 'oldest' }
   ): Promise<Photo[]> {
+    // 确定排序方向
+    const ascending = options?.sortOrder === 'oldest';
+
     let query = supabaseAdmin
       .from('photos')
       .select('*')
       .eq('user_id', userId)
       .eq('category', category)
-      .is('trashed', false) // 过滤掉回收站照片
-      .order('updated_at', { ascending: false });
+      .is('trashed', false); // 过滤掉回收站照片
+
+    // 多级排序：优先按拍摄时间，然后按创建时间
+    query = query
+      .order('metadata->dateTime', { ascending, nullsLast: true })
+      .order('created_at', { ascending });
 
     // 添加分页参数
     if (options?.limit !== undefined) {

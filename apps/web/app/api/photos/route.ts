@@ -95,11 +95,16 @@ export async function GET(req: Request) {
     const category = searchParams.get("category") as PhotoCategory | null;
     const limit = Number.parseInt(searchParams.get("limit") || "50", 10);
     const offset = Number.parseInt(searchParams.get("offset") || "0", 10);
+    const sortOrder = searchParams.get("sortOrder") as 'newest' | 'oldest' | null;
 
-    console.log("[GET /api/photos] Query params:", { category, limit, offset });
+    console.log("[GET /api/photos] Query params:", { category, limit, offset, sortOrder });
 
-    // 分页选项
-    const paginationOptions = { limit, offset };
+    // 分页选项（包含排序方式）
+    const paginationOptions = {
+      limit,
+      offset,
+      sortOrder: sortOrder || 'newest'
+    };
 
     // 获取照片列表（现在返回完整Photo[]，包含fileUrl）
     let photos;

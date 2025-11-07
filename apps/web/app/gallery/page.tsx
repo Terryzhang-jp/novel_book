@@ -65,6 +65,13 @@ export default function GalleryPage() {
     setSelectedLocationId("all"); // 重置地点筛选
   }, [selectedCategory]);
 
+  // 当排序方式改变时，重置并重新加载
+  useEffect(() => {
+    if (photos.length > 0) { // 只在已加载照片后才触发
+      fetchPhotos(true);
+    }
+  }, [sortOrder]);
+
   const fetchPhotos = async (reset = false) => {
     try {
       if (reset) {
@@ -77,8 +84,9 @@ export default function GalleryPage() {
 
       const currentOffset = reset ? 0 : offset;
       const categoryParam = selectedCategory === "all" ? "" : `&category=${selectedCategory}`;
+      const sortParam = `&sortOrder=${sortOrder}`;
       const response = await fetch(
-        `/api/photos?limit=${PAGE_SIZE}&offset=${currentOffset}${categoryParam}`
+        `/api/photos?limit=${PAGE_SIZE}&offset=${currentOffset}${categoryParam}${sortParam}`
       );
 
       if (!response.ok) {
@@ -245,7 +253,7 @@ export default function GalleryPage() {
   };
 
   const selectAll = () => {
-    const allPhotoIds = new Set(sortedPhotos.map((p) => p.id));
+    const allPhotoIds = new Set(filteredPhotos.map((p) => p.id));
     setSelectedPhotos(allPhotoIds);
   };
 
@@ -365,53 +373,16 @@ export default function GalleryPage() {
     return counts;
   }, [photos]);
 
-  /**
-   * 对照片进行排序
-   * 使用 useMemo 缓存结果，仅在 photos 或 sortOrder 变化时重新计算
-   */
-  const sortedPhotos = useMemo(() => {
-    console.log('[Gallery] Sorting photos, sortOrder:', sortOrder, 'photo count:', filteredPhotos.length);
-
-    const sorted = [...filteredPhotos].sort((a, b) => {
-      // 获取照片时间：优先使用拍摄时间，否则使用创建时间
-      const getPhotoTime = (photo: Photo): Date => {
-        const dateTime = photo.metadata?.dateTime;
-        if (dateTime) {
-          return new Date(dateTime);
-        }
-        return new Date(photo.createdAt);
-      };
-
-      const timeA = getPhotoTime(a).getTime();
-      const timeB = getPhotoTime(b).getTime();
-
-      // 根据排序方式决定升序或降序
-      if (sortOrder === 'newest') {
-        return timeB - timeA; // 降序：新的在前
-      } else {
-        return timeA - timeB; // 升序：旧的在前
-      }
-    });
-
-    // 输出前3张照片的时间用于调试
-    if (sorted.length > 0) {
-      console.log('[Gallery] First 3 photos after sorting:');
-      sorted.slice(0, 3).forEach((photo, idx) => {
-        const time = photo.metadata?.dateTime || photo.createdAt;
-        console.log(`  ${idx + 1}. ${photo.originalName} - ${time}`);
-      });
-    }
-
-    return sorted;
-  }, [filteredPhotos, sortOrder]);
+  // 前端排序已移至后端，直接使用 filteredPhotos
+  // 后端会根据 sortOrder 参数进行排序
 
   /**
    * 对照片进行时间聚类
-   * 使用 useMemo 缓存结果，仅在 sortedPhotos 或 clusterThreshold 变化时重新计算
+   * 使用 useMemo 缓存结果，仅在 filteredPhotos 或 clusterThreshold 变化时重新计算
    */
   const photoClusters = useMemo(() => {
-    return clusterPhotosByTime(sortedPhotos, clusterThreshold);
-  }, [sortedPhotos, clusterThreshold]);
+    return clusterPhotosByTime(filteredPhotos, clusterThreshold);
+  }, [filteredPhotos, clusterThreshold]);
 
   /**
    * Handle photo click to open detail modal
@@ -426,13 +397,13 @@ export default function GalleryPage() {
   const handleDetailNavigate = (direction: 'prev' | 'next') => {
     if (!detailPhotoId) return;
 
-    const currentIndex = sortedPhotos.findIndex((p) => p.id === detailPhotoId);
+    const currentIndex = filteredPhotos.findIndex((p) => p.id === detailPhotoId);
     if (currentIndex === -1) return;
 
     if (direction === 'prev' && currentIndex > 0) {
-      setDetailPhotoId(sortedPhotos[currentIndex - 1].id);
-    } else if (direction === 'next' && currentIndex < sortedPhotos.length - 1) {
-      setDetailPhotoId(sortedPhotos[currentIndex + 1].id);
+      setDetailPhotoId(filteredPhotos[currentIndex - 1].id);
+    } else if (direction === 'next' && currentIndex < filteredPhotos.length - 1) {
+      setDetailPhotoId(filteredPhotos[currentIndex + 1].id);
     }
   };
 
@@ -442,12 +413,12 @@ export default function GalleryPage() {
   const getNavigationState = () => {
     if (!detailPhotoId) return { hasPrev: false, hasNext: false };
 
-    const currentIndex = sortedPhotos.findIndex((p) => p.id === detailPhotoId);
+    const currentIndex = filteredPhotos.findIndex((p) => p.id === detailPhotoId);
     if (currentIndex === -1) return { hasPrev: false, hasNext: false };
 
     return {
       hasPrev: currentIndex > 0,
-      hasNext: currentIndex < sortedPhotos.length - 1,
+      hasNext: currentIndex < filteredPhotos.length - 1,
     };
   };
 
@@ -685,7 +656,7 @@ export default function GalleryPage() {
       {/* Quick Delete Modal */}
       <QuickDeleteModal
         isOpen={showQuickDeleteModal}
-        photos={sortedPhotos}
+        photos={filteredPhotos}
         initialIndex={0}
         onClose={() => setShowQuickDeleteModal(false)}
         onTrash={handleTrashPhotos}
