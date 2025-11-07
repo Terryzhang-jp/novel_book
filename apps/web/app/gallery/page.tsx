@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Upload, Trash2, X, MapPin, Zap, ArrowUpDown } from "lucide-react";
-import type { Photo, PhotoCategory, PhotoStats } from "@/types/storage";
+import type { Photo, PhotoCategory, PhotoStats, Location } from "@/types/storage";
 import { CategoryFilter } from "@/components/gallery/category-filter";
+import { LocationFilter } from "@/components/gallery/location-filter";
 import { PhotoGrid } from "@/components/gallery/photo-grid";
 import { PhotoDetailModal } from "@/components/photos/photo-detail-modal";
 import { BatchLocationAssignment } from "@/components/photos/batch-location-assignment";
@@ -26,6 +27,8 @@ export default function GalleryPage() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [stats, setStats] = useState<PhotoStats | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<PhotoCategory | "all">("all");
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | "all">("all");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -53,11 +56,13 @@ export default function GalleryPage() {
   // 初始加载
   useEffect(() => {
     fetchPhotos(true);
+    fetchLocations();
   }, []);
 
   // 当分类改变时，重置并重新加载
   useEffect(() => {
     fetchPhotos(true);
+    setSelectedLocationId("all"); // 重置地点筛选
   }, [selectedCategory]);
 
   const fetchPhotos = async (reset = false) => {
@@ -118,6 +123,19 @@ export default function GalleryPage() {
       setTrashedCount(data.count || 0);
     } catch (error) {
       console.error("Error fetching trashed count:", error);
+    }
+  };
+
+  // 获取用户的所有地点
+  const fetchLocations = async () => {
+    try {
+      const response = await fetch("/api/locations");
+      if (!response.ok) return;
+
+      const data = await response.json();
+      setLocations(data.locations || []);
+    } catch (error) {
+      console.error("Error fetching locations:", error);
     }
   };
 
@@ -326,7 +344,26 @@ export default function GalleryPage() {
   };
 
   // 由于API已经按category过滤，photos就是过滤后的结果
-  const filteredPhotos = photos;
+  // 然后再根据selectedLocationId进行前端筛选
+  const filteredPhotos = useMemo(() => {
+    if (selectedLocationId === "all") {
+      return photos;
+    }
+    return photos.filter(photo => photo.locationId === selectedLocationId);
+  }, [photos, selectedLocationId]);
+
+  /**
+   * 计算每个location的照片数量
+   */
+  const photoCountByLocation = useMemo(() => {
+    const counts: Record<string, number> = {};
+    photos.forEach(photo => {
+      if (photo.locationId) {
+        counts[photo.locationId] = (counts[photo.locationId] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [photos]);
 
   /**
    * 对照片进行排序
@@ -549,6 +586,20 @@ export default function GalleryPage() {
               selectedCategory={selectedCategory}
               onCategoryChange={setSelectedCategory}
             />
+          )}
+
+          {/* Location Filter - 只在有location的分类时显示 */}
+          {(selectedCategory === "time-location" || selectedCategory === "location-only" || selectedCategory === "all") &&
+           locations.length > 0 &&
+           Object.keys(photoCountByLocation).length > 0 && (
+            <div className="mt-4">
+              <LocationFilter
+                locations={locations}
+                selectedLocationId={selectedLocationId}
+                onLocationChange={setSelectedLocationId}
+                photoCountByLocation={photoCountByLocation}
+              />
+            </div>
           )}
         </div>
       </div>
