@@ -54,7 +54,7 @@ function getPhotoDateTime(photo: PhotoWithOptionalUserId): string | undefined {
 interface PhotoMapProps {
   photos: PhotoWithOptionalUserId[];
   userId: string;  // Fallback userId if photo doesn't have one
-  onPhotoClick?: (photoId: string) => void;
+  onLocationClick?: (location: PhotoLocation) => void;  // Changed from onPhotoClick
   className?: string;
   height?: string;
   focusLocation?: {
@@ -75,11 +75,14 @@ interface PhotoMapProps {
 /**
  * Group photos by location (same coordinates)
  */
-interface PhotoLocation {
+export interface PhotoLocation {
   latitude: number;
   longitude: number;
   photos: PhotoWithOptionalUserId[];
 }
+
+// Also export PhotoWithOptionalUserId for external use
+export type { PhotoWithOptionalUserId };
 
 /**
  * PhotoMap Component
@@ -89,7 +92,7 @@ interface PhotoLocation {
 export function PhotoMap({
   photos,
   userId,
-  onPhotoClick,
+  onLocationClick,
   className = '',
   height = '600px',
   focusLocation = null,
@@ -280,7 +283,7 @@ export function PhotoMap({
           // Single photo - large display
           <button
             type="button"
-            onClick={() => onPhotoClick?.(firstPhoto.id)}
+            onClick={() => onLocationClick?.(location)}
             className="relative w-full aspect-[4/3] bg-muted rounded-lg overflow-hidden mb-3 hover:ring-2 hover:ring-primary transition-all cursor-pointer"
           >
             <Image
@@ -300,7 +303,7 @@ export function PhotoMap({
                 <button
                   key={photo.id}
                   type="button"
-                  onClick={() => onPhotoClick?.(photo.id)}
+                  onClick={() => onLocationClick?.(location)}
                   className="relative aspect-square bg-muted rounded-lg overflow-hidden hover:ring-2 hover:ring-primary transition-all cursor-pointer"
                 >
                   <Image
@@ -369,7 +372,7 @@ export function PhotoMap({
           {/* Click to view details */}
           <button
             type="button"
-            onClick={() => onPhotoClick?.(firstPhoto.id)}
+            onClick={() => onLocationClick?.(location)}
             className="w-full mt-2 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-medium rounded transition-colors"
           >
             查看详情 →

@@ -18,8 +18,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { MapPin, Loader2, Users, Image as ImageIcon, LogIn } from 'lucide-react';
-import { PhotoMap } from '@/components/maps/photo-map';
-import { PublicPhotoDetailModal } from '@/components/photos/public-photo-detail-modal';
+import { PhotoMap, type PhotoLocation } from '@/components/maps/photo-map';
+import { LocationPhotosModal } from '@/components/photos/location-photos-modal';
 import { PhotoSidebar } from '@/components/chichibu/photo-sidebar';
 import { AppLayout } from '@/components/layout/app-layout';
 import type { PhotoCategory } from '@/types/storage';
@@ -42,9 +42,8 @@ interface PublicPhotoIndex {
 export default function ChichibuPage() {
   const [photos, setPhotos] = useState<PublicPhotoIndex[]>([]);
   const [loading, setLoading] = useState(true);
-  const [detailPhotoId, setDetailPhotoId] = useState<string | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<PhotoLocation | null>(null);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
-  const [locationPhotos, setLocationPhotos] = useState<PublicPhotoIndex[]>([]); // Photos at the selected location
   const [focusLocation, setFocusLocation] = useState<{
     latitude: number;
     longitude: number;
@@ -88,30 +87,10 @@ export default function ChichibuPage() {
   }, [photos]);
 
   /**
-   * Handle photo click from map popup to open detail modal
-   * When a photo is clicked, find all photos at the same location
+   * Handle location click from map popup to open location photos modal
    */
-  const handlePhotoClick = (photoId: string) => {
-    const clickedPhoto = photos.find((p) => p.id === photoId);
-    if (!clickedPhoto?.location) {
-      setDetailPhotoId(photoId);
-      setLocationPhotos([clickedPhoto!]);
-      return;
-    }
-
-    // Find all photos at the same location
-    const photosAtLocation = photos.filter((photo) => {
-      if (!photo.location) return false;
-
-      // Check if coordinates match (within small tolerance)
-      const latMatch = Math.abs(photo.location.latitude - clickedPhoto.location.latitude) < 0.00001;
-      const lngMatch = Math.abs(photo.location.longitude - clickedPhoto.location.longitude) < 0.00001;
-
-      return latMatch && lngMatch;
-    });
-
-    setLocationPhotos(photosAtLocation);
-    setDetailPhotoId(photoId);
+  const handleLocationClick = (location: PhotoLocation) => {
+    setSelectedLocation(location);
   };
 
   /**
@@ -129,38 +108,6 @@ export default function ChichibuPage() {
     }
   };
 
-  /**
-   * Handle navigation in photo detail modal
-   * Navigate within photos at the same location
-   */
-  const handleDetailNavigate = (direction: 'prev' | 'next') => {
-    if (!detailPhotoId) return;
-
-    const currentIndex = locationPhotos.findIndex((p) => p.id === detailPhotoId);
-    if (currentIndex === -1) return;
-
-    if (direction === 'prev' && currentIndex > 0) {
-      setDetailPhotoId(locationPhotos[currentIndex - 1].id);
-    } else if (direction === 'next' && currentIndex < locationPhotos.length - 1) {
-      setDetailPhotoId(locationPhotos[currentIndex + 1].id);
-    }
-  };
-
-  /**
-   * Get navigation state for detail modal
-   * Based on photos at the same location
-   */
-  const getNavigationState = () => {
-    if (!detailPhotoId || locationPhotos.length === 0) return { hasPrev: false, hasNext: false };
-
-    const currentIndex = locationPhotos.findIndex((p) => p.id === detailPhotoId);
-    if (currentIndex === -1) return { hasPrev: false, hasNext: false };
-
-    return {
-      hasPrev: currentIndex > 0,
-      hasNext: currentIndex < locationPhotos.length - 1,
-    };
-  };
 
   // Get a representative userId for the PhotoMap component
   // (PhotoMap needs userId for image path construction)
@@ -264,7 +211,7 @@ export default function ChichibuPage() {
                 <PhotoMap
                   photos={photos}
                   userId={representativeUserId}
-                  onPhotoClick={handlePhotoClick}
+                  onLocationClick={handleLocationClick}
                   focusLocation={focusLocation}
                   height="100%"
                 />
@@ -288,14 +235,11 @@ export default function ChichibuPage() {
         )}
       </div>
 
-      {/* Photo Detail Modal */}
-      <PublicPhotoDetailModal
-        isOpen={!!detailPhotoId}
-        photoId={detailPhotoId}
-        onClose={() => setDetailPhotoId(null)}
-        onNavigate={handleDetailNavigate}
-        hasPrev={getNavigationState().hasPrev}
-        hasNext={getNavigationState().hasNext}
+      {/* Location Photos Modal */}
+      <LocationPhotosModal
+        isOpen={!!selectedLocation}
+        location={selectedLocation}
+        onClose={() => setSelectedLocation(null)}
       />
       </div>
     </AppLayout>

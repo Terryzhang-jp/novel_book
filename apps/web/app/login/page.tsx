@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/tailwind/ui/button";
-import { PhotoMap } from "@/components/maps/photo-map";
-import { PublicPhotoDetailModal } from "@/components/photos/public-photo-detail-modal";
+import { PhotoMap, type PhotoLocation } from "@/components/maps/photo-map";
+import { LocationPhotosModal } from "@/components/photos/location-photos-modal";
 import { MapPin, Loader2 } from "lucide-react";
 import type { PhotoCategory } from "@/types/storage";
 
@@ -31,7 +31,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [photos, setPhotos] = useState<PublicPhotoIndex[]>([]);
   const [photosLoading, setPhotosLoading] = useState(true);
-  const [detailPhotoId, setDetailPhotoId] = useState<string | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<PhotoLocation | null>(null);
   const router = useRouter();
 
   /**
@@ -91,8 +91,8 @@ export default function LoginPage() {
     }
   };
 
-  const handlePhotoClick = (photoId: string) => {
-    setDetailPhotoId(photoId);
+  const handleLocationClick = (location: PhotoLocation) => {
+    setSelectedLocation(location);
   };
 
   // Get representative userId for PhotoMap component
@@ -124,7 +124,7 @@ export default function LoginPage() {
           <PhotoMap
             photos={photos}
             userId={representativeUserId}
-            onPhotoClick={handlePhotoClick}
+            onLocationClick={handleLocationClick}
             height="100vh"
             initialZoom={10}
           />
@@ -133,11 +133,12 @@ export default function LoginPage() {
         {/* Top Title Overlay */}
         <div className="absolute top-0 left-0 right-0 flex items-center justify-center pt-16 pointer-events-none z-[1000]">
           <div className="text-center">
-            <h1 className="text-7xl font-light tracking-widest" style={{
+            <h1 className="text-7xl tracking-widest" style={{
               color: '#1a1a1a',
-              fontFamily: 'Georgia, "Times New Roman", serif',
-              letterSpacing: '0.2em',
-              fontWeight: 300
+              fontFamily: '"Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", "STSong", "SimSun", "PingFang SC", "Microsoft YaHei", serif',
+              letterSpacing: '0.15em',
+              fontWeight: 400,
+              textShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
             }}>
               9月 秩父 之行
             </h1>
@@ -260,11 +261,11 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Photo Detail Modal */}
-      <PublicPhotoDetailModal
-        isOpen={!!detailPhotoId}
-        photoId={detailPhotoId}
-        onClose={() => setDetailPhotoId(null)}
+      {/* Location Photos Modal */}
+      <LocationPhotosModal
+        isOpen={!!selectedLocation}
+        location={selectedLocation}
+        onClose={() => setSelectedLocation(null)}
       />
     </div>
   );

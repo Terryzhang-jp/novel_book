@@ -20,8 +20,8 @@ import { Grid3x3, Image as ImageIcon, MapPin } from 'lucide-react';
 import type { Photo, PhotoCategory, PhotoStats } from '@/types/storage';
 import { AppLayout } from '@/components/layout/app-layout';
 import { CategoryFilter } from '@/components/gallery/category-filter';
-import { PhotoMap, PhotoMapStats } from '@/components/maps/photo-map';
-import { PhotoDetailModal } from '@/components/photos/photo-detail-modal';
+import { PhotoMap, PhotoMapStats, type PhotoLocation } from '@/components/maps/photo-map';
+import { LocationPhotosModal } from '@/components/photos/location-photos-modal';
 
 export default function GalleryMapPage() {
   const router = useRouter();
@@ -30,8 +30,7 @@ export default function GalleryMapPage() {
   const [selectedCategory, setSelectedCategory] = useState<PhotoCategory | 'all'>('all');
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
-  const [detailPhotoId, setDetailPhotoId] = useState<string | null>(null);
-  const [locationPhotos, setLocationPhotos] = useState<Photo[]>([]); // Photos at the selected location
+  const [selectedLocation, setSelectedLocation] = useState<PhotoLocation | null>(null);
 
   /**
    * Fetch photos from API
@@ -88,63 +87,10 @@ export default function GalleryMapPage() {
   );
 
   /**
-   * Handle photo click to open detail modal
-   * When a photo is clicked, find all photos at the same location
+   * Handle location click to open location photos modal
    */
-  const handlePhotoClick = (photoId: string) => {
-    const clickedPhoto = filteredPhotos.find((p) => p.id === photoId);
-    if (!clickedPhoto?.metadata?.location) {
-      setDetailPhotoId(photoId);
-      setLocationPhotos([clickedPhoto!]);
-      return;
-    }
-
-    // Find all photos at the same location
-    const photosAtLocation = filteredPhotos.filter((photo) => {
-      if (!photo.metadata?.location) return false;
-
-      // Check if coordinates match (within small tolerance)
-      const latMatch = Math.abs(photo.metadata.location.latitude - clickedPhoto.metadata.location.latitude) < 0.00001;
-      const lngMatch = Math.abs(photo.metadata.location.longitude - clickedPhoto.metadata.location.longitude) < 0.00001;
-
-      return latMatch && lngMatch;
-    });
-
-    setLocationPhotos(photosAtLocation);
-    setDetailPhotoId(photoId);
-  };
-
-  /**
-   * Handle navigation in photo detail modal
-   * Navigate within photos at the same location
-   */
-  const handleDetailNavigate = (direction: 'prev' | 'next') => {
-    if (!detailPhotoId) return;
-
-    const currentIndex = locationPhotos.findIndex((p) => p.id === detailPhotoId);
-    if (currentIndex === -1) return;
-
-    if (direction === 'prev' && currentIndex > 0) {
-      setDetailPhotoId(locationPhotos[currentIndex - 1].id);
-    } else if (direction === 'next' && currentIndex < locationPhotos.length - 1) {
-      setDetailPhotoId(locationPhotos[currentIndex + 1].id);
-    }
-  };
-
-  /**
-   * Get navigation state for detail modal
-   * Based on photos at the same location
-   */
-  const getNavigationState = () => {
-    if (!detailPhotoId || locationPhotos.length === 0) return { hasPrev: false, hasNext: false };
-
-    const currentIndex = locationPhotos.findIndex((p) => p.id === detailPhotoId);
-    if (currentIndex === -1) return { hasPrev: false, hasNext: false };
-
-    return {
-      hasPrev: currentIndex > 0,
-      hasNext: currentIndex < locationPhotos.length - 1,
-    };
+  const handleLocationClick = (location: PhotoLocation) => {
+    setSelectedLocation(location);
   };
 
   if (loading) {
@@ -235,7 +181,7 @@ export default function GalleryMapPage() {
                 <PhotoMap
                   photos={photosWithLocation}
                   userId={userId}
-                  onPhotoClick={handlePhotoClick}
+                  onLocationClick={handleLocationClick}
                   height="calc(100vh - 400px)"
                 />
               )}
@@ -256,18 +202,12 @@ export default function GalleryMapPage() {
         )}
         </div>
 
-        {/* Photo Detail Modal */}
-        {userId && (
-          <PhotoDetailModal
-            isOpen={!!detailPhotoId}
-            photoId={detailPhotoId}
-            userId={userId}
-            onClose={() => setDetailPhotoId(null)}
-            onNavigate={handleDetailNavigate}
-            hasPrev={getNavigationState().hasPrev}
-            hasNext={getNavigationState().hasNext}
-          />
-        )}
+        {/* Location Photos Modal */}
+        <LocationPhotosModal
+          isOpen={!!selectedLocation}
+          location={selectedLocation}
+          onClose={() => setSelectedLocation(null)}
+        />
       </div>
     </AppLayout>
   );
