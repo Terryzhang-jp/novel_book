@@ -5,7 +5,7 @@
  * 一次展示一个完整模板，左右滑动切换
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import type { PosterData, TemplateId } from '@/lib/poster/types';
 import { POSTER_TEMPLATES } from '@/lib/poster/template-config';
 import { ChevronLeft, ChevronRight, Info } from 'lucide-react';
@@ -53,20 +53,26 @@ export function TemplateSwipeView({ posterData, onTemplateClick }: TemplateSwipe
   const TemplateComponent = templateComponents[currentTemplate.id];
 
   // 切换到下一个模板
-  const goToNext = () => {
-    if (currentIndex < POSTER_TEMPLATES.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-      setShowInfo(true);
-    }
-  };
+  const goToNext = useCallback(() => {
+    setCurrentIndex((prev) => {
+      if (prev < POSTER_TEMPLATES.length - 1) {
+        setShowInfo(true);
+        return prev + 1;
+      }
+      return prev;
+    });
+  }, []);
 
   // 切换到上一个模板
-  const goToPrev = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1);
-      setShowInfo(true);
-    }
-  };
+  const goToPrev = useCallback(() => {
+    setCurrentIndex((prev) => {
+      if (prev > 0) {
+        setShowInfo(true);
+        return prev - 1;
+      }
+      return prev;
+    });
+  }, []);
 
   // 鼠标/触摸事件处理
   const handleDragStart = (clientX: number) => {
@@ -131,7 +137,7 @@ export function TemplateSwipeView({ posterData, onTemplateClick }: TemplateSwipe
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex]);
+  }, [goToPrev, goToNext]);
 
   // 计算缩放比例 - 让模板适应屏幕
   const containerMaxWidth = 900;
