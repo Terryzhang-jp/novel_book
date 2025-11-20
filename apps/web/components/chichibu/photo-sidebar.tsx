@@ -200,58 +200,61 @@ export function PhotoSidebar({
   if (!isOpen) {
     // Collapsed state - show toggle button only
     return (
-      <div className={`flex-shrink-0 flex items-center ${className}`}>
+      <div className={`flex-shrink-0 flex items-start ${className}`}>
         <button
           onClick={() => setIsOpen(true)}
-          className="bg-card border border-border rounded-l-lg p-3 shadow-md hover:bg-accent transition-colors h-20"
+          className="group flex items-center gap-2 bg-background/80 backdrop-blur-md border border-border/50 rounded-full pl-4 pr-2 py-2 shadow-lg hover:bg-background hover:scale-105 transition-all"
           aria-label="Open photo sidebar"
         >
-          <ChevronLeft className="w-5 h-5 text-foreground" />
+          <span className="text-sm font-medium text-foreground">Explore Photos</span>
+          <div className="p-1 bg-primary/10 rounded-full group-hover:bg-primary/20 transition-colors">
+            <ChevronRight className="w-4 h-4 text-primary" />
+          </div>
         </button>
       </div>
     );
   }
 
   return (
-    <div className={`flex-shrink-0 w-80 h-full bg-card border-l border-border shadow-lg flex flex-col ${className}`}>
+    <div className={`flex flex-col h-[40vh] md:h-[calc(100vh-160px)] w-full md:w-96 bg-background/80 backdrop-blur-xl border border-border/50 shadow-2xl rounded-2xl overflow-hidden transition-all duration-300 ${className}`}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border">
-        <div>
-          <h3 className="font-semibold text-foreground">照片列表</h3>
-          <p className="text-xs text-muted-foreground">{photoCount} 张照片</p>
+      <div className="flex items-center justify-between p-4 border-b border-border/50 bg-background/40 backdrop-blur-sm">
+        <div className="flex items-center gap-2">
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <MapPin className="w-4 h-4 text-primary" />
+          </div>
+          <div>
+            <h3 className="font-serif font-bold text-foreground text-base leading-none">Exploration</h3>
+            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mt-1">{photoCount} Moments</p>
+          </div>
         </div>
         <button
           onClick={() => setIsOpen(false)}
-          className="p-1.5 hover:bg-accent rounded transition-colors"
+          className="p-2 hover:bg-muted/50 rounded-full transition-colors group"
           aria-label="Close sidebar"
         >
-          <ChevronRight className="w-5 h-5 text-muted-foreground" />
+          <ChevronLeft className="w-5 h-5 text-muted-foreground group-hover:text-foreground" />
         </button>
       </div>
 
       {/* Filters */}
-      <div className="p-3 border-b border-border space-y-3">
+      <div className="p-4 border-b border-border/50 space-y-4 bg-background/20">
         {/* Time Filter */}
         <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Calendar className="w-4 h-4 text-muted-foreground" />
-            <span className="text-xs font-medium text-muted-foreground">时间范围</span>
-          </div>
-          <div className="flex gap-1">
+          <div className="flex gap-1 p-1 bg-muted/50 rounded-lg">
             {[
-              { value: 'all', label: '全部' },
-              { value: 'today', label: '今天' },
-              { value: 'week', label: '本周' },
-              { value: 'month', label: '本月' },
+              { value: 'all', label: 'All' },
+              { value: 'today', label: 'Today' },
+              { value: 'week', label: 'Week' },
+              { value: 'month', label: 'Month' },
             ].map((option) => (
               <button
                 key={option.value}
                 onClick={() => setTimeFilter(option.value as TimeFilter)}
-                className={`flex-1 px-2 py-1 text-xs rounded transition-colors ${
-                  timeFilter === option.value
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-                }`}
+                className={`flex-1 px-2 py-1.5 text-[10px] md:text-xs font-medium rounded-md transition-all ${timeFilter === option.value
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                  }`}
               >
                 {option.label}
               </button>
@@ -260,57 +263,55 @@ export function PhotoSidebar({
         </div>
 
         {/* Group By */}
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Filter className="w-4 h-4 text-muted-foreground" />
-            <span className="text-xs font-medium text-muted-foreground">分组方式</span>
-          </div>
-          <div className="flex gap-1">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Group By</span>
+          <div className="flex gap-2">
             <button
               onClick={() => setGroupBy('time')}
-              className={`flex-1 px-2 py-1 text-xs rounded transition-colors flex items-center justify-center gap-1 ${
-                groupBy === 'time'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-              }`}
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors text-xs font-medium ${groupBy === 'time'
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:bg-muted'
+                }`}
+              title="Group by Time"
             >
-              <Calendar className="w-3 h-3" />
-              按时间
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Time</span>
             </button>
             <button
               onClick={() => setGroupBy('location')}
-              className={`flex-1 px-2 py-1 text-xs rounded transition-colors flex items-center justify-center gap-1 ${
-                groupBy === 'location'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-              }`}
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors text-xs font-medium ${groupBy === 'location'
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:bg-muted'
+                }`}
+              title="Group by Location"
             >
-              <MapPin className="w-3 h-3" />
-              按地点
+              <MapPin className="w-3.5 h-3.5" />
+              <span>Location</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* Photo List - Grouped */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto scrollbar-hide bg-background/10">
         {photoGroups.length === 0 ? (
-          <div className="p-6 text-center text-sm text-muted-foreground">
-            暂无照片
+          <div className="flex flex-col items-center justify-center h-40 text-center p-6">
+            <Filter className="w-8 h-8 text-muted-foreground/30 mb-2" />
+            <p className="text-sm text-muted-foreground">No photos found</p>
           </div>
         ) : (
-          <div className="p-3 space-y-4">
+          <div className="p-3 space-y-6">
             {photoGroups.map((group, groupIndex) => (
               <div key={groupIndex}>
                 {/* Group Header */}
-                <div className="sticky top-0 bg-card z-10 py-2 mb-2">
-                  <h4 className="text-xs font-semibold text-muted-foreground">
-                    {group.title} ({group.photos.length})
+                <div className="sticky top-0 bg-background/95 backdrop-blur-md z-10 py-2 mb-2 px-2 border-b border-border/30 shadow-sm -mx-3 px-6">
+                  <h4 className="text-[10px] font-bold text-primary uppercase tracking-widest">
+                    {group.title}
                   </h4>
                 </div>
 
                 {/* Photos in Group */}
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {group.photos.map((photo) => {
                     const isSelected = photo.id === selectedPhotoId;
 
@@ -318,36 +319,41 @@ export function PhotoSidebar({
                       <button
                         key={photo.id}
                         onClick={() => onPhotoClick(photo.id)}
-                        className={`w-full flex items-start gap-3 p-2 rounded-lg transition-all text-left ${
-                          isSelected
-                            ? 'bg-primary/10 ring-2 ring-primary'
-                            : 'hover:bg-accent'
-                        }`}
+                        className={`group w-full flex items-start gap-3 p-2 rounded-xl transition-all text-left border ${isSelected
+                            ? 'bg-primary/5 border-primary/30 shadow-sm'
+                            : 'bg-card/40 border-transparent hover:bg-card/80 hover:border-border/50 hover:shadow-sm'
+                          }`}
                       >
                         {/* Thumbnail */}
-                        <div className="relative w-20 h-20 flex-shrink-0 bg-muted rounded overflow-hidden">
+                        <div className="relative w-14 h-14 flex-shrink-0 bg-muted rounded-lg overflow-hidden shadow-sm group-hover:shadow-md transition-shadow">
                           <Image
                             src={photo.fileUrl}
                             alt={photo.fileName}
                             fill
-                            className="object-cover"
-                            sizes="80px"
+                            className="object-cover transition-transform duration-500 group-hover:scale-110"
+                            sizes="56px"
                             unoptimized
                           />
                         </div>
 
                         {/* Info */}
-                        <div className="flex-1 min-w-0 py-1">
-                          <p className="text-sm font-medium text-foreground truncate mb-1">
-                            {photo.userName}
-                          </p>
-                          <p className="text-xs text-muted-foreground mb-1">
-                            {formatDate(photo.dateTime)}
-                          </p>
-                          {photo.location && (
-                            <p className="text-xs text-muted-foreground font-mono truncate">
-                              📍 {photo.location.latitude.toFixed(4)}, {photo.location.longitude.toFixed(4)}
+                        <div className="flex-1 min-w-0 py-0.5">
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-sm font-serif font-bold text-foreground truncate pr-2">
+                              {photo.userName}
                             </p>
+                            <span className="text-[10px] text-muted-foreground font-mono flex-shrink-0">
+                              {new Date(photo.dateTime || '').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+
+                          {photo.location && (
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <MapPin className="w-3 h-3 flex-shrink-0 text-primary/50" />
+                              <span className="truncate font-light">
+                                {photo.location.latitude.toFixed(3)}, {photo.location.longitude.toFixed(3)}
+                              </span>
+                            </div>
                           )}
                         </div>
                       </button>
@@ -358,13 +364,6 @@ export function PhotoSidebar({
             ))}
           </div>
         )}
-      </div>
-
-      {/* Footer tip */}
-      <div className="p-3 border-t border-border bg-muted/50">
-        <p className="text-xs text-muted-foreground text-center">
-          点击照片在地图上查看位置
-        </p>
       </div>
     </div>
   );

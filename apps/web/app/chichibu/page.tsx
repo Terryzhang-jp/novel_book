@@ -128,119 +128,74 @@ export default function ChichibuPage() {
 
   return (
     <AppLayout>
-      <div className="min-h-screen bg-background">
-      {/* Header / Navigation */}
-      <div className="border-b border-border bg-card">
-        <div className="max-w-7xl mx-auto px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <MapPin className="w-6 h-6 text-primary" />
-              <h1 className="text-xl font-bold">Chichibu Travel</h1>
-            </div>
-            <Link
-              href="/login"
-              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              <LogIn className="w-4 h-4" />
-              <span>Login</span>
-            </Link>
-          </div>
+      <div className="relative h-[calc(100vh-64px)] w-full overflow-hidden bg-background">
+        {/* Full Screen Map */}
+        <div className="absolute inset-0 z-0">
+          <PhotoMap
+            photos={photos}
+            userId={representativeUserId}
+            onLocationClick={handleLocationClick}
+            focusLocation={focusLocation}
+            height="100%"
+          />
         </div>
-      </div>
 
-      {/* Hero Section */}
-      <div className="bg-gradient-to-b from-primary/5 to-background border-b border-border">
-        <div className="max-w-7xl mx-auto px-8 py-16 text-center">
-          <h2 className="text-4xl md:text-5xl font-bold text-foreground mb-4">
-            秩父旅行
-          </h2>
-          <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Discover Chichibu through travelers' eyes
-          </p>
+        {/* Overlay Header */}
+        <div className="absolute top-0 left-0 right-0 z-10 pointer-events-none">
+          <div className="bg-gradient-to-b from-background/80 to-transparent backdrop-blur-sm pb-12 pt-4 px-4 md:px-8">
+            <div className="max-w-7xl mx-auto flex items-start justify-between pointer-events-auto">
+              <div>
+                <h1 className="text-3xl md:text-4xl font-serif font-bold text-foreground drop-shadow-sm">
+                  Chichibu Travel
+                </h1>
+                <p className="text-sm md:text-base text-muted-foreground font-medium mt-1 max-w-md">
+                  Discover the beauty of Chichibu through the lens of travelers.
+                </p>
 
-          {/* Stats */}
-          <div className="flex items-center justify-center gap-8 text-sm">
-            <div className="flex items-center gap-2">
-              <ImageIcon className="w-5 h-5 text-primary" />
-              <span>
-                <span className="font-bold text-lg">{photos.length}</span>{' '}
-                <span className="text-muted-foreground">
-                  {photos.length === 1 ? 'photo' : 'photos'}
-                </span>
-              </span>
-            </div>
-            <div className="w-px h-6 bg-border" />
-            <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-primary" />
-              <span>
-                <span className="font-bold text-lg">{travelerCount}</span>{' '}
-                <span className="text-muted-foreground">
-                  {travelerCount === 1 ? 'traveler' : 'travelers'}
-                </span>
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-8 py-8">
-        {photos.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="text-6xl mb-4">🗺️</div>
-            <h3 className="text-xl font-semibold text-foreground mb-2">
-              No photos yet
-            </h3>
-            <p className="text-muted-foreground mb-6">
-              Be the first to share your Chichibu travel experience!
-            </p>
-            <Link
-              href="/login"
-              className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              <LogIn className="w-5 h-5" />
-              <span>Get Started</span>
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {/* Map and Sidebar - Flex Layout */}
-            <div className="flex gap-0 bg-card border border-border rounded-lg overflow-hidden" style={{ height: 'calc(100vh - 400px)' }}>
-              {/* Map - Takes remaining space */}
-              <div className="flex-1 min-w-0">
-                <PhotoMap
-                  photos={photos}
-                  userId={representativeUserId}
-                  onLocationClick={handleLocationClick}
-                  focusLocation={focusLocation}
-                  height="100%"
-                />
+                {/* Stats Badge */}
+                <div className="flex items-center gap-4 mt-3">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-background/80 backdrop-blur-md border border-border/50 shadow-sm text-xs font-medium">
+                    <ImageIcon className="w-3.5 h-3.5 text-primary" />
+                    <span>{photos.length} Photos</span>
+                  </div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-background/80 backdrop-blur-md border border-border/50 shadow-sm text-xs font-medium">
+                    <Users className="w-3.5 h-3.5 text-primary" />
+                    <span>{travelerCount} Travelers</span>
+                  </div>
+                </div>
               </div>
 
-              {/* Photo Sidebar - Fixed width or collapsed */}
-              <PhotoSidebar
-                photos={photos}
-                onPhotoClick={handleSidebarPhotoClick}
-                selectedPhotoId={selectedPhotoId}
-              />
+              {/* Removed Join Button */}
             </div>
+          </div>
+        </div>
 
-            {/* Info Text */}
-            <div className="p-4 bg-muted rounded-lg text-center">
-              <p className="text-sm text-muted-foreground">
-                点击地图上的标记查看照片详情，或使用右侧列表快速浏览
-              </p>
+        {/* Floating Sidebar */}
+        <div className="absolute top-0 left-0 bottom-0 z-20 pointer-events-none flex flex-col justify-end md:justify-start md:pt-48 md:pl-8 pb-8 px-4 md:px-0 w-full md:w-auto">
+          <PhotoSidebar
+            photos={photos}
+            onPhotoClick={handleSidebarPhotoClick}
+            selectedPhotoId={selectedPhotoId}
+            className="pointer-events-auto"
+          />
+        </div>
+
+        {/* Loading Overlay */}
+        {loading && (
+          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+            <div className="text-center">
+              <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto mb-4" />
+              <p className="text-muted-foreground font-medium">Loading Map...</p>
             </div>
           </div>
         )}
-      </div>
 
-      {/* Location Photos Modal */}
-      <LocationPhotosModal
-        isOpen={!!selectedLocation}
-        location={selectedLocation}
-        onClose={() => setSelectedLocation(null)}
-      />
+        {/* Location Photos Modal */}
+        <LocationPhotosModal
+          isOpen={!!selectedLocation}
+          location={selectedLocation}
+          onClose={() => setSelectedLocation(null)}
+        />
       </div>
     </AppLayout>
   );

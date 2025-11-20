@@ -18,7 +18,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { X, ChevronLeft, ChevronRight, Camera, Loader2, BookOpen, FileText, Edit2 } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Camera, Loader2, BookOpen, FileText, Edit2, FileImage } from 'lucide-react';
 import { LocationAssignment } from './location-assignment';
 import { DateTimeAssignment } from './datetime-assignment';
 import type { Photo } from '@/types/storage';
@@ -151,6 +151,21 @@ export function PhotoDetailModal({
     <div className="fixed inset-0 z-[9999] bg-background/95 backdrop-blur-sm">
       {/* Action Buttons */}
       <div className="fixed top-4 right-4 z-[10000] flex gap-2">
+        {/* Generate Poster Button */}
+        {photo && (
+          <button
+            type="button"
+            onClick={() => {
+              router.push(`/gallery/poster/${photoId}`);
+            }}
+            className="p-2 bg-card border border-border rounded-full hover:bg-accent transition-colors"
+            aria-label="Generate poster"
+            title="生成海报"
+          >
+            <FileImage className="w-6 h-6" />
+          </button>
+        )}
+
         {/* Edit Button */}
         {photo && (
           <button

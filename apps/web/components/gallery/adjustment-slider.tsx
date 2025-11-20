@@ -23,27 +23,47 @@ export function AdjustmentSlider({
 }: AdjustmentSliderProps) {
   const [isDragging, setIsDragging] = useState(false);
 
-  const percentage = ((value - min) / (max - min)) * 100;
+  // Calculate percentage for gradient background
+  // For -100 to 100 range: 0 is 50%
+  const range = max - min;
+  const percentage = ((value - min) / range) * 100;
+  const zeroPercentage = ((0 - min) / range) * 100;
+
   const isModified = value !== 0;
 
   return (
-    <div className="space-y-2">
-      {/* 标签和数值 */}
-      <div className="flex items-center justify-between">
-        <label className={`text-sm font-medium transition-colors ${
-          isModified ? "text-gray-900" : "text-gray-600"
-        }`}>
+    <div className="group">
+      {/* Label and Value Row */}
+      <div className="flex items-center justify-between mb-3">
+        <label className={`text-[11px] font-medium tracking-wider uppercase transition-colors ${isModified ? "text-white" : "text-zinc-500 group-hover:text-zinc-400"
+          }`}>
           {label}
         </label>
-        <span className={`text-sm font-mono tabular-nums transition-colors ${
-          isModified ? "text-blue-600 font-semibold" : "text-gray-500"
-        }`}>
+        <span className={`text-[11px] font-mono tabular-nums transition-colors ${isModified ? "text-white" : "text-zinc-600 group-hover:text-zinc-500"
+          }`}>
           {value > 0 ? "+" : ""}{value}{unit}
         </span>
       </div>
 
-      {/* 滑块 */}
-      <div className="relative">
+      {/* Slider Container */}
+      <div className="relative h-4 flex items-center">
+        {/* Track Background */}
+        <div className="absolute w-full h-[2px] bg-zinc-800 rounded-full overflow-hidden">
+          {/* Active Track Segment */}
+          <div
+            className="absolute h-full bg-white transition-all duration-75 ease-out"
+            style={{
+              left: value >= 0 ? `${zeroPercentage}%` : `${percentage}%`,
+              width: `${Math.abs(percentage - zeroPercentage)}%`,
+              opacity: isModified ? 1 : 0
+            }}
+          />
+        </div>
+
+        {/* Center Marker */}
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[2px] h-[2px] bg-zinc-600 rounded-full" />
+
+        {/* Input Range */}
         <input
           type="range"
           min={min}
@@ -55,81 +75,20 @@ export function AdjustmentSlider({
           onMouseUp={() => setIsDragging(false)}
           onTouchStart={() => setIsDragging(true)}
           onTouchEnd={() => setIsDragging(false)}
-          className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer transition-all slider-custom"
-          style={{
-            background: isModified
-              ? `linear-gradient(to right,
-                  #e5e7eb 0%,
-                  #e5e7eb ${percentage}%,
-                  #60a5fa ${percentage}%,
-                  #60a5fa ${percentage}%,
-                  #e5e7eb ${percentage}%,
-                  #e5e7eb 100%)`
-              : `#e5e7eb`,
-          }}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
         />
 
-        {/* 中心标记线 */}
-        {min < 0 && max > 0 && (
-          <div
-            className="absolute top-1/2 -translate-y-1/2 w-0.5 h-3 bg-gray-300 pointer-events-none"
-            style={{ left: `${((0 - min) / (max - min)) * 100}%` }}
-          />
-        )}
+        {/* Custom Thumb (Visual Only) */}
+        <div
+          className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg pointer-events-none transition-transform duration-100 ease-out ${isDragging ? "scale-125" : "scale-100 group-hover:scale-110"
+            }`}
+          style={{
+            left: `${percentage}%`,
+            transform: `translate(-50%, -50%) ${isDragging ? "scale(1.25)" : "scale(1)"}`,
+            opacity: isModified || isDragging ? 1 : 0.5
+          }}
+        />
       </div>
-
-      {/* 重置按钮（仅在修改时显示） */}
-      {isModified && (
-        <button
-          onClick={() => onChange(0)}
-          className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
-        >
-          重置
-        </button>
-      )}
-
-      <style jsx>{`
-        .slider-custom::-webkit-slider-thumb {
-          appearance: none;
-          width: 18px;
-          height: 18px;
-          background: ${isModified || isDragging ? "#2563eb" : "#6b7280"};
-          border: 2px solid white;
-          border-radius: 50%;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-          cursor: pointer;
-          transition: all 0.15s ease;
-        }
-
-        .slider-custom::-webkit-slider-thumb:hover {
-          transform: scale(1.1);
-          background: #2563eb;
-        }
-
-        .slider-custom::-webkit-slider-thumb:active {
-          transform: scale(0.95);
-        }
-
-        .slider-custom::-moz-range-thumb {
-          width: 18px;
-          height: 18px;
-          background: ${isModified || isDragging ? "#2563eb" : "#6b7280"};
-          border: 2px solid white;
-          border-radius: 50%;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-          cursor: pointer;
-          transition: all 0.15s ease;
-        }
-
-        .slider-custom::-moz-range-thumb:hover {
-          transform: scale(1.1);
-          background: #2563eb;
-        }
-
-        .slider-custom::-moz-range-thumb:active {
-          transform: scale(0.95);
-        }
-      `}</style>
     </div>
   );
 }

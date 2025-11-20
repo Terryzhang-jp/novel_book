@@ -107,154 +107,181 @@ export default function DocumentsPage() {
   return (
     <AppLayout>
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-        {/* Page Header */}
-        <div className="border-b bg-white shadow-sm">
-          <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <FileText className="h-8 w-8 text-blue-600" />
-                <h1 className="text-2xl font-bold text-gray-900">
-                  My Documents
-                </h1>
+        {/* Immersive Header */}
+        <div className="sticky top-0 z-10 border-b border-border/40 bg-background/80 backdrop-blur-xl transition-all">
+          <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-serif font-bold text-foreground tracking-tight">
+                    Library
+                  </h1>
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest">
+                    {documents.length} {documents.length === 1 ? 'Entry' : 'Entries'}
+                  </p>
+                </div>
               </div>
-              <Button onClick={handleCreateDocument} className="flex items-center space-x-2">
-                <Plus className="h-4 w-4" />
-                <span>New Document</span>
-              </Button>
+
+              <div className="flex items-center gap-3 flex-1 md:justify-end">
+                {/* Integrated Search */}
+                <div className="relative w-full md:w-64 group">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                  <input
+                    type="text"
+                    placeholder="Search archives..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-10 w-full rounded-full border border-border bg-muted/50 pl-9 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                  />
+                </div>
+
+                <Button onClick={handleCreateDocument} className="h-10 rounded-full px-4 shadow-lg shadow-primary/20">
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Draft
+                </Button>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Main Content */}
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Search Bar */}
-        <div className="mb-8">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search documents..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 bg-white py-3 pl-12 pr-4 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
+          {/* Search Bar Removed (Integrated in Header) */}
 
-        {/* Error Message */}
-        {error && (
-          <div className="mb-6 rounded-lg bg-red-50 p-4 text-sm text-red-800">
-            {error}
-          </div>
-        )}
-
-        {/* Loading State */}
-        {loading && (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <div className="mb-4 inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
-              <p className="text-gray-600">Loading documents...</p>
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 rounded-lg bg-red-50 p-4 text-sm text-red-800">
+              {error}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Empty State */}
-        {!loading && filteredDocuments.length === 0 && searchQuery === "" && (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <FileText className="mb-4 h-16 w-16 text-gray-300" />
-            <h3 className="mb-2 text-lg font-semibold text-gray-900">
-              No documents yet
-            </h3>
-            <p className="mb-6 text-gray-600">
-              Create your first document to get started
-            </p>
-            <Button onClick={handleCreateDocument} className="flex items-center space-x-2">
-              <Plus className="h-4 w-4" />
-              <span>Create Document</span>
-            </Button>
-          </div>
-        )}
+          {/* Loading State */}
+          {loading && (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="mb-4 inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
+                <p className="text-gray-600">Loading documents...</p>
+              </div>
+            </div>
+          )}
 
-        {/* No Search Results */}
-        {!loading && filteredDocuments.length === 0 && searchQuery !== "" && (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Search className="mb-4 h-16 w-16 text-gray-300" />
-            <h3 className="mb-2 text-lg font-semibold text-gray-900">
-              No documents found
-            </h3>
-            <p className="text-gray-600">
-              Try adjusting your search query
-            </p>
-          </div>
-        )}
+          {/* Empty State */}
+          {!loading && filteredDocuments.length === 0 && searchQuery === "" && (
+            <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in zoom-in duration-500">
+              <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center mb-6">
+                <FileText className="h-10 w-10 text-muted-foreground/50" />
+              </div>
+              <h3 className="mb-2 text-xl font-serif font-bold text-foreground">
+                The Archive is Empty
+              </h3>
+              <p className="mb-8 text-muted-foreground max-w-sm mx-auto">
+                Start your first draft. Capture your thoughts, stories, and ideas in a distraction-free environment.
+              </p>
+              <Button onClick={handleCreateDocument} size="lg" className="rounded-full shadow-xl shadow-primary/20">
+                <Plus className="mr-2 h-5 w-5" />
+                Create First Document
+              </Button>
+            </div>
+          )}
 
-        {/* Document Grid */}
-        {!loading && filteredDocuments.length > 0 && (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredDocuments.map((doc) => (
-              <div
-                key={doc.id}
-                className="group relative overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-all hover:shadow-lg"
-              >
-                <Link href={`/documents/${doc.id}`}>
-                  <div className="p-6">
-                    <h3 className="mb-2 truncate text-lg font-semibold text-gray-900 group-hover:text-blue-600">
-                      {doc.title || "Untitled"}
-                    </h3>
-                    <p className="mb-4 line-clamp-3 text-sm text-gray-600">
-                      {doc.preview || "No content yet..."}
-                    </p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-500">
+          {/* No Search Results */}
+          {!loading && filteredDocuments.length === 0 && searchQuery !== "" && (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <Search className="mb-4 h-12 w-12 text-muted-foreground/30" />
+              <h3 className="mb-2 text-lg font-medium text-foreground">
+                No matches found
+              </h3>
+              <p className="text-muted-foreground">
+                Try searching for a different keyword or tag.
+              </p>
+            </div>
+          )}
+
+          {/* Document Grid - Paper Style */}
+          {!loading && filteredDocuments.length > 0 && (
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {filteredDocuments.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="group relative flex flex-col bg-card hover:bg-card/80 border border-border/50 hover:border-primary/50 rounded-xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+                >
+                  <Link href={`/documents/${doc.id}`} className="flex-1 flex flex-col p-6">
+                    {/* Paper Header */}
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="w-10 h-10 rounded-lg bg-primary/5 flex items-center justify-center text-primary/60 group-hover:text-primary group-hover:bg-primary/10 transition-colors">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70 bg-muted/50 px-2 py-1 rounded-md">
                         {formatDate(doc.updatedAt)}
                       </span>
-                      {doc.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {doc.tags.slice(0, 2).map((tag, index) => (
+                    </div>
+
+                    {/* Content */}
+                    <h3 className="mb-3 text-lg font-serif font-bold text-foreground leading-tight group-hover:text-primary transition-colors line-clamp-2">
+                      {doc.title || "Untitled Draft"}
+                    </h3>
+                    <p className="mb-6 text-sm text-muted-foreground leading-relaxed line-clamp-3 flex-1 font-light">
+                      {doc.preview || "Empty document..."}
+                    </p>
+
+                    {/* Footer / Tags */}
+                    <div className="flex items-center justify-between mt-auto pt-4 border-t border-border/30">
+                      <div className="flex flex-wrap gap-1.5">
+                        {doc.tags.length > 0 ? (
+                          doc.tags.slice(0, 2).map((tag, index) => (
                             <span
                               key={index}
-                              className="rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-700"
+                              className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-primary/5 text-primary/70"
                             >
-                              {tag}
+                              #{tag}
                             </span>
-                          ))}
-                          {doc.tags.length > 2 && (
-                            <span className="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-700">
-                              +{doc.tags.length - 2}
-                            </span>
-                          )}
-                        </div>
-                      )}
+                          ))
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground/50 italic">No tags</span>
+                        )}
+                        {doc.tags.length > 2 && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-muted text-muted-foreground">
+                            +{doc.tags.length - 2}
+                          </span>
+                        )}
+                      </div>
                     </div>
+                  </Link>
+
+                  {/* Actions */}
+                  <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleDeleteDocument(doc.id, doc.title);
+                      }}
+                      className="p-2 rounded-lg bg-background/80 backdrop-blur-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shadow-sm border border-border/50"
+                      title="Delete document"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
-                </Link>
+                </div>
+              ))}
+            </div>
+          )}
 
-                {/* Delete Button */}
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleDeleteDocument(doc.id, doc.title);
-                  }}
-                  className="absolute right-4 top-4 rounded-lg bg-white p-2 opacity-0 shadow-md transition-opacity hover:bg-red-50 group-hover:opacity-100"
-                  title="Delete document"
-                >
-                  <Trash2 className="h-4 w-4 text-red-600" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Document Count */}
-        {!loading && filteredDocuments.length > 0 && (
-          <div className="mt-8 text-center text-sm text-gray-600">
-            {searchQuery
-              ? `${filteredDocuments.length} of ${documents.length} documents`
-              : `${documents.length} ${documents.length === 1 ? "document" : "documents"}`}
-          </div>
-        )}
+          {/* Document Count */}
+          {!loading && filteredDocuments.length > 0 && (
+            <div className="mt-12 text-center">
+              <p className="text-xs font-mono text-muted-foreground/50 uppercase tracking-widest">
+                {searchQuery
+                  ? `Found ${filteredDocuments.length} of ${documents.length} entries`
+                  : `End of Archive • ${documents.length} entries`}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </AppLayout>
   );
 }
+

@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Camera } from "lucide-react";
+import { Calendar, Camera, MapPin } from "lucide-react";
 import type { PhotoCluster } from "@/lib/utils/photo-clustering";
 import { PhotoGrid } from "./photo-grid";
 
@@ -33,22 +33,60 @@ export function ClusterSection({
   // 判断是否为无时间信息组
   const isUnclustered = cluster.startTime === null;
 
+  // 解析时间
+  const dateObj = cluster.startTime ? new Date(cluster.startTime) : null;
+  const day = dateObj ? dateObj.getDate() : "";
+  const month = dateObj ? dateObj.toLocaleDateString("en-US", { month: "short" }).toUpperCase() : "";
+  const year = dateObj ? dateObj.getFullYear() : "";
+  const weekDay = dateObj ? dateObj.toLocaleDateString("en-US", { weekday: "long" }) : "";
+
+  // 提取地点信息（简单取第一张有地点的照片）
+  const locationPhoto = cluster.photos.find(p => p.metadata?.location);
+  const locationName = locationPhoto?.metadata?.location ?
+    `${locationPhoto.metadata.location.latitude.toFixed(2)}°, ${locationPhoto.metadata.location.longitude.toFixed(2)}°` : null;
+
   return (
-    <div className="mb-12">
-      {/* 聚类标题 */}
-      <div className="mb-4 flex items-center gap-2">
+    <div className="mb-16">
+      {/* 杂志化标题 */}
+      <div className="mb-8 flex items-end gap-4 border-b border-border/40 pb-4">
         {isUnclustered ? (
-          <Camera className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+          <div className="flex items-center gap-3 text-muted-foreground">
+            <Camera className="w-8 h-8" />
+            <h3 className="text-2xl font-light tracking-wide">Unclustered</h3>
+          </div>
         ) : (
-          <Calendar className="w-5 h-5 text-primary flex-shrink-0" />
+          <>
+            {/* 左侧：巨大的日期数字 */}
+            <div className="text-6xl font-bold text-foreground leading-none tracking-tighter">
+              {day}
+            </div>
+
+            {/* 中间：竖排月份和年份 */}
+            <div className="flex flex-col justify-center h-full pb-1">
+              <span className="text-sm font-bold text-primary tracking-widest uppercase leading-none mb-1">
+                {month}
+              </span>
+              <span className="text-sm font-light text-muted-foreground tracking-widest leading-none">
+                {year}
+              </span>
+            </div>
+
+            {/* 分隔竖线 */}
+            <div className="w-px h-10 bg-border/60 mx-2 self-center" />
+
+            {/* 右侧：星期和地点 */}
+            <div className="flex flex-col justify-center h-full pb-1">
+              <span className="text-lg font-medium text-foreground tracking-wide leading-none mb-1">
+                {weekDay}
+              </span>
+              <div className="flex items-center gap-1 text-xs text-muted-foreground font-light tracking-wide">
+                {locationName && <MapPin className="w-3 h-3" />}
+                <span>{locationName || `${cluster.photos.length} Photos`}</span>
+                {cluster.isBurst && <span className="ml-2 px-1.5 py-0.5 bg-primary/10 text-primary rounded text-[10px] font-bold uppercase">Burst</span>}
+              </div>
+            </div>
+          </>
         )}
-        <h3
-          className={`text-lg font-semibold ${
-            isUnclustered ? "text-muted-foreground" : "text-foreground"
-          }`}
-        >
-          {cluster.displayTitle}
-        </h3>
       </div>
 
       {/* 照片网格 */}

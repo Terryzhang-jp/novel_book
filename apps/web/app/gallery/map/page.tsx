@@ -108,99 +108,91 @@ export default function GalleryMapPage() {
 
   return (
     <AppLayout>
-      <div className="min-h-screen bg-background">
-        {/* Header */}
-        <div className="border-b border-border bg-card">
-          <div className="max-w-7xl mx-auto px-8 py-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h1 className="text-3xl font-bold text-foreground mb-2">Map View</h1>
-                <p className="text-muted-foreground">
-                  Explore your photos by location
-                </p>
-              </div>
-              <div className="flex items-center gap-4">
-                <Link
-                  href="/gallery"
-                  className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <Grid3x3 className="w-4 h-4" />
-                  Gallery
-                </Link>
-                <Link
-                  href="/gallery/locations"
-                  className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <MapPin className="w-4 h-4" />
-                  Locations
-                </Link>
-              </div>
-            </div>
+      <div className="relative h-[calc(100vh-64px)] w-full overflow-hidden bg-background">
 
-            {/* Category Filter */}
-            {stats && (
-              <CategoryFilter
-                stats={stats}
-                selectedCategory={selectedCategory}
-                onCategoryChange={setSelectedCategory}
+        {/* Full Screen Map */}
+        <div className="absolute inset-0 z-0">
+          {photos.length === 0 && !loading ? (
+            <div className="flex flex-col items-center justify-center h-full text-center bg-muted/10">
+              <div className="text-6xl mb-4">🗺️</div>
+              <h3 className="text-xl font-semibold text-foreground mb-2">No photos yet</h3>
+              <p className="text-muted-foreground mb-6">
+                Upload photos with GPS data to see them on the map
+              </p>
+              <Link
+                href="/gallery/upload"
+                className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors shadow-lg"
+              >
+                <ImageIcon className="w-5 h-5" />
+                <span>Upload Photo</span>
+              </Link>
+            </div>
+          ) : (
+            userId && (
+              <PhotoMap
+                photos={photosWithLocation}
+                userId={userId}
+                onLocationClick={handleLocationClick}
+                height="100%"
+                className="z-0"
               />
-            )}
+            )
+          )}
+        </div>
+
+        {/* Floating Header (Top Left) */}
+        <div className="absolute top-6 left-6 z-10">
+          <div className="bg-background/80 backdrop-blur-md border border-border/50 shadow-lg rounded-2xl p-4 min-w-[240px]">
+            <h1 className="text-xl font-bold text-foreground mb-1">Map View</h1>
+            <p className="text-xs text-muted-foreground mb-3">
+              Explore your photos by location
+            </p>
+            <div className="flex items-center gap-2 text-sm">
+              <Link
+                href="/gallery"
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg transition-colors"
+              >
+                <Grid3x3 className="w-3.5 h-3.5" />
+                Gallery
+              </Link>
+              <Link
+                href="/gallery/locations"
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg transition-colors"
+              >
+                <MapPin className="w-3.5 h-3.5" />
+                Locations
+              </Link>
+            </div>
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-8 py-8">
-        {photos.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="text-6xl mb-4">🗺️</div>
-            <h3 className="text-xl font-semibold text-foreground mb-2">No photos yet</h3>
-            <p className="text-muted-foreground mb-6">
-              Upload photos with GPS data to see them on the map
-            </p>
-            <Link
-              href="/gallery/upload"
-              className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              <ImageIcon className="w-5 h-5" />
-              <span>Upload Photo</span>
-            </Link>
+        {/* Floating Filter Bar (Top Right) */}
+        {stats && (
+          <div className="absolute top-6 right-6 z-10 max-w-[calc(100%-300px)] pointer-events-none">
+            <div className="pointer-events-auto flex justify-end">
+              <div className="bg-background/80 backdrop-blur-md border border-border/50 shadow-lg rounded-full p-1.5">
+                <CategoryFilter
+                  stats={stats}
+                  selectedCategory={selectedCategory}
+                  onCategoryChange={setSelectedCategory}
+                  variant="pill"
+                />
+              </div>
+            </div>
           </div>
-        ) : (
-          <div className="space-y-6">
-            {/* Map Statistics */}
-            <div className="p-4 bg-card border border-border rounded-lg">
+        )}
+
+        {/* Floating Stats (Bottom Left) */}
+        {photos.length > 0 && (
+          <div className="absolute bottom-8 left-6 z-10">
+            <div className="bg-background/80 backdrop-blur-md border border-border/50 shadow-lg rounded-2xl p-4">
               <PhotoMapStats
                 totalPhotos={filteredPhotos.length}
                 photosWithLocation={photosWithLocation.length}
               />
             </div>
-
-            {/* Map */}
-            <div className="bg-card border border-border rounded-lg overflow-hidden">
-              {userId && (
-                <PhotoMap
-                  photos={photosWithLocation}
-                  userId={userId}
-                  onLocationClick={handleLocationClick}
-                  height="calc(100vh - 400px)"
-                />
-              )}
-            </div>
-
-            {/* Help Text */}
-            {photosWithLocation.length === 0 && filteredPhotos.length > 0 && (
-              <div className="p-6 bg-muted rounded-lg text-center">
-                <p className="text-sm text-muted-foreground mb-2">
-                  No photos in this category have location data
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Photos taken with GPS-enabled cameras or assigned locations from the library will appear here
-                </p>
-              </div>
-            )}
           </div>
         )}
-        </div>
 
         {/* Location Photos Modal */}
         <LocationPhotosModal

@@ -19,6 +19,66 @@ const config = {
       },
     },
     extend: {
+      fontFamily: {
+        sans: [
+          'Inter',
+          'Noto Sans SC',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'Segoe UI',
+          'Roboto',
+          'sans-serif',
+        ],
+        serif: [
+          'Noto Serif SC',
+          'Georgia',
+          'Cambria',
+          'Times New Roman',
+          'serif',
+        ],
+        mono: [
+          'JetBrainsMono',
+          'Fira Code',
+          'Menlo',
+          'Monaco',
+          'Courier New',
+          'monospace',
+        ],
+        title: ['Noto Serif SC', 'serif'],
+        default: ['Inter', 'Noto Sans SC', 'sans-serif'],
+      },
+      typography: {
+        DEFAULT: {
+          css: {
+            lineHeight: '1.8',
+            'p': {
+              marginTop: '1.25em',
+              marginBottom: '1.25em',
+            },
+            'h1, h2, h3, h4': {
+              fontFamily: 'Noto Serif SC, serif',
+              letterSpacing: '0',
+              fontWeight: '600',
+            },
+            'strong': {
+              fontWeight: '700',
+            },
+            'code': {
+              fontFamily: 'JetBrainsMono, monospace',
+            },
+            'blockquote': {
+              fontStyle: 'normal',
+              borderLeftColor: 'hsl(var(--primary))',
+            },
+          },
+        },
+        lg: {
+          css: {
+            lineHeight: '1.85',
+            fontSize: '1.125rem',
+          },
+        },
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

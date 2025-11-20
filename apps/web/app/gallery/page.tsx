@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Upload, Trash2, X, MapPin, Zap, ArrowUpDown } from "lucide-react";
+import { Upload, Trash2, X, MapPin, Zap, ArrowUpDown, Wand2 } from "lucide-react";
 import type { Photo, PhotoCategory, PhotoStats, Location } from "@/types/storage";
 import { CategoryFilter } from "@/components/gallery/category-filter";
 import { LocationFilter } from "@/components/gallery/location-filter";
@@ -15,6 +15,7 @@ import { TrashBinModal } from "@/components/gallery/trash-bin-modal";
 import { AppLayout } from "@/components/layout/app-layout";
 import { ClusterSection } from "@/components/gallery/cluster-section";
 import { ClusterSettings } from "@/components/gallery/cluster-settings";
+import { MagazineView } from '@/components/gallery/magazine-view';
 import {
   clusterPhotosByTime,
   DEFAULT_CLUSTER_THRESHOLD,
@@ -26,6 +27,7 @@ export default function GalleryPage() {
   const router = useRouter();
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [stats, setStats] = useState<PhotoStats | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'magazine'>('grid'); // Add viewMode state
   const [selectedCategory, setSelectedCategory] = useState<PhotoCategory | "all">("all");
   const [locations, setLocations] = useState<Location[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string | "all">("all");
@@ -328,6 +330,39 @@ export default function GalleryPage() {
     }
   };
 
+  // Sculpting State
+  const [isSculpting, setIsSculpting] = useState(false);
+
+  /**
+   * Handle "Sculpt Story" action
+   */
+  const handleSculptStory = async () => {
+    if (selectedPhotos.size === 0) return;
+
+    try {
+      setIsSculpting(true);
+      const response = await fetch("/api/documents/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoIds: Array.from(selectedPhotos) }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate story");
+      }
+
+      const { documentId } = await response.json();
+
+      // Redirect to the new document
+      router.push(`/documents/${documentId}`);
+
+    } catch (error) {
+      console.error("Error sculpting story:", error);
+      alert("Failed to sculpt story. Please try again.");
+      setIsSculpting(false);
+    }
+  };
+
   /**
    * Handle batch location assignment
    */
@@ -438,201 +473,232 @@ export default function GalleryPage() {
   return (
     <AppLayout>
       <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="sticky top-0 z-10 border-b border-border bg-card shadow-sm">
-        <div className="max-w-7xl mx-auto px-8 py-6">
-          <div className="flex items-center justify-between mb-6">
-            <h1 className="text-3xl font-bold text-foreground">Photo Gallery</h1>
-            <div className="flex items-center gap-4">
-              {!selectionMode ? (
-                <>
-                  {/* 聚类设置 */}
-                  <ClusterSettings onChange={setClusterThreshold} />
+        {/* Header - Immersive & Minimalist */}
+        <div className="sticky top-0 z-20 border-b border-white/5 bg-background/80 backdrop-blur-xl transition-all duration-300">
+          <div className="max-w-7xl mx-auto px-8 py-4">
+            <div className="flex items-center justify-between">
+              {/* Left: Title */}
+              <div className="flex items-center gap-4">
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">Gallery</h1>
+                <div className="h-6 w-px bg-border/50" />
+                <span className="text-sm text-muted-foreground font-medium">
+                  {stats?.total || 0} Photos
+                </span>
+              </div>
 
-                  {/* 排序方式 */}
-                  <button
-                    onClick={() => {
-                      const newOrder = sortOrder === 'newest' ? 'oldest' : 'newest';
-                      console.log('[Gallery] Changing sort order from', sortOrder, 'to', newOrder);
-                      setSortOrder(newOrder);
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-accent transition-colors"
-                    title={sortOrder === 'newest' ? "当前：最新在前，点击切换到最旧在前" : "当前：最旧在前，点击切换到最新在前"}
-                  >
-                    <ArrowUpDown className="w-4 h-4" />
-                    <span>{sortOrder === 'newest' ? '最新在前' : '最旧在前'}</span>
-                  </button>
+              {/* Right: Actions Toolbar */}
+              <div className="flex items-center gap-2">
+                {!selectionMode ? (
+                  <>
+                    {/* 聚类设置 - Icon Only */}
+                    <div className="p-2 hover:bg-accent rounded-full transition-colors cursor-pointer" title="Grouping Settings">
+                      <ClusterSettings onChange={setClusterThreshold} />
+                    </div>
 
-                  {/* 快速删除模式 */}
-                  <button
-                    onClick={() => setShowQuickDeleteModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                    disabled={photos.length === 0}
-                    title="快速删除模式：左键移入回收站，右键保留"
-                  >
-                    <Zap className="w-4 h-4" />
-                    <span>Quick Delete</span>
-                  </button>
+                    {/* 排序方式 - Icon Only */}
+                    <button
+                      onClick={() => setSortOrder(prev => prev === 'newest' ? 'oldest' : 'newest')}
+                      className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full transition-colors"
+                      title={sortOrder === 'newest' ? "Sort: Newest First" : "Sort: Oldest First"}
+                    >
+                      <ArrowUpDown className="w-5 h-5" />
+                    </button>
 
-                  {/* 回收站 */}
-                  <button
-                    onClick={() => setShowTrashBinModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-accent transition-colors relative"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Trash</span>
-                    {trashedCount > 0 && (
-                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                        {trashedCount > 99 ? '99+' : trashedCount}
-                      </span>
-                    )}
-                  </button>
+                    {/* 快速删除 - Icon Only */}
+                    <button
+                      onClick={() => setShowQuickDeleteModal(true)}
+                      className="p-2 text-purple-500 hover:bg-purple-500/10 rounded-full transition-colors"
+                      disabled={photos.length === 0}
+                      title="Quick Delete Mode"
+                    >
+                      <Zap className="w-5 h-5" />
+                    </button>
 
-                  <button
-                    onClick={toggleSelectionMode}
-                    className="flex items-center gap-2 px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-accent transition-colors"
-                    disabled={photos.length === 0}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Select</span>
-                  </button>
-                  <Link
-                    href="/gallery/upload"
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-                  >
-                    <Upload className="w-4 h-4" />
-                    <span>Upload</span>
-                  </Link>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={selectAll}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Select All
-                  </button>
-                  <button
-                    onClick={deselectAll}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Deselect All
-                  </button>
-                  <button
-                    onClick={handleBatchLocationClick}
-                    disabled={selectedPhotos.size === 0}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <MapPin className="w-4 h-4" />
-                    <span>Assign Location ({selectedPhotos.size})</span>
-                  </button>
-                  <button
-                    onClick={handleBatchDelete}
-                    disabled={selectedPhotos.size === 0 || deleting}
-                    className="flex items-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>
-                      {deleting
-                        ? "Deleting..."
-                        : `Delete (${selectedPhotos.size})`}
-                    </span>
-                  </button>
-                  <button
-                    onClick={toggleSelectionMode}
-                    className="flex items-center gap-2 px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-accent transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                    <span>Cancel</span>
-                  </button>
-                </>
+                    {/* 回收站 - Icon Only */}
+                    <button
+                      onClick={() => setShowTrashBinModal(true)}
+                      className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full transition-colors relative"
+                      title="Trash Bin"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                      {trashedCount > 0 && (
+                        <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full ring-2 ring-background" />
+                      )}
+                    </button>
+
+                    {/* 分隔线 */}
+                    <div className="h-6 w-px bg-border/50 mx-1" />
+
+                    {/* 选择模式 */}
+                    <button
+                      onClick={toggleSelectionMode}
+                      className="px-4 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground border border-border hover:border-foreground/20 rounded-full transition-all"
+                      disabled={photos.length === 0}
+                    >
+                      Select
+                    </button>
+
+                    {/* 上传按钮 - Primary Capsule */}
+                    <Link
+                      href="/gallery/upload"
+                      className="flex items-center gap-2 px-5 py-1.5 bg-primary text-primary-foreground text-sm font-medium rounded-full hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all hover:scale-105"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>Upload</span>
+                    </Link>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-3 bg-accent/50 px-4 py-1.5 rounded-full border border-border/50 backdrop-blur-md animate-in fade-in slide-in-from-top-2">
+                    <span className="text-sm font-medium mr-2">{selectedPhotos.size} Selected</span>
+
+                    <button onClick={selectAll} className="text-xs hover:underline text-muted-foreground">All</button>
+                    <div className="w-px h-3 bg-border" />
+                    <button onClick={deselectAll} className="text-xs hover:underline text-muted-foreground">None</button>
+
+                    <div className="w-px h-4 bg-border mx-1" />
+
+                    <button
+                      onClick={handleBatchLocationClick}
+                      disabled={selectedPhotos.size === 0}
+                      className="p-1.5 hover:bg-background rounded-full text-foreground disabled:opacity-50 transition-colors"
+                      title="Assign Location"
+                    >
+                      <MapPin className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      onClick={handleBatchDelete}
+                      disabled={selectedPhotos.size === 0 || deleting}
+                      className="p-1.5 hover:bg-red-500/10 hover:text-red-500 rounded-full text-foreground disabled:opacity-50 transition-colors"
+                      title="Delete Selected"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+
+                    <div className="w-px h-4 bg-border mx-1" />
+
+                    {/* Sculpt Story Button */}
+                    <button
+                      onClick={handleSculptStory}
+                      disabled={selectedPhotos.size === 0 || isSculpting}
+                      className="flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xs font-medium rounded-full hover:shadow-lg hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100"
+                      title="Sculpt a story from selected photos"
+                    >
+                      {isSculpting ? (
+                        <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <Wand2 className="w-3 h-3" />
+                      )}
+                      <span>Sculpt Story</span>
+                    </button>
+
+                    <div className="w-px h-4 bg-border mx-1" />
+
+                    <button
+                      onClick={toggleSelectionMode}
+                      className="p-1 hover:bg-background rounded-full transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Filters Bar - Unified Scrollable Capsule Bar */}
+            <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide mask-linear-fade">
+              {stats && (
+                <CategoryFilter
+                  stats={stats}
+                  selectedCategory={selectedCategory}
+                  onCategoryChange={setSelectedCategory}
+                />
               )}
+
+              {/* Divider between categories and locations */}
+              {(selectedCategory === "time-location" || selectedCategory === "location-only" || selectedCategory === "all") &&
+                locations.length > 0 &&
+                Object.keys(photoCountByLocation).length > 0 && (
+                  <>
+                    <div className="h-6 w-px bg-border/50 mx-2 flex-shrink-0" />
+
+                    <LocationFilter
+                      locations={locations}
+                      selectedLocationId={selectedLocationId}
+                      onLocationChange={setSelectedLocationId}
+                      photoCountByLocation={photoCountByLocation}
+                    />
+                  </>
+                )}
             </div>
           </div>
+        </div>
 
-          {/* Category Filter */}
-          {stats && (
-            <CategoryFilter
-              stats={stats}
-              selectedCategory={selectedCategory}
-              onCategoryChange={setSelectedCategory}
-            />
-          )}
+        {/* Photo Clusters */}
+        <div className="max-w-7xl mx-auto px-8 py-8">
+          {userId ? (
+            <>
+              {/* 渲染所有聚类组 */}
+              {photoClusters.map((cluster) => (
+                <ClusterSection
+                  key={`${cluster.id}-${sortOrder}`}
+                  cluster={cluster}
+                  userId={userId}
+                  onPhotoDelete={handlePhotoDelete}
+                  selectionMode={selectionMode}
+                  selectedPhotos={selectedPhotos}
+                  onPhotoToggle={togglePhotoSelection}
+                  onPhotoClick={handlePhotoClick}
+                />
+              ))}
 
-          {/* Location Filter - 只在有location的分类时显示 */}
-          {(selectedCategory === "time-location" || selectedCategory === "location-only" || selectedCategory === "all") &&
-           locations.length > 0 &&
-           Object.keys(photoCountByLocation).length > 0 && (
-            <div className="mt-4">
-              <LocationFilter
-                locations={locations}
-                selectedLocationId={selectedLocationId}
-                onLocationChange={setSelectedLocationId}
-                photoCountByLocation={photoCountByLocation}
-              />
+              {/* Loading More Indicator */}
+              {loadingMore && (
+                <div className="flex justify-center items-center py-8">
+                  <div className="text-center">
+                    <div className="inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-2" />
+                    <p className="text-sm text-muted-foreground">Loading more photos...</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Intersection Observer Target */}
+              <div ref={loadMoreRef} className="h-20" />
+
+              {/* No More Photos Indicator */}
+              {!hasMore && photos.length > 0 && (
+                <div className="flex justify-center items-center py-8">
+                  <p className="text-sm text-muted-foreground">You've reached the end</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="text-6xl mb-4">📷</div>
+              <h3 className="text-xl font-semibold text-foreground mb-2">No photos yet</h3>
+              <p className="text-muted-foreground mb-6">
+                Upload your first photo to get started
+              </p>
+              <Link
+                href="/gallery/upload"
+                className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+              >
+                <Upload className="w-5 h-5" />
+                <span>Upload Photo</span>
+              </Link>
             </div>
           )}
         </div>
-      </div>
 
-      {/* Photo Clusters */}
-      <div className="max-w-7xl mx-auto px-8 py-8">
-        {userId ? (
-          <>
-            {/* 渲染所有聚类组 */}
-            {photoClusters.map((cluster) => (
-              <ClusterSection
-                key={`${cluster.id}-${sortOrder}`}
-                cluster={cluster}
-                userId={userId}
-                onPhotoDelete={handlePhotoDelete}
-                selectionMode={selectionMode}
-                selectedPhotos={selectedPhotos}
-                onPhotoToggle={togglePhotoSelection}
-                onPhotoClick={handlePhotoClick}
-              />
-            ))}
-
-            {/* Loading More Indicator */}
-            {loadingMore && (
-              <div className="flex justify-center items-center py-8">
-                <div className="text-center">
-                  <div className="inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-2" />
-                  <p className="text-sm text-muted-foreground">Loading more photos...</p>
-                </div>
-              </div>
-            )}
-
-            {/* Intersection Observer Target */}
-            <div ref={loadMoreRef} className="h-20" />
-
-            {/* No More Photos Indicator */}
-            {!hasMore && photos.length > 0 && (
-              <div className="flex justify-center items-center py-8">
-                <p className="text-sm text-muted-foreground">You've reached the end</p>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="text-6xl mb-4">📷</div>
-            <h3 className="text-xl font-semibold text-foreground mb-2">No photos yet</h3>
-            <p className="text-muted-foreground mb-6">
-              Upload your first photo to get started
-            </p>
-            <Link
-              href="/gallery/upload"
-              className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              <Upload className="w-5 h-5" />
-              <span>Upload Photo</span>
-            </Link>
-          </div>
+        {/* Magazine View Overlay */}
+        {viewMode === 'magazine' && (
+          <MagazineView
+            photos={filteredPhotos}
+            onClose={() => setViewMode('grid')}
+          />
         )}
-      </div>
 
-      {/* Photo Detail Modal */}
-      {userId && (
+        {/* Photo Detail Modal */}
         <PhotoDetailModal
           isOpen={!!detailPhotoId}
           photoId={detailPhotoId}
@@ -643,31 +709,30 @@ export default function GalleryPage() {
           hasNext={getNavigationState().hasNext}
           onPhotoUpdate={fetchPhotos}
         />
-      )}
 
-      {/* Batch Location Assignment Modal */}
-      <BatchLocationAssignment
-        isOpen={showBatchLocationModal}
-        photoIds={Array.from(selectedPhotos)}
-        onClose={() => setShowBatchLocationModal(false)}
-        onComplete={handleBatchLocationComplete}
-      />
+        {/* Batch Location Assignment Modal */}
+        <BatchLocationAssignment
+          isOpen={showBatchLocationModal}
+          photoIds={Array.from(selectedPhotos)}
+          onClose={() => setShowBatchLocationModal(false)}
+          onComplete={handleBatchLocationComplete}
+        />
 
-      {/* Quick Delete Modal */}
-      <QuickDeleteModal
-        isOpen={showQuickDeleteModal}
-        photos={filteredPhotos}
-        initialIndex={0}
-        onClose={() => setShowQuickDeleteModal(false)}
-        onTrash={handleTrashPhotos}
-      />
+        {/* Quick Delete Modal */}
+        <QuickDeleteModal
+          isOpen={showQuickDeleteModal}
+          photos={filteredPhotos}
+          initialIndex={0}
+          onClose={() => setShowQuickDeleteModal(false)}
+          onTrash={handleTrashPhotos}
+        />
 
-      {/* Trash Bin Modal */}
-      <TrashBinModal
-        isOpen={showTrashBinModal}
-        onClose={() => setShowTrashBinModal(false)}
-        onComplete={() => fetchPhotos(true)}
-      />
+        {/* Trash Bin Modal */}
+        <TrashBinModal
+          isOpen={showTrashBinModal}
+          onClose={() => setShowTrashBinModal(false)}
+          onComplete={() => fetchPhotos(true)}
+        />
       </div>
     </AppLayout>
   );

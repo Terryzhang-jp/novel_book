@@ -9,7 +9,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { User, Camera, MapPin, FileText, Calendar, Mail, Loader2, ArrowLeft, Lock, Eye, EyeOff } from 'lucide-react';
+import { User, Camera, MapPin, FileText, Calendar, Mail, Loader2, ArrowLeft, Lock, Eye, EyeOff, ChevronDown } from 'lucide-react';
 import { AppLayout } from '@/components/layout/app-layout';
 import { PhotoGrid } from '@/components/gallery/photo-grid';
 import { PhotoDetailModal } from '@/components/photos/photo-detail-modal';
@@ -276,302 +276,179 @@ export default function ProfilePage() {
 
         {/* Main Content */}
         <div className="max-w-7xl mx-auto px-6 py-8">
-          {/* User Info Card */}
-          <div className="bg-card rounded-lg shadow-md p-6 mb-8">
-            <div className="flex items-start gap-6">
-              {/* Avatar Placeholder */}
-              <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <User className="w-12 h-12 text-primary" />
+          {/* Hero Section - Magazine Cover Style */}
+          <div className="flex flex-col items-center text-center mb-16 animate-in fade-in zoom-in duration-700">
+            {/* Avatar with Glow */}
+            <div className="relative mb-8 group">
+              <div className="absolute inset-0 bg-primary/20 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+              <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-gradient-to-br from-primary/10 to-primary/5 border-4 border-background shadow-2xl flex items-center justify-center relative z-10 overflow-hidden">
+                <User className="w-16 h-16 text-primary/80" />
               </div>
+            </div>
 
-              {/* User Details */}
-              <div className="flex-1">
-                <h2 className="text-2xl font-bold text-foreground mb-2">
-                  {profile.user.name || '未设置昵称'}
-                </h2>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Mail className="w-4 h-4" />
-                    <span>{profile.user.email}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Calendar className="w-4 h-4" />
-                    <span>加入于 {formatDate(profile.user.createdAt)}</span>
-                  </div>
-                </div>
+            {/* Name & Bio */}
+            <h1 className="text-4xl md:text-6xl font-serif font-bold text-foreground tracking-tight mb-4">
+              {profile.user.name || 'Anonymous Creator'}
+            </h1>
+            <div className="flex items-center gap-2 text-muted-foreground mb-8 font-light tracking-wide uppercase text-sm">
+              <span>Member since {new Date(profile.user.createdAt).getFullYear()}</span>
+              <span className="w-1 h-1 bg-border rounded-full" />
+              <span>{profile.user.email}</span>
+            </div>
+
+            {/* Sleek Stats Row */}
+            <div className="flex items-center gap-8 md:gap-16 border-y border-border/40 py-6 px-12 backdrop-blur-sm bg-card/30">
+              <div className="text-center">
+                <p className="text-3xl font-bold text-foreground font-serif">{profile.stats.photos.total}</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">Photos</p>
+              </div>
+              <div className="w-px h-10 bg-border/40" />
+              <div className="text-center">
+                <p className="text-3xl font-bold text-foreground font-serif">{profile.stats.locations}</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">Locations</p>
+              </div>
+              <div className="w-px h-10 bg-border/40" />
+              <div className="text-center">
+                <p className="text-3xl font-bold text-foreground font-serif">{profile.stats.documents}</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">Stories</p>
               </div>
             </div>
           </div>
 
-          {/* Password Change Card */}
-          <div className="bg-card rounded-lg shadow-md p-6 mb-8">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <Lock className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-foreground">修改密码</h3>
-                <p className="text-sm text-muted-foreground">保护你的账户安全</p>
-              </div>
-            </div>
-
-            <form onSubmit={handlePasswordChange} className="space-y-4">
-              <div>
-                <label htmlFor="current-password" className="block text-sm font-medium text-foreground mb-2">
-                  当前密码
-                </label>
-                <div className="relative">
-                  <input
-                    id="current-password"
-                    type={showCurrentPassword ? "text" : "password"}
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    required
-                    className="block w-full appearance-none rounded-lg border border-input bg-background px-4 py-2.5 text-foreground placeholder-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 sm:text-sm pr-10"
-                    placeholder="输入当前密码"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+          {/* Account Settings (Collapsible) */}
+          <div className="max-w-2xl mx-auto mb-20">
+            <details className="group bg-card/50 border border-border/50 rounded-xl overflow-hidden transition-all hover:bg-card/80">
+              <summary className="flex items-center justify-between p-4 cursor-pointer list-none select-none">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Lock className="w-4 h-4 text-primary" />
+                  </div>
+                  <span className="font-medium">Account Settings</span>
                 </div>
-              </div>
+                <ChevronDown className="w-4 h-4 text-muted-foreground transition-transform group-open:rotate-180" />
+              </summary>
 
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="new-password" className="block text-sm font-medium text-foreground mb-2">
-                    新密码
-                  </label>
-                  <div className="relative">
+              <div className="p-6 pt-0 border-t border-border/50 mt-4">
+                <h3 className="text-sm font-medium mb-4 text-muted-foreground">Change Password</h3>
+                <form onSubmit={handlePasswordChange} className="space-y-4">
+                  <div>
                     <input
-                      id="new-password"
+                      type={showCurrentPassword ? "text" : "password"}
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      required
+                      className="block w-full bg-background/50 border border-border rounded-lg px-4 py-2 text-sm focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+                      placeholder="Current Password"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <input
                       type={showNewPassword ? "text" : "password"}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       required
-                      className="block w-full appearance-none rounded-lg border border-input bg-background px-4 py-2.5 text-foreground placeholder-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 sm:text-sm pr-10"
-                      placeholder="至少 6 个字符"
+                      className="block w-full bg-background/50 border border-border rounded-lg px-4 py-2 text-sm focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+                      placeholder="New Password"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="confirm-password" className="block text-sm font-medium text-foreground mb-2">
-                    确认新密码
-                  </label>
-                  <div className="relative">
                     <input
-                      id="confirm-password"
                       type={showConfirmPassword ? "text" : "password"}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       required
-                      className="block w-full appearance-none rounded-lg border border-input bg-background px-4 py-2.5 text-foreground placeholder-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 sm:text-sm pr-10"
-                      placeholder="再次输入新密码"
+                      className="block w-full bg-background/50 border border-border rounded-lg px-4 py-2 text-sm focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+                      placeholder="Confirm New Password"
                     />
+                  </div>
+
+                  {passwordError && <p className="text-xs text-red-500">{passwordError}</p>}
+                  {passwordSuccess && <p className="text-xs text-green-500">{passwordSuccess}</p>}
+
+                  <div className="flex justify-end">
                     <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      type="submit"
+                      disabled={passwordLoading}
+                      className="px-4 py-2 bg-primary text-primary-foreground text-sm rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
                     >
-                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {passwordLoading ? 'Updating...' : 'Update Password'}
                     </button>
                   </div>
-                </div>
+                </form>
               </div>
-
-              {passwordError && (
-                <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-800">
-                  {passwordError}
-                </div>
-              )}
-
-              {passwordSuccess && (
-                <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
-                  {passwordSuccess}
-                </div>
-              )}
-
-              <div>
-                <button
-                  type="submit"
-                  disabled={passwordLoading}
-                  className="px-6 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
-                >
-                  {passwordLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
-                      修改中...
-                    </>
-                  ) : (
-                    '修改密码'
-                  )}
-                </button>
-              </div>
-            </form>
+            </details>
           </div>
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            {/* Photos Stats */}
-            <div className="bg-card rounded-lg shadow-md p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center">
-                  <Camera className="w-6 h-6 text-blue-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">照片总数</p>
-                  <p className="text-2xl font-bold text-foreground">{profile.stats.photos.total}</p>
-                </div>
-              </div>
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">时间+地点</span>
-                  <span className="font-medium">{profile.stats.photos.byCategory['time-location']}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">仅时间</span>
-                  <span className="font-medium">{profile.stats.photos.byCategory['time-only']}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">仅地点</span>
-                  <span className="font-medium">{profile.stats.photos.byCategory['location-only']}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">无元数据</span>
-                  <span className="font-medium">{profile.stats.photos.byCategory.neither}</span>
-                </div>
-              </div>
-            </div>
+          {/* Content Sections */}
+          <div className="space-y-20">
 
-            {/* Locations Stats */}
-            <div className="bg-card rounded-lg shadow-md p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
-                  <MapPin className="w-6 h-6 text-green-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">地点库</p>
-                  <p className="text-2xl font-bold text-foreground">{profile.stats.locations}</p>
-                </div>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                你已保存 {profile.stats.locations} 个常用地点
-              </p>
-            </div>
-
-            {/* Documents Stats */}
-            <div className="bg-card rounded-lg shadow-md p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center">
-                  <FileText className="w-6 h-6 text-purple-500" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">文档</p>
-                  <p className="text-2xl font-bold text-foreground">{profile.stats.documents}</p>
-                </div>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                你已创建 {profile.stats.documents} 个文档
-              </p>
-            </div>
-          </div>
-
-          {/* Photos Section */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-foreground">我的照片</h2>
-              <Link
-                href="/gallery"
-                className="text-primary hover:text-primary/80 transition-colors text-sm"
-              >
-                查看全部 →
-              </Link>
-            </div>
-            {photos.length > 0 ? (
-              <PhotoGrid
-                photos={photos.slice(0, 12)}
-                userId={profile.user.id}
-                onPhotoClick={setDetailPhotoId}
-              />
-            ) : (
-              <div className="bg-card rounded-lg shadow-md p-12 text-center">
-                <Camera className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground mb-4">还没有上传照片</p>
-                <Link
-                  href="/gallery/upload"
-                  className="inline-block px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-                >
-                  上传第一张照片
+            {/* Issue 01: Photos */}
+            <section>
+              <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b border-border/40 py-4 mb-8 flex items-center justify-between">
+                <h2 className="text-xl font-serif font-bold tracking-tight">Issue 01: Recent Captures</h2>
+                <Link href="/gallery" className="text-xs font-medium uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
+                  View All
                 </Link>
               </div>
-            )}
-          </div>
 
-          {/* Locations Section */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-foreground">我的地点</h2>
-              <Link
-                href="/gallery/locations"
-                className="text-primary hover:text-primary/80 transition-colors text-sm"
-              >
-                管理地点 →
-              </Link>
-            </div>
-            {locations.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {locations.slice(0, 6).map((location) => (
-                  <div
-                    key={location.id}
-                    className="bg-card rounded-lg shadow-md p-4 hover:shadow-lg transition-shadow"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        <MapPin className="w-5 h-5 text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-foreground mb-1 truncate">
-                          {location.name}
-                        </h3>
-                        {location.address?.formattedAddress && (
-                          <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
-                            {location.address.formattedAddress}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                          <span>
-                            {location.coordinates.latitude.toFixed(4)}, {location.coordinates.longitude.toFixed(4)}
-                          </span>
-                          <span>使用 {location.usageCount} 次</span>
-                        </div>
+              {photos.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-1">
+                  {photos.slice(0, 8).map((photo) => (
+                    <div
+                      key={photo.id}
+                      className="aspect-square relative group overflow-hidden cursor-pointer bg-muted"
+                      onClick={() => setDetailPhotoId(photo.id)}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={photo.fileUrl}
+                        alt="User photo"
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-20 text-center border border-dashed border-border rounded-xl">
+                  <Camera className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+                  <p className="text-muted-foreground font-serif italic">No photos captured yet.</p>
+                  <Link href="/gallery/upload" className="text-primary text-sm mt-2 inline-block hover:underline">Start your journey</Link>
+                </div>
+              )}
+            </section>
+
+            {/* Issue 02: Locations */}
+            <section>
+              <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b border-border/40 py-4 mb-8 flex items-center justify-between">
+                <h2 className="text-xl font-serif font-bold tracking-tight">Issue 02: Places Visited</h2>
+                <Link href="/gallery/locations" className="text-xs font-medium uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
+                  Manage
+                </Link>
+              </div>
+
+              {locations.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {locations.slice(0, 6).map((location) => (
+                    <div key={location.id} className="group relative pl-6 border-l-2 border-border/50 hover:border-primary transition-colors py-2">
+                      <div className="absolute -left-[5px] top-3 w-2 h-2 rounded-full bg-background border-2 border-border group-hover:border-primary transition-colors" />
+                      <h3 className="font-serif font-bold text-lg leading-tight mb-1 group-hover:text-primary transition-colors">{location.name}</h3>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
+                        {location.coordinates.latitude.toFixed(2)}°N, {location.coordinates.longitude.toFixed(2)}°E
+                      </p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground/70">
+                        <MapPin className="w-3 h-3" />
+                        <span>{location.usageCount} memories here</span>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="bg-card rounded-lg shadow-md p-12 text-center">
-                <MapPin className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground mb-4">还没有保存地点</p>
-                <Link
-                  href="/gallery/locations"
-                  className="inline-block px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-                >
-                  创建第一个地点
-                </Link>
-              </div>
-            )}
+                  ))}
+                </div>
+              ) : (
+                <div className="py-20 text-center border border-dashed border-border rounded-xl">
+                  <MapPin className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+                  <p className="text-muted-foreground font-serif italic">No places marked yet.</p>
+                </div>
+              )}
+            </section>
           </div>
         </div>
 

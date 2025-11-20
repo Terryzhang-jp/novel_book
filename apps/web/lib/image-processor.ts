@@ -30,7 +30,7 @@ export interface ImageAdjustments {
 
 export class ImageProcessor {
   // 尺寸控制常量
-  private readonly MAX_CANVAS_DIMENSION = 2048; // 最大边长，防止内存溢出
+  private readonly MAX_CANVAS_DIMENSION = 2560; // 提升到 2560px 以支持更高分辨率屏幕
   private readonly MIN_CANVAS_DIMENSION = 512;  // 最小边长，保证质量
 
   private canvas: HTMLCanvasElement;
@@ -272,7 +272,7 @@ export class ImageProcessor {
   /**
    * 导出为Blob
    */
-  async toBlob(type: string = 'image/jpeg', quality: number = 0.92): Promise<Blob> {
+  async toBlob(type: string = 'image/jpeg', quality: number = 0.85): Promise<Blob> {
     return new Promise((resolve, reject) => {
       this.canvas.toBlob(
         (blob) => {

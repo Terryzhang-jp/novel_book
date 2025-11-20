@@ -19,16 +19,15 @@ function FilterButton({ label, count, active, onClick }: FilterButtonProps) {
     <button
       onClick={onClick}
       className={`
-        px-3 py-1.5 rounded-lg border transition-all text-sm
-        ${
-          active
-            ? "bg-primary text-primary-foreground border-primary"
-            : "bg-background text-foreground border-border hover:bg-accent"
+        flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all whitespace-nowrap text-xs font-medium
+        ${active
+          ? "bg-primary text-primary-foreground border-primary shadow-md"
+          : "bg-background/50 text-muted-foreground border-border hover:bg-accent hover:text-foreground backdrop-blur-sm"
         }
       `}
     >
-      <span className="font-medium">{label}</span>
-      <span className="ml-2 opacity-70">({count})</span>
+      <span>{label}</span>
+      <span className="opacity-70 text-[10px]">({count})</span>
     </button>
   );
 }
@@ -50,32 +49,27 @@ export function LocationFilter({
   });
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-muted-foreground">📍 Filter by Location:</span>
-      </div>
-      <div className="flex gap-2 flex-wrap">
-        <FilterButton
-          label="All Locations"
-          count={totalCount}
-          active={selectedLocationId === "all"}
-          onClick={() => onLocationChange("all")}
-        />
-        {sortedLocations.map((location) => {
-          const count = photoCountByLocation[location.id] || 0;
-          if (count === 0) return null;
+    <div className="flex items-center gap-2">
+      <FilterButton
+        label="All Locations"
+        count={totalCount}
+        active={selectedLocationId === "all"}
+        onClick={() => onLocationChange("all")}
+      />
+      {sortedLocations.map((location) => {
+        const count = photoCountByLocation[location.id] || 0;
+        if (count === 0) return null;
 
-          return (
-            <FilterButton
-              key={location.id}
-              label={location.name}
-              count={count}
-              active={selectedLocationId === location.id}
-              onClick={() => onLocationChange(location.id)}
-            />
-          );
-        })}
-      </div>
+        return (
+          <FilterButton
+            key={location.id}
+            label={location.name}
+            count={count}
+            active={selectedLocationId === location.id}
+            onClick={() => onLocationChange(location.id)}
+          />
+        );
+      })}
     </div>
   );
 }

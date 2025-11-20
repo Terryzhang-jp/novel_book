@@ -26,6 +26,7 @@ export function PhotoCard({
 }: PhotoCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const imageUrl = photo.fileUrl;
 
@@ -67,9 +68,8 @@ export function PhotoCard({
 
   return (
     <div
-      className={`group relative bg-card rounded-lg overflow-hidden shadow-md transition-all duration-300 ${
-        selectionMode || onClick ? "cursor-pointer" : "hover:shadow-xl hover:-translate-y-1"
-      } ${isSelected ? "ring-4 ring-primary" : ""} ${isDeleting ? "opacity-50 scale-95" : "opacity-100 scale-100"}`}
+      className={`group relative bg-card rounded-lg overflow-hidden shadow-md transition-all duration-300 ${selectionMode || onClick ? "cursor-pointer" : "hover:shadow-xl hover:-translate-y-1"
+        } ${isSelected ? "ring-4 ring-primary" : ""} ${isDeleting ? "opacity-50 scale-95" : "opacity-100 scale-100"}`}
       onClick={handleClick}
     >
       {/* Image */}
@@ -78,8 +78,10 @@ export function PhotoCard({
           src={imageUrl}
           alt={photo.fileName}
           fill
-          className="object-cover"
+          className={`object-cover transition-all duration-500 ${isLoading ? "scale-110 blur-xl grayscale" : "scale-100 blur-0 grayscale-0"
+            }`}
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+          onLoad={() => setIsLoading(false)}
         />
       </div>
 
@@ -106,11 +108,10 @@ export function PhotoCard({
       {selectionMode && (
         <div className="absolute top-2 right-2">
           <div
-            className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-              isSelected
-                ? "bg-primary text-primary-foreground"
-                : "bg-background/80 text-foreground border-2 border-border"
-            }`}
+            className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${isSelected
+              ? "bg-primary text-primary-foreground"
+              : "bg-background/80 text-foreground border-2 border-border"
+              }`}
           >
             {isSelected && <Check className="w-5 h-5" />}
           </div>
