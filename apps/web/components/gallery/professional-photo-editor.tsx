@@ -229,6 +229,43 @@ export function ProfessionalPhotoEditor({ photoId, imageUrl, onSave, onCancel }:
     );
   }
 
+  // Handle tab switching with state sync
+  const handleTabChange = async (newTab: TabType) => {
+    if (newTab === activeTab) return;
+
+    setIsProcessing(true);
+
+    try {
+      if (newTab === "edit") {
+        // Adjust -> Transform
+        // Commit adjustments and load into Editor
+        if (processorRef.current && editorRef.current) {
+          const blob = await processorRef.current.toBlob();
+          const url = URL.createObjectURL(blob);
+          const editor = editorRef.current.getInstance();
+          // Load the adjusted image into the editor
+          await editor.loadImageFromURL(url, "Photo");
+        }
+      } else {
+        // Transform -> Adjust
+        // Commit transforms and load into Processor
+        if (editorRef.current && processorRef.current) {
+          const editor = editorRef.current.getInstance();
+          const dataUrl = editor.toDataURL();
+          // Load the transformed image into the processor
+          await processorRef.current.loadImage(dataUrl);
+          // Reset sliders because the adjustments are now baked into the image
+          resetAdjustments();
+        }
+      }
+      setActiveTab(newTab);
+    } catch (error) {
+      console.error("Failed to switch tabs:", error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 flex flex-col bg-[#09090b] text-white overflow-hidden z-50 font-sans selection:bg-white/20">
       {/* Loading Overlay */}
@@ -236,7 +273,7 @@ export function ProfessionalPhotoEditor({ photoId, imageUrl, onSave, onCancel }:
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#09090b]/90 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-4">
             <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-            <p className="text-xs text-zinc-500 font-medium tracking-wide uppercase">Loading Studio</p>
+            <p className="text-xs text-zinc-500 font-medium tracking-wide uppercase">Processing</p>
           </div>
         </div>
       )}
@@ -304,7 +341,7 @@ export function ProfessionalPhotoEditor({ photoId, imageUrl, onSave, onCancel }:
           <div className="flex-shrink-0 p-4 border-b border-white/5">
             <div className="flex p-1 bg-zinc-900/50 rounded-lg border border-white/5">
               <button
-                onClick={() => setActiveTab("adjust")}
+                onClick={() => handleTabChange("adjust")}
                 className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-2 ${activeTab === "adjust"
                   ? "bg-zinc-800 text-white shadow-sm"
                   : "text-zinc-500 hover:text-zinc-300"
@@ -313,7 +350,7 @@ export function ProfessionalPhotoEditor({ photoId, imageUrl, onSave, onCancel }:
                 Adjust
               </button>
               <button
-                onClick={() => setActiveTab("edit")}
+                onClick={() => handleTabChange("edit")}
                 className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all flex items-center justify-center gap-2 ${activeTab === "edit"
                   ? "bg-zinc-800 text-white shadow-sm"
                   : "text-zinc-500 hover:text-zinc-300"

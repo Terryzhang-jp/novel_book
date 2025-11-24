@@ -130,24 +130,21 @@ export default function LoginPage() {
           />
         )}
 
-        {/* Top Title Overlay */}
-        <div className="absolute top-0 left-0 right-0 flex items-center justify-center pt-16 pointer-events-none z-[1000]">
-          <div className="text-center">
-            <h1 className="text-7xl tracking-widest" style={{
-              color: '#1a1a1a',
-              fontFamily: '"Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", "STSong", "SimSun", "PingFang SC", "Microsoft YaHei", serif',
-              letterSpacing: '0.15em',
-              fontWeight: 400,
-              textShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
-            }}>
-              9月 秩父 之行
-            </h1>
-          </div>
-        </div>
+
       </div>
 
       {/* Right Side - Login Form */}
       <div className="w-[480px] bg-white shadow-2xl flex flex-col">
+        <div className="pt-16 text-center">
+          <h1 className="text-5xl tracking-widest" style={{
+            color: '#1a1a1a',
+            fontFamily: '"Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", "STSong", "SimSun", "PingFang SC", "Microsoft YaHei", serif',
+            letterSpacing: '0.15em',
+            fontWeight: 400,
+          }}>
+            9月 秩父 之行
+          </h1>
+        </div>
         <div className="flex-1 flex items-center justify-center p-12">
           <div className="w-full max-w-sm space-y-8">
             {/* Header */}

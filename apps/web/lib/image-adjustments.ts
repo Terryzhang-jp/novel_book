@@ -14,7 +14,8 @@ export function applyExposure(imageData: ImageData, value: number): void {
 
   // V1: Math.pow(2, value / 80) -> max 2.3x
   // V2: Math.pow(2, value / 120) -> max 1.78x
-  const factor = Math.pow(2, value / 120);
+  // V3: Math.pow(2, value / 200) -> max 1.41x (Reduced sensitivity)
+  const factor = Math.pow(2, value / 200);
   const data = imageData.data;
 
   for (let i = 0; i < data.length; i += 4) {
@@ -33,7 +34,8 @@ export function applyBrightness(imageData: ImageData, value: number): void {
 
   // V1: (value / 100) * 80
   // V2: (value / 100) * 40 -> 仅允许约 15% 的总亮度变化，非常细腻
-  const adjustment = (value / 100) * 40;
+  // V3: (value / 100) * 30 -> Further reduced
+  const adjustment = (value / 100) * 30;
   const data = imageData.data;
 
   for (let i = 0; i < data.length; i += 4) {
@@ -51,7 +53,8 @@ export function applyContrast(imageData: ImageData, value: number): void {
   if (value === 0) return;
 
   // 降低输入强度，让调节更平滑
-  const effectiveValue = value * 0.6;
+  // V3: 0.6 -> 0.4
+  const effectiveValue = value * 0.4;
   const factor = (259 * (effectiveValue + 255)) / (255 * (259 - effectiveValue));
   const data = imageData.data;
 
@@ -75,7 +78,8 @@ export function applyHighlightsShadows(
 
   const data = imageData.data;
   // 降低强度系数
-  const intensity = 0.6;
+  // V3: 0.6 -> 0.4
+  const intensity = 0.4;
 
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
@@ -116,7 +120,8 @@ export function applyWhitesBlacks(
 
   const data = imageData.data;
   // 降低强度系数
-  const intensity = 0.6;
+  // V3: 0.6 -> 0.4
+  const intensity = 0.4;
   const whitesFactor = (whites / 100) * intensity;
   const blacksFactor = (blacks / 100) * intensity;
 
@@ -154,8 +159,8 @@ export function applyTemperature(imageData: ImageData, value: number): void {
 
   const data = imageData.data;
   const warmth = value / 100;
-  // 降低系数: 25 -> 15
-  const strength = 15;
+  // 降低系数: 25 -> 15 -> 10
+  const strength = 10;
 
   for (let i = 0; i < data.length; i += 4) {
     if (warmth > 0) {
@@ -179,8 +184,8 @@ export function applyTint(imageData: ImageData, value: number): void {
 
   const data = imageData.data;
   const tint = value / 100;
-  // 降低系数: 15 -> 10
-  const strength = 10;
+  // 降低系数: 15 -> 10 -> 8
+  const strength = 8;
 
   for (let i = 0; i < data.length; i += 4) {
     if (tint > 0) {
@@ -205,8 +210,8 @@ export function applySaturation(imageData: ImageData, value: number): void {
   if (value === 0) return;
 
   const data = imageData.data;
-  // 降低强度: 100% -> 60%
-  const factor = 1 + (value / 100) * 0.6;
+  // 降低强度: 100% -> 60% -> 40%
+  const factor = 1 + (value / 100) * 0.4;
 
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
@@ -232,8 +237,8 @@ export function applyVibrance(imageData: ImageData, value: number): void {
 
   const data = imageData.data;
   const factor = value / 100;
-  // 降低系数: 50 -> 30
-  const strength = 30;
+  // 降低系数: 50 -> 30 -> 20
+  const strength = 20;
 
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
@@ -273,8 +278,8 @@ export function applyClarity(imageData: ImageData, value: number): void {
 
     // 只对中间调应用（避免影响高光和阴影）
     if (luminance > 50 && luminance < 205) {
-      // 降低系数: 0.5 -> 0.3
-      const contrastFactor = 1 + factor * 0.3;
+      // 降低系数: 0.5 -> 0.3 -> 0.2
+      const contrastFactor = 1 + factor * 0.2;
       data[i] = 128 + (r - 128) * contrastFactor;
       data[i + 1] = 128 + (g - 128) * contrastFactor;
       data[i + 2] = 128 + (b - 128) * contrastFactor;
@@ -292,8 +297,8 @@ export function applySharpness(imageData: ImageData, value: number): void {
   const width = imageData.width;
   const height = imageData.height;
   const data = imageData.data;
-  // 降低系数: /100 -> /300 (非常微弱的锐化)
-  const factor = value / 300;
+  // 降低系数: /100 -> /300 -> /500 (非常微弱的锐化)
+  const factor = value / 500;
 
   // 锐化卷积核
   const kernel = [

@@ -37,7 +37,8 @@ export function createImageWorker(): Worker | null {
       // 内联所有图像处理函数
       function applyExposure(imageData, value) {
         if (value === 0) return;
-        const factor = Math.pow(2, value / 25);
+        // V3: Math.pow(2, value / 200) -> max 1.41x (Reduced sensitivity)
+        const factor = Math.pow(2, value / 200);
         const data = imageData.data;
         for (let i = 0; i < data.length; i += 4) {
           data[i] = Math.min(255, data[i] * factor);
@@ -48,7 +49,8 @@ export function createImageWorker(): Worker | null {
 
       function applyBrightness(imageData, value) {
         if (value === 0) return;
-        const adjustment = (value / 100) * 255;
+        // V3: (value / 100) * 30 -> Further reduced
+        const adjustment = (value / 100) * 30;
         const data = imageData.data;
         for (let i = 0; i < data.length; i += 4) {
           data[i] += adjustment;
@@ -59,7 +61,9 @@ export function createImageWorker(): Worker | null {
 
       function applyContrast(imageData, value) {
         if (value === 0) return;
-        const factor = (259 * (value + 255)) / (255 * (259 - value));
+        // V3: 0.6 -> 0.4
+        const effectiveValue = value * 0.4;
+        const factor = (259 * (effectiveValue + 255)) / (255 * (259 - effectiveValue));
         const data = imageData.data;
         for (let i = 0; i < data.length; i += 4) {
           data[i] = factor * (data[i] - 128) + 128;
@@ -71,6 +75,8 @@ export function createImageWorker(): Worker | null {
       function applyHighlightsShadows(imageData, highlights, shadows) {
         if (highlights === 0 && shadows === 0) return;
         const data = imageData.data;
+        // V3: 0.6 -> 0.4
+        const intensity = 0.4;
         for (let i = 0; i < data.length; i += 4) {
           const r = data[i];
           const g = data[i + 1];
@@ -78,14 +84,14 @@ export function createImageWorker(): Worker | null {
           const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
 
           if (highlights !== 0 && luminance > 128) {
-            const highlightFactor = ((luminance - 128) / 127) * (highlights / 100);
+            const highlightFactor = ((luminance - 128) / 127) * (highlights / 100) * intensity;
             data[i] += r * highlightFactor;
             data[i + 1] += g * highlightFactor;
             data[i + 2] += b * highlightFactor;
           }
 
           if (shadows !== 0 && luminance < 128) {
-            const shadowFactor = ((128 - luminance) / 128) * (shadows / 100);
+            const shadowFactor = ((128 - luminance) / 128) * (shadows / 100) * intensity;
             data[i] += (255 - r) * shadowFactor;
             data[i + 1] += (255 - g) * shadowFactor;
             data[i + 2] += (255 - b) * shadowFactor;
@@ -96,8 +102,10 @@ export function createImageWorker(): Worker | null {
       function applyWhitesBlacks(imageData, whites, blacks) {
         if (whites === 0 && blacks === 0) return;
         const data = imageData.data;
-        const whitesFactor = whites / 100;
-        const blacksFactor = blacks / 100;
+        // V3: 0.6 -> 0.4
+        const intensity = 0.4;
+        const whitesFactor = (whites / 100) * intensity;
+        const blacksFactor = (blacks / 100) * intensity;
 
         for (let i = 0; i < data.length; i += 4) {
           const r = data[i];
@@ -125,13 +133,15 @@ export function createImageWorker(): Worker | null {
         if (value === 0) return;
         const data = imageData.data;
         const warmth = value / 100;
+        // V3: 25 -> 15 -> 10
+        const strength = 10;
         for (let i = 0; i < data.length; i += 4) {
           if (warmth > 0) {
-            data[i] += warmth * 50;
-            data[i + 2] -= warmth * 50;
+            data[i] += warmth * strength;
+            data[i + 2] -= warmth * strength;
           } else {
-            data[i] += warmth * 50;
-            data[i + 2] -= warmth * 50;
+            data[i] += warmth * strength;
+            data[i + 2] -= warmth * strength;
           }
         }
       }
@@ -140,15 +150,17 @@ export function createImageWorker(): Worker | null {
         if (value === 0) return;
         const data = imageData.data;
         const tint = value / 100;
+        // V3: 15 -> 10 -> 8
+        const strength = 8;
         for (let i = 0; i < data.length; i += 4) {
           if (tint > 0) {
-            data[i] += tint * 30;
-            data[i + 2] += tint * 30;
-            data[i + 1] -= tint * 30;
+            data[i] += tint * strength;
+            data[i + 2] += tint * strength;
+            data[i + 1] -= tint * strength;
           } else {
-            data[i] += tint * 30;
-            data[i + 1] -= tint * 30;
-            data[i + 2] += tint * 30;
+            data[i] += tint * strength;
+            data[i + 1] -= tint * strength;
+            data[i + 2] += tint * strength;
           }
         }
       }
@@ -156,7 +168,8 @@ export function createImageWorker(): Worker | null {
       function applySaturation(imageData, value) {
         if (value === 0) return;
         const data = imageData.data;
-        const factor = 1 + value / 100;
+        // V3: 100% -> 60% -> 40%
+        const factor = 1 + (value / 100) * 0.4;
         for (let i = 0; i < data.length; i += 4) {
           const r = data[i];
           const g = data[i + 1];
@@ -172,6 +185,8 @@ export function createImageWorker(): Worker | null {
         if (value === 0) return;
         const data = imageData.data;
         const factor = value / 100;
+        // V3: 50 -> 30 -> 20
+        const strength = 20;
         for (let i = 0; i < data.length; i += 4) {
           const r = data[i];
           const g = data[i + 1];
@@ -179,7 +194,7 @@ export function createImageWorker(): Worker | null {
           const max = Math.max(r, g, b);
           const avg = (r + g + b) / 3;
           const saturation = max > 0 ? 1 - (3 * avg - max - avg) / (2 * max) : 0;
-          const adjustment = factor * (1 - saturation) * 50;
+          const adjustment = factor * (1 - saturation) * strength;
           const gray = 0.299 * r + 0.587 * g + 0.114 * b;
           data[i] += (r - gray) * adjustment;
           data[i + 1] += (g - gray) * adjustment;
@@ -197,7 +212,8 @@ export function createImageWorker(): Worker | null {
           const b = data[i + 2];
           const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
           if (luminance > 50 && luminance < 205) {
-            const contrastFactor = 1 + factor * 0.5;
+            // V3: 0.5 -> 0.3 -> 0.2
+            const contrastFactor = 1 + factor * 0.2;
             data[i] = 128 + (r - 128) * contrastFactor;
             data[i + 1] = 128 + (g - 128) * contrastFactor;
             data[i + 2] = 128 + (b - 128) * contrastFactor;
@@ -210,7 +226,8 @@ export function createImageWorker(): Worker | null {
         const width = imageData.width;
         const height = imageData.height;
         const data = imageData.data;
-        const factor = value / 100;
+        // V3: /100 -> /300 -> /500
+        const factor = value / 500;
         const kernel = [
           0, -factor, 0,
           -factor, 1 + 4 * factor, -factor,

@@ -12,11 +12,12 @@ export type TemplateId =
   | 'film'
   | 'gallery'
   | 'panorama'
-  | 'story';
+  | 'story'
+  | 'photography';
 
 export type AspectRatio = '1:1' | '4:5' | '16:9' | '9:16';
 
-export type TemplateStyle = 'minimal' | 'vintage' | 'modern' | 'artistic' | 'casual';
+export type TemplateStyle = 'minimal' | 'vintage' | 'modern' | 'artistic' | 'casual' | 'professional';
 
 /**
  * 海报模板配置
@@ -45,6 +46,16 @@ export interface PosterData {
     latitude: number;
     longitude: number;
   };
+  // EXIF Data for Photography Template
+  exif?: {
+    iso?: string;
+    aperture?: string;
+    shutterSpeed?: string;
+    focalLength?: string;
+    lensModel?: string;
+  };
+  width?: number;
+  height?: number;
 }
 
 /**

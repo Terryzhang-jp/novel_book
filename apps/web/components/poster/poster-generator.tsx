@@ -21,6 +21,7 @@ import { FilmTemplate } from './templates/film';
 import { GalleryTemplate } from './templates/gallery';
 import { PanoramaTemplate } from './templates/panorama';
 import { StoryTemplate } from './templates/story';
+import { PhotographyTemplate } from './templates/photography';
 
 interface PosterGeneratorProps {
   data: PosterData;
@@ -86,6 +87,7 @@ export function PosterGenerator({ data, onGenerating, onComplete, onError }: Pos
       'gallery',
       'panorama',
       'story',
+      'photography',
     ];
 
     const results: Array<{ templateId: TemplateId; blob: Blob }> = [];
@@ -174,6 +176,7 @@ export function PosterGenerator({ data, onGenerating, onComplete, onError }: Pos
         <GalleryTemplate data={data} id="gallery-template" />
         <PanoramaTemplate data={data} id="panorama-template" />
         <StoryTemplate data={data} id="story-template" />
+        <PhotographyTemplate data={data} id="photography-template" />
       </div>
 
       {/* 导出API - 通过props暴露给父组件 */}

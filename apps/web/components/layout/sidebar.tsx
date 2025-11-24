@@ -14,6 +14,7 @@ import {
   Menu,
   X,
   User,
+  Wand2,
 } from "lucide-react";
 import { Button } from "@/components/tailwind/ui/button";
 
@@ -42,6 +43,12 @@ const navItems: NavItem[] = [
     href: "/gallery",
     icon: Image,
     description: "View your photos",
+  },
+  {
+    name: "Studio",
+    href: "/gallery/studio",
+    icon: Wand2,
+    description: "Create & Edit",
   },
   {
     name: "Locations",
@@ -180,8 +187,8 @@ export function Sidebar({ userEmail, userName }: SidebarProps) {
                       href={item.href}
                       onClick={closeMobileMenu}
                       className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-200 group ${active
-                          ? "bg-primary/10 text-primary font-medium"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        ? "bg-primary/10 text-primary font-medium"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
                         }`}
                     >
                       <Icon
