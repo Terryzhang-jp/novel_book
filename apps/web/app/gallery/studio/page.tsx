@@ -2,9 +2,15 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { Upload, Image as ImageIcon, ArrowLeft, Loader2, Download, Wand2 } from "lucide-react";
-import { ProfessionalPhotoEditor } from "@/components/gallery/professional-photo-editor";
 import { PosterGenerator, usePosterGenerator } from "@/components/poster/poster-generator";
+
+// Dynamic import for photo editor to avoid SSR issues with canvas libraries
+const ProfessionalPhotoEditor = dynamic(
+  () => import("@/components/gallery/professional-photo-editor").then(mod => mod.ProfessionalPhotoEditor),
+  { ssr: false, loading: () => <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin" /></div> }
+);
 import { PhotographyTemplate } from "@/components/poster/templates/photography";
 import { MinimalTemplate } from "@/components/poster/templates/minimal";
 import { ModernTemplate } from "@/components/poster/templates/modern";
