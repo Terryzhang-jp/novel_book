@@ -109,7 +109,8 @@ function CanvasRichText({ element, isSelected, onSelect, onUpdate, onDblClick }:
 
 // Image component with useImage hook
 function CanvasImage({ element, isSelected, onSelect, onUpdate }: any) {
-    const [image] = useImage(element.src);
+    // 添加 'anonymous' 以支持跨域加载 Supabase Storage 图片
+    const [image] = useImage(element.src, 'anonymous');
 
     return (
         <KonvaImage
