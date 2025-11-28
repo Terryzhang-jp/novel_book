@@ -15,6 +15,7 @@ import {
   X,
   User,
   Wand2,
+  Palette,
 } from "lucide-react";
 import { Button } from "@/components/tailwind/ui/button";
 
@@ -37,6 +38,12 @@ const navItems: NavItem[] = [
     href: "/documents",
     icon: FileText,
     description: "Manage your documents",
+  },
+  {
+    name: "Canvas",
+    href: "/canvas",
+    icon: Palette,
+    description: "Creative canvas",
   },
   {
     name: "Gallery",

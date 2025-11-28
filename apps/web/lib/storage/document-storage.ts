@@ -1,6 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
-import type { Document, DocumentIndex } from "@/types/storage";
-import type { JSONContent } from "novel";
+import type { Document, DocumentIndex, JSONContent, DecorationElement } from "@/types/storage";
 import { NotFoundError, UnauthorizedError } from "./errors";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -15,7 +14,8 @@ export class DocumentStorage {
   async create(
     userId: string,
     title: string,
-    content?: JSONContent
+    content?: JSONContent,
+    decorations?: DecorationElement[]
   ): Promise<Document> {
     const defaultContent: JSONContent = {
       type: "doc",
@@ -34,6 +34,7 @@ export class DocumentStorage {
         title,
         content: docContent,
         images: content ? this.extractImages(content) : [],
+        decorations: decorations || [],
         tags: [],
         preview: content ? this.generatePreview(content) : "",
         is_public: false,
@@ -53,6 +54,7 @@ export class DocumentStorage {
       title: data.title,
       content: data.content,
       images: data.images,
+      decorations: data.decorations || [],
       tags: data.tags,
       preview: data.preview,
       createdAt: data.created_at,
@@ -80,6 +82,7 @@ export class DocumentStorage {
       title: data.title,
       content: data.content,
       images: data.images,
+      decorations: data.decorations || [],
       tags: data.tags,
       preview: data.preview,
       createdAt: data.created_at,
@@ -107,6 +110,33 @@ export class DocumentStorage {
       );
     }
 
+    // Clean up deleted images if content is being updated
+    if (data.content !== undefined) {
+      try {
+        const { extractImageUrls, getDeletedImages, parseSupabaseImagePath } = await import('@/lib/utils/image-cleanup');
+        const { deleteFile } = await import('@/lib/supabase/storage');
+
+        const oldUrls = extractImageUrls(doc.content);
+        const newUrls = extractImageUrls(data.content);
+        const deletedUrls = getDeletedImages(oldUrls, newUrls);
+
+        // Delete images from Supabase Storage (don't block document update if deletion fails)
+        for (const url of deletedUrls) {
+          const parsed = parseSupabaseImagePath(url);
+          if (parsed) {
+            try {
+              await deleteFile(parsed.bucket, parsed.path);
+              console.log(`Deleted image: ${parsed.bucket}/${parsed.path}`);
+            } catch (error) {
+              console.error(`Failed to delete image: ${url}`, error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error during image cleanup:', error);
+      }
+    }
+
     // 准备更新数据
     const updateData: any = {
       updated_at: new Date().toISOString(),
@@ -118,6 +148,7 @@ export class DocumentStorage {
       updateData.images = this.extractImages(data.content);
       updateData.preview = this.generatePreview(data.content);
     }
+    if (data.decorations !== undefined) updateData.decorations = data.decorations;
     if (data.tags !== undefined) updateData.tags = data.tags;
 
     const { data: updated, error } = await supabaseAdmin
@@ -138,6 +169,7 @@ export class DocumentStorage {
       title: updated.title,
       content: updated.content,
       images: updated.images,
+      decorations: updated.decorations || [],
       tags: updated.tags,
       preview: updated.preview,
       createdAt: updated.created_at,

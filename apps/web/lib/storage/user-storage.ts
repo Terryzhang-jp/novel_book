@@ -11,8 +11,10 @@ export class UserStorage {
   async create(
     email: string,
     password: string,
-    name?: string
-  ): Promise<Omit<User, "passwordHash">> {
+    name?: string,
+    securityQuestion?: string,
+    securityAnswer?: string
+  ): Promise<Omit<User, "passwordHash" | "securityAnswerHash">> {
     // 验证输入
     if (!email || !password) {
       throw new ValidationError("Email and password are required");
@@ -20,6 +22,11 @@ export class UserStorage {
 
     if (password.length < 6) {
       throw new ValidationError("Password must be at least 6 characters");
+    }
+
+    // 验证安全问题（如果提供）
+    if (securityQuestion && !securityAnswer) {
+      throw new ValidationError("Security answer is required when security question is provided");
     }
 
     // 检查邮箱是否已存在
@@ -36,6 +43,11 @@ export class UserStorage {
     // 加密密码
     const passwordHash = await hash(password, 10);
 
+    // 加密安全问题答案（如果提供）
+    const securityAnswerHash = securityAnswer
+      ? await hash(securityAnswer.toLowerCase().trim(), 10)
+      : null;
+
     // 创建用户对象
     const userId = uuidv4();
     const now = new Date().toISOString();
@@ -47,6 +59,8 @@ export class UserStorage {
         email,
         password_hash: passwordHash,
         name,
+        security_question: securityQuestion || null,
+        security_answer_hash: securityAnswerHash,
         require_password_change: false, // 注册用户不需要强制修改密码
         profile: {},
         created_at: now,
@@ -64,6 +78,7 @@ export class UserStorage {
       id: data.id,
       email: data.email,
       name: data.name,
+      securityQuestion: data.security_question,
       requirePasswordChange: data.require_password_change,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
@@ -331,6 +346,107 @@ export class UserStorage {
 
     if (updateError) {
       throw new Error(`Failed to update password: ${updateError.message}`);
+    }
+  }
+
+  /**
+   * 获取用户的安全问题（用于密码找回）
+   */
+  async getSecurityQuestion(email: string): Promise<{ question: string } | null> {
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .select('security_question')
+      .eq('email', email)
+      .single();
+
+    if (error || !data || !data.security_question) {
+      return null;
+    }
+
+    return { question: data.security_question };
+  }
+
+  /**
+   * 验证安全问题答案并重置密码
+   */
+  async resetPasswordWithSecurityAnswer(
+    email: string,
+    securityAnswer: string,
+    newPassword: string
+  ): Promise<void> {
+    // 验证新密码
+    if (!newPassword || newPassword.length < 6) {
+      throw new ValidationError("New password must be at least 6 characters");
+    }
+
+    // 获取用户
+    const { data: user, error: fetchError } = await supabaseAdmin
+      .from('users')
+      .select('id, security_answer_hash')
+      .eq('email', email)
+      .single();
+
+    if (fetchError || !user) {
+      throw new NotFoundError("User");
+    }
+
+    if (!user.security_answer_hash) {
+      throw new ValidationError("No security question set for this account");
+    }
+
+    // 验证安全问题答案（转小写并去除空格）
+    const isValid = await compare(
+      securityAnswer.toLowerCase().trim(),
+      user.security_answer_hash
+    );
+
+    if (!isValid) {
+      throw new ValidationError("Security answer is incorrect");
+    }
+
+    // 加密新密码
+    const newPasswordHash = await hash(newPassword, 10);
+
+    // 更新密码
+    const { error: updateError } = await supabaseAdmin
+      .from('users')
+      .update({
+        password_hash: newPasswordHash,
+        require_password_change: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', user.id);
+
+    if (updateError) {
+      throw new Error(`Failed to reset password: ${updateError.message}`);
+    }
+  }
+
+  /**
+   * 更新用户的安全问题和答案
+   */
+  async updateSecurityQuestion(
+    userId: string,
+    securityQuestion: string,
+    securityAnswer: string
+  ): Promise<void> {
+    if (!securityQuestion || !securityAnswer) {
+      throw new ValidationError("Security question and answer are required");
+    }
+
+    const securityAnswerHash = await hash(securityAnswer.toLowerCase().trim(), 10);
+
+    const { error } = await supabaseAdmin
+      .from('users')
+      .update({
+        security_question: securityQuestion,
+        security_answer_hash: securityAnswerHash,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId);
+
+    if (error) {
+      throw new Error(`Failed to update security question: ${error.message}`);
     }
   }
 }

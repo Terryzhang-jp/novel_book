@@ -18,5 +18,13 @@
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "postcss": "^8.5.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "prosemirror-model": "1.25.4",
+      "prosemirror-state": "1.4.4",
+      "prosemirror-view": "1.41.3",
+      "prosemirror-transform": "1.10.2"
+    }
   }
 }

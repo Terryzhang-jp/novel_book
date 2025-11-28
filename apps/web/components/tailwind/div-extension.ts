@@ -2,9 +2,14 @@
  * Div Extension for TipTap
  *
  * Allows div containers with inline styles for image grids
+ *
+ * NOTE: Currently commented out due to import issues with TipTap Node.
+ * Will be re-enabled when needed.
  */
 
-import { Node } from '@tiptap/core';
+// Commented out temporarily - not currently used
+/*
+import { Node } from 'novel/extensions';
 
 export const DivExtension = Node.create({
   name: 'div',
@@ -46,3 +51,4 @@ export const DivExtension = Node.create({
     };
   },
 });
+*/

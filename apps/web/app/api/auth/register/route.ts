@@ -9,10 +9,18 @@ export async function POST(request: Request) {
     // 确保存储已初始化
     await initializeStorage();
 
-    const { email, password, name } = await request.json();
+    const { email, password, name, securityQuestion, securityAnswer } = await request.json();
 
-    // 创建用户
-    const user = await userStorage.create(email, password, name);
+    // 验证安全问题（必填）
+    if (!securityQuestion || !securityAnswer) {
+      return NextResponse.json(
+        { error: "Security question and answer are required" },
+        { status: 400 }
+      );
+    }
+
+    // 创建用户（包含安全问题）
+    const user = await userStorage.create(email, password, name, securityQuestion, securityAnswer);
 
     // 生成 JWT token
     const token = await createSession(user.id, user.email);

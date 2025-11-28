@@ -11,7 +11,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import Image from 'next/image';
 import { X, MapPin, Image as ImageIcon, Calendar, User } from 'lucide-react';
 import type { PhotoLocation } from '@/components/maps/photo-map';
 import { PublicPhotoDetailModal } from './public-photo-detail-modal';
@@ -122,13 +121,12 @@ export function LocationPhotosModal({
                   >
                     {/* Photo Image */}
                     <div className="relative aspect-[4/3] bg-muted">
-                      <Image
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
                         src={photo.fileUrl}
                         alt={photo.fileName}
-                        fill
-                        className="object-cover group-hover:scale-105 transition-transform duration-300"
-                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                        unoptimized
+                        crossOrigin="anonymous"
+                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
 
                       {/* Hover Overlay */}

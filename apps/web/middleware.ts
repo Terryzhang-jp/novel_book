@@ -7,13 +7,13 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Public routes (不需要认证)
-  const publicRoutes = ["/login", "/register", "/chichibu"];
+  const publicRoutes = ["/login", "/register", "/chichibu", "/forgot-password"];
   const isPublicRoute = publicRoutes.some((route) =>
     pathname.startsWith(route)
   );
 
   // Auth-only routes (已登录用户不应访问，如登录/注册页)
-  const authOnlyRoutes = ["/login", "/register"];
+  const authOnlyRoutes = ["/login", "/register", "/forgot-password"];
   const isAuthOnlyRoute = authOnlyRoutes.some((route) =>
     pathname.startsWith(route)
   );

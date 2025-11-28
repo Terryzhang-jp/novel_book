@@ -48,6 +48,7 @@ export function TemplateSwipeView({ posterData, onTemplateClick }: TemplateSwipe
     gallery: GalleryTemplate,
     panorama: PanoramaTemplate,
     story: StoryTemplate,
+    photography: StoryTemplate, // Using StoryTemplate as placeholder for photography
   };
 
   const TemplateComponent = templateComponents[currentTemplate.id];
@@ -281,11 +282,10 @@ export function TemplateSwipeView({ posterData, onTemplateClick }: TemplateSwipe
               setCurrentIndex(index);
               setShowInfo(true);
             }}
-            className={`h-2 rounded-full transition-all duration-300 ${
-              index === currentIndex
-                ? 'w-8 bg-primary'
-                : 'w-2 bg-border hover:bg-primary/50'
-            }`}
+            className={`h-2 rounded-full transition-all duration-300 ${index === currentIndex
+              ? 'w-8 bg-primary'
+              : 'w-2 bg-border hover:bg-primary/50'
+              }`}
           />
         ))}
       </div>

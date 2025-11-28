@@ -13,27 +13,9 @@
   z-index: 1;
 }
 
-/* Spotlight Mode - Background Overlay */
-.ProseMirror::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0);
-  pointer-events: none;
-  transition: background 0.5s ease;
-  z-index: -1;
-}
-
-.zen-spotlight-active .ProseMirror::before {
-  background: rgba(0, 0, 0, 0.6);
-}
-
 /* Spotlight Mode - Dim all paragraphs by default */
 .zen-spotlight-active .ProseMirror>* {
-  opacity: 0.15;
+  opacity: 0.2;
   transition: opacity 0.5s ease;
 }
 
@@ -43,10 +25,7 @@
   opacity: 1;
   position: relative;
   z-index: 2;
-  background: rgba(255, 255, 255, 0.95);
-  padding: 1.5rem 2rem;
-  border-radius: 0.5rem;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  /* Removed card styling for a cleaner look */
 }
 
 .ProseMirror h1,

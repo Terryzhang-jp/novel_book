@@ -15,6 +15,24 @@ const nextConfig = {
       bodySizeLimit: '10mb',
     },
   },
+  headers: async () => {
+    return [
+      // Only apply COEP/COOP to canvas page (needed for SharedArrayBuffer/Konva)
+      {
+        source: '/canvas/:path*',
+        headers: [
+          {
+            key: 'Cross-Origin-Opener-Policy',
+            value: 'same-origin',
+          },
+          {
+            key: 'Cross-Origin-Embedder-Policy',
+            value: 'require-corp',
+          },
+        ],
+      },
+    ];
+  },
   webpack: (config, { isServer }) => {
     // Ignore canvas module for browser builds (needed for Filerobot/Konva)
     if (!isServer) {

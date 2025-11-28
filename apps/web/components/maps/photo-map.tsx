@@ -15,7 +15,6 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import Image from 'next/image';
 import { MapPin, Image as ImageIcon, Loader2 } from 'lucide-react';
 import type { Photo } from '@/types/storage';
 
@@ -286,13 +285,12 @@ export function PhotoMap({
             onClick={() => onLocationClick?.(location)}
             className="relative w-full aspect-[4/3] bg-muted rounded-lg overflow-hidden mb-3 hover:ring-2 hover:ring-primary transition-all cursor-pointer"
           >
-            <Image
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
               src={firstPhoto.fileUrl}
               alt={firstPhoto.fileName}
-              fill
-              className="object-cover"
-              sizes="320px"
-              unoptimized
+              crossOrigin="anonymous"
+              className="absolute inset-0 w-full h-full object-cover"
             />
           </button>
         ) : (
@@ -306,13 +304,12 @@ export function PhotoMap({
                   onClick={() => onLocationClick?.(location)}
                   className="relative aspect-square bg-muted rounded-lg overflow-hidden hover:ring-2 hover:ring-primary transition-all cursor-pointer"
                 >
-                  <Image
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
                     src={photo.fileUrl}
                     alt={photo.fileName}
-                    fill
-                    className="object-cover"
-                    sizes="150px"
-                    unoptimized
+                    crossOrigin="anonymous"
+                    className="absolute inset-0 w-full h-full object-cover"
                   />
                   {/* Show indicator for first photo */}
                   {index === 0 && (
@@ -462,14 +459,14 @@ function PhotoMarker({ location, leaflet, Marker, Popup, LocationPopupContent }:
       html: `
         <div class="relative group cursor-pointer transform transition-transform hover:scale-110 hover:z-50">
           <div class="relative w-12 h-12 md:w-16 md:h-16 bg-white p-1 rounded-lg shadow-lg border border-gray-200 overflow-hidden">
-            <img src="${firstPhoto.fileUrl}" class="w-full h-full object-cover rounded-md" alt="marker" />
+            <img src="${firstPhoto.fileUrl}" crossorigin="anonymous" class="w-full h-full object-cover rounded-md" alt="marker" />
           </div>
           ${count > 1 ? `
             <div class="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold w-5 h-5 md:w-6 md:h-6 flex items-center justify-center rounded-full border-2 border-white shadow-sm">
               ${count}
             </div>
           ` : ''}
-          <div class="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-white filter drop-shadow-sm"></div>
+          <div class="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white filter drop-shadow-sm"></div>
         </div>
       `,
       iconSize: [48, 48], // Base size, but CSS handles it

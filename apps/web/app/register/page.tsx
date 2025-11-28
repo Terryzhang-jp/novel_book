@@ -4,11 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/tailwind/ui/button";
+import { SECURITY_QUESTIONS } from "@/types/storage";
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [securityQuestion, setSecurityQuestion] = useState("");
+  const [securityAnswer, setSecurityAnswer] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -23,6 +26,16 @@ export default function RegisterPage() {
       return;
     }
 
+    if (!securityQuestion) {
+      setError("Please select a security question");
+      return;
+    }
+
+    if (!securityAnswer.trim()) {
+      setError("Please enter an answer to your security question");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -31,7 +44,13 @@ export default function RegisterPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password, name }),
+        body: JSON.stringify({
+          email,
+          password,
+          name,
+          securityQuestion,
+          securityAnswer,
+        }),
       });
 
       const data = await response.json();
@@ -109,6 +128,42 @@ export default function RegisterPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="relative block w-full appearance-none rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm"
                 placeholder="Password (min 6 characters)"
+              />
+            </div>
+
+            {/* Security Question */}
+            <div className="pt-4 border-t border-gray-200">
+              <p className="text-sm font-medium text-gray-700 mb-3">
+                Security Question (for password recovery)
+              </p>
+              <select
+                id="securityQuestion"
+                value={securityQuestion}
+                onChange={(e) => setSecurityQuestion(e.target.value)}
+                className="relative block w-full appearance-none rounded-lg border border-gray-300 px-4 py-3 text-gray-900 focus:z-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm"
+                required
+              >
+                <option value="">Select a security question...</option>
+                {SECURITY_QUESTIONS.map((question) => (
+                  <option key={question} value={question}>
+                    {question}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="securityAnswer" className="sr-only">
+                Security Answer
+              </label>
+              <input
+                id="securityAnswer"
+                name="securityAnswer"
+                type="text"
+                value={securityAnswer}
+                onChange={(e) => setSecurityAnswer(e.target.value)}
+                className="relative block w-full appearance-none rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm"
+                placeholder="Your answer"
+                required
               />
             </div>
           </div>

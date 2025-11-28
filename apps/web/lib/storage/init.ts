@@ -19,6 +19,7 @@ export const PATHS = {
   LOCATIONS: join(getDataRoot(), "locations"),
   INDEXES: join(getDataRoot(), "indexes"),
   IMAGES: join(process.cwd(), "public", "images"),
+  AI_MAGIC: join(getDataRoot(), "ai-magic"),
 
   // 文件路径
   USERS_FILE: join(getDataRoot(), "auth", "users.json"),
@@ -38,6 +39,7 @@ export async function initializeStorage(): Promise<void> {
   await ensureDir(PATHS.LOCATIONS);
   await ensureDir(PATHS.INDEXES);
   await ensureDir(PATHS.IMAGES);
+  await ensureDir(PATHS.AI_MAGIC);
 
   // 如果 users.json 不存在，创建空数组
   if (!exists(PATHS.USERS_FILE)) {

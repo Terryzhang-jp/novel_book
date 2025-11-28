@@ -39,6 +39,32 @@ const tiptapLink = TiptapLink.configure({
 });
 
 const updatedImage = UpdatedImage.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      align: {
+        default: 'center',
+        parseHTML: (element) => element.getAttribute('data-align'),
+        renderHTML: (attributes) => {
+          const { align } = attributes;
+          let style = 'border-radius: 0.5rem; border: 1px solid var(--muted-border);';
+
+          if (align === 'left') {
+            style += 'float: left; margin-right: 1.5rem; margin-bottom: 1rem; max-width: 50%; clear: left;';
+          } else if (align === 'right') {
+            style += 'float: right; margin-left: 1.5rem; margin-bottom: 1rem; max-width: 50%; clear: right;';
+          } else {
+            style += 'display: block; margin: 1.5rem auto; max-width: 100%;';
+          }
+
+          return {
+            style,
+            'data-align': align,
+          };
+        },
+      },
+    };
+  },
   addProseMirrorPlugins() {
     return [
       UploadImagesPlugin({
@@ -48,9 +74,6 @@ const updatedImage = UpdatedImage.extend({
   },
 }).configure({
   allowBase64: true,
-  HTMLAttributes: {
-    class: cx("rounded-lg border border-muted"),
-  },
 });
 
 const taskList = TaskList.configure({

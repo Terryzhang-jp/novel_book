@@ -7,7 +7,8 @@ import { Button } from "@/components/tailwind/ui/button";
 import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import DocumentEditor from "@/components/document-editor";
 import { PhotoSidebar } from "@/components/documents/photo-sidebar";
-import type { JSONContent, EditorInstance } from "novel";
+import type { EditorInstance, JSONContent } from "novel";
+import type { DecorationElement } from "@/types/storage";
 
 interface Document {
   id: string;
@@ -15,6 +16,7 @@ interface Document {
   title: string;
   content: JSONContent;
   images: string[];
+  decorations?: DecorationElement[];
   tags?: string[];
   preview?: string;
   createdAt: string;
@@ -100,11 +102,21 @@ export default function EditDocumentPage({
         },
         body: JSON.stringify({
           content,
+          decorations: document.decorations,
         }),
       });
     } catch (err) {
       console.error("Failed to save content:", err);
     }
+  };
+
+  const handleDecorationsChange = async (decorations: DecorationElement[]) => {
+    if (!document) return;
+
+    // Update local state immediately
+    setDocument({ ...document, decorations });
+
+    // Debounce save to server (save will happen with content)
   };
 
   const handleEditorReady = (editor: EditorInstance) => {
@@ -167,7 +179,14 @@ export default function EditDocumentPage({
   }
 
   return (
-    <div className={zenMode ? "min-h-screen bg-[#f9f9f7] text-[#333]" : "min-h-screen bg-background"}>
+    <div
+      className={zenMode ? "min-h-screen text-[#333]" : "min-h-screen bg-background"}
+      style={zenMode ? {
+        backgroundColor: '#f9f9f7',
+        backgroundImage: 'radial-gradient(#e5e5e5 1px, transparent 1px)',
+        backgroundSize: '24px 24px'
+      } : undefined}
+    >
 
       {/* Zen Mode Toggle Button */}
       <div className="fixed top-4 right-4 z-50">
@@ -275,7 +294,9 @@ export default function EditDocumentPage({
           <DocumentEditor
             documentId={document.id}
             initialContent={document.content}
+            initialDecorations={document.decorations || []}
             onSave={handleContentSave}
+            onDecorationsChange={handleDecorationsChange}
             onEditorReady={handleEditorReady}
             onTyping={zenMode ? setIsTyping : undefined}
             zenMode={zenMode}
