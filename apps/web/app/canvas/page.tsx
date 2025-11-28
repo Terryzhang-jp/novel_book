@@ -631,7 +631,27 @@ export default function ImmersiveJournalPage() {
         toast.info("Removing background... This may take a moment.");
 
         try {
-            const blob = await imglyRemoveBackground(element.src);
+            // 准备图片源：如果是外部 URL（如 Supabase Storage），需要先转换为 Blob
+            let imageSource: string | Blob = element.src;
+
+            // 检查是否是外部 URL（非 blob: 和非 data: 开头的 URL）
+            if (!element.src.startsWith('blob:') && !element.src.startsWith('data:')) {
+                try {
+                    // 获取图片并转换为 Blob
+                    const response = await fetch(element.src);
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch image: ${response.status}`);
+                    }
+                    imageSource = await response.blob();
+                } catch (fetchError) {
+                    console.error("Failed to fetch image for background removal:", fetchError);
+                    toast.error("Failed to load image. Please try again.");
+                    setIsProcessingBg(false);
+                    return;
+                }
+            }
+
+            const blob = await imglyRemoveBackground(imageSource);
             const url = URL.createObjectURL(blob);
 
             // 释放旧的 blob URL 以避免内存泄漏
