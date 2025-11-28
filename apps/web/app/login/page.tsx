@@ -110,11 +110,11 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      {/* Left Side - Interactive Map */}
-      <div className="flex-1 relative">
+    <div className="flex h-screen overflow-hidden bg-background">
+      {/* Left Side - Interactive Map (hidden on mobile) */}
+      <div className="hidden md:flex flex-1 relative">
         {photos.length === 0 ? (
-          <div className="h-full flex items-center justify-center bg-muted">
+          <div className="h-full w-full flex items-center justify-center bg-muted">
             <div className="text-center">
               <MapPin className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
               <p className="text-muted-foreground">No photos yet</p>
@@ -129,15 +129,12 @@ export default function LoginPage() {
             initialZoom={10}
           />
         )}
-
-
       </div>
 
       {/* Right Side - Login Form */}
-      <div className="w-[480px] bg-white shadow-2xl flex flex-col">
+      <div className="w-full md:w-[480px] bg-card shadow-2xl flex flex-col">
         <div className="pt-16 text-center">
-          <h1 className="text-5xl tracking-widest" style={{
-            color: '#1a1a1a',
+          <h1 className="text-5xl tracking-widest text-foreground" style={{
             fontFamily: '"Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", "STSong", "SimSun", "PingFang SC", "Microsoft YaHei", serif',
             letterSpacing: '0.15em',
             fontWeight: 400,
@@ -145,14 +142,14 @@ export default function LoginPage() {
             9月 秩父 之行
           </h1>
         </div>
-        <div className="flex-1 flex items-center justify-center p-12">
+        <div className="flex-1 flex items-center justify-center p-8 md:p-12">
           <div className="w-full max-w-sm space-y-8">
             {/* Header */}
             <div className="text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+              <h2 className="text-3xl font-bold tracking-tight text-foreground">
                 Welcome Back
               </h2>
-              <p className="mt-2 text-sm text-gray-600">
+              <p className="mt-2 text-sm text-muted-foreground">
                 Sign in to share your travel stories
               </p>
             </div>
@@ -161,7 +158,7 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="mt-8 space-y-6">
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="email" className="block text-sm font-medium text-foreground mb-2">
                     Email address
                   </label>
                   <input
@@ -172,12 +169,12 @@ export default function LoginPage() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="block w-full appearance-none rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm"
+                    className="block w-full appearance-none rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary sm:text-sm"
                     placeholder="you@example.com"
                   />
                 </div>
                 <div>
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="password" className="block text-sm font-medium text-foreground mb-2">
                     Password
                   </label>
                   <input
@@ -188,14 +185,14 @@ export default function LoginPage() {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full appearance-none rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm"
+                    className="block w-full appearance-none rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary sm:text-sm"
                     placeholder="••••••••"
                   />
                 </div>
               </div>
 
               {error && (
-                <div className="rounded-lg bg-red-50 p-3 text-sm text-red-800">
+                <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
                   {error}
                 </div>
               )}
@@ -211,11 +208,11 @@ export default function LoginPage() {
 
             {/* Footer Links */}
             <div className="space-y-4">
-              <div className="text-center text-sm text-gray-600">
+              <div className="text-center text-sm text-muted-foreground">
                 Don't have an account?{" "}
                 <Link
                   href="/register"
-                  className="font-medium text-blue-600 hover:text-blue-500"
+                  className="font-medium text-primary hover:text-primary/80"
                 >
                   Sign up
                 </Link>
@@ -224,7 +221,7 @@ export default function LoginPage() {
               <div className="text-center">
                 <Link
                   href="/forgot-password"
-                  className="text-sm text-gray-500 hover:text-gray-700"
+                  className="text-sm text-muted-foreground hover:text-foreground"
                 >
                   Forgot password?
                 </Link>
@@ -233,7 +230,7 @@ export default function LoginPage() {
               <div className="text-center">
                 <Link
                   href="/chichibu"
-                  className="text-sm text-gray-500 hover:text-gray-700"
+                  className="text-sm text-muted-foreground hover:text-foreground"
                 >
                   Continue exploring without login →
                 </Link>
@@ -243,25 +240,25 @@ export default function LoginPage() {
         </div>
 
         {/* Stats Footer */}
-        <div className="border-t border-gray-200 px-12 py-6 bg-gray-50">
+        <div className="border-t border-border px-8 md:px-12 py-6 bg-muted/50">
           <div className="flex items-center justify-around text-center">
             <div>
-              <p className="text-2xl font-bold text-gray-900">{photos.length}</p>
-              <p className="text-xs text-gray-500">Photos Shared</p>
+              <p className="text-2xl font-bold text-foreground">{photos.length}</p>
+              <p className="text-xs text-muted-foreground">Photos Shared</p>
             </div>
-            <div className="h-12 w-px bg-gray-300" />
+            <div className="h-12 w-px bg-border" />
             <div>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-bold text-foreground">
                 {new Set(photos.map(p => p.userId)).size}
               </p>
-              <p className="text-xs text-gray-500">Travelers</p>
+              <p className="text-xs text-muted-foreground">Travelers</p>
             </div>
-            <div className="h-12 w-px bg-gray-300" />
+            <div className="h-12 w-px bg-border" />
             <div>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-bold text-foreground">
                 {photos.filter(p => p.location).length}
               </p>
-              <p className="text-xs text-gray-500">Locations</p>
+              <p className="text-xs text-muted-foreground">Locations</p>
             </div>
           </div>
         </div>

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Upload, Trash2, X, MapPin, Zap, ArrowUpDown, Wand2 } from "lucide-react";
+import { toast } from "sonner";
 import type { Photo, PhotoCategory, PhotoStats, Location } from "@/types/storage";
 import { CategoryFilter } from "@/components/gallery/category-filter";
 import { LocationFilter } from "@/components/gallery/location-filter";
@@ -54,6 +55,9 @@ export default function GalleryPage() {
 
   // 排序方式：'newest' = 最新在前，'oldest' = 最旧在前
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+
+  // 批量删除确认
+  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
 
   // 初始加载
   useEffect(() => {
@@ -232,7 +236,7 @@ export default function GalleryPage() {
 
       // 提供更详细的错误信息
       const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-      alert(`Failed to delete photo: ${errorMessage}\n\nPlease check your connection and try again.`);
+      toast.error(`Failed to delete photo: ${errorMessage}`);
       throw error;
     }
   };
@@ -263,15 +267,13 @@ export default function GalleryPage() {
     setSelectedPhotos(new Set());
   };
 
-  const handleBatchDelete = async () => {
+  const handleBatchDelete = () => {
     if (selectedPhotos.size === 0) return;
+    setShowBatchDeleteConfirm(true);
+  };
 
-    const confirmed = confirm(
-      `Are you sure you want to delete ${selectedPhotos.size} photo${selectedPhotos.size > 1 ? "s" : ""}?`
-    );
-
-    if (!confirmed) return;
-
+  const confirmBatchDelete = async () => {
+    setShowBatchDeleteConfirm(false);
     setDeleting(true);
 
     // 乐观更新：立即从 UI 中移除所有选中的照片
@@ -317,6 +319,7 @@ export default function GalleryPage() {
 
       setSelectedPhotos(new Set());
       setSelectionMode(false);
+      toast.success(`Successfully deleted ${deletedPhotos.length} photo${deletedPhotos.length > 1 ? "s" : ""}`);
     } catch (error) {
       console.error("Error deleting photos:", error);
       // 失败时恢复照片并显示错误
@@ -324,7 +327,7 @@ export default function GalleryPage() {
 
       // 提供更详细的错误信息
       const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-      alert(`Failed to delete photos: ${errorMessage}\n\nPlease check your connection and try again.`);
+      toast.error(`Failed to delete photos: ${errorMessage}`);
     } finally {
       setDeleting(false);
     }
@@ -358,7 +361,7 @@ export default function GalleryPage() {
 
     } catch (error) {
       console.error("Error sculpting story:", error);
-      alert("Failed to sculpt story. Please try again.");
+      toast.error("Failed to sculpt story. Please try again.");
       setIsSculpting(false);
     }
   };
@@ -733,6 +736,33 @@ export default function GalleryPage() {
           onClose={() => setShowTrashBinModal(false)}
           onComplete={() => fetchPhotos(true)}
         />
+
+        {/* Batch Delete Confirmation Modal */}
+        {showBatchDeleteConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-card border border-border rounded-xl p-6 shadow-2xl max-w-md w-full mx-4 animate-in fade-in zoom-in duration-200">
+              <h3 className="text-lg font-semibold text-foreground mb-2">Delete Photos</h3>
+              <p className="text-muted-foreground mb-6">
+                Are you sure you want to delete {selectedPhotos.size} photo{selectedPhotos.size > 1 ? "s" : ""}? This action cannot be undone.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowBatchDeleteConfirm(false)}
+                  className="px-4 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmBatchDelete}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AppLayout>
   );

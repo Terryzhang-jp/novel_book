@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/tailwind/ui/button";
 import { Plus, Search, Trash2, FileText } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
+import { toast } from "sonner";
 
 interface DocumentIndex {
   id: string;
@@ -23,6 +24,7 @@ export default function DocumentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -69,10 +71,15 @@ export default function DocumentsPage() {
     router.push("/documents/new");
   };
 
-  const handleDeleteDocument = async (id: string, title: string) => {
-    if (!confirm(`Are you sure you want to delete "${title}"?`)) {
-      return;
-    }
+  const handleDeleteDocument = (id: string, title: string) => {
+    setDeleteConfirm({ id, title });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+
+    const { id, title } = deleteConfirm;
+    setDeleteConfirm(null);
 
     try {
       const response = await fetch(`/api/documents/${id}`, {
@@ -81,11 +88,12 @@ export default function DocumentsPage() {
 
       if (response.ok) {
         setDocuments((prev) => prev.filter((doc) => doc.id !== id));
+        toast.success(`"${title}" has been deleted`);
       } else {
-        alert("Failed to delete document");
+        toast.error("Failed to delete document");
       }
     } catch (err) {
-      alert("An error occurred while deleting the document");
+      toast.error("An error occurred while deleting the document");
     }
   };
 
@@ -281,6 +289,35 @@ export default function DocumentsPage() {
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-xl p-6 shadow-2xl max-w-md w-full mx-4 animate-in fade-in zoom-in duration-200">
+            <h3 className="text-lg font-semibold text-foreground mb-2">Delete Document</h3>
+            <p className="text-muted-foreground mb-6">
+              Are you sure you want to delete "{deleteConfirm.title}"? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setDeleteConfirm(null)}
+                className="rounded-lg"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmDelete}
+                className="rounded-lg"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }

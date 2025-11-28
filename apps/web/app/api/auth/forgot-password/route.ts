@@ -28,8 +28,9 @@ export async function GET(request: Request) {
 
     if (!result) {
       // 为了安全，不透露用户是否存在或是否设置了安全问题
+      // 返回通用错误信息，不区分"用户不存在"和"没有安全问题"
       return NextResponse.json(
-        { error: "No security question found for this email" },
+        { error: "Unable to verify this email address" },
         { status: 404 }
       );
     }

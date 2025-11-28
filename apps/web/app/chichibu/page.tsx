@@ -67,9 +67,6 @@ export default function ChichibuPage() {
       }
 
       const data = await response.json();
-      console.log('[Chichibu] Fetched photos:', data.photos.length);
-      console.log('[Chichibu] Photos with location:', data.photos.filter((p: any) => p.location).length);
-      console.log('[Chichibu] Sample photo:', data.photos[0]);
       setPhotos(data.photos);
     } catch (error) {
       console.error('Error fetching photos:', error);

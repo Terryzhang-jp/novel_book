@@ -207,8 +207,8 @@ const HtmlTextEditor = ({
             <div
                 className="fixed z-[60] bg-white shadow-xl rounded-lg border border-gray-200 flex items-center gap-1 p-1 transition-opacity duration-200"
                 style={{
-                    top: style.top - 45, // Position above the editor
-                    left: style.left,
+                    top: y - 45, // Position above the editor
+                    left: x,
                     opacity: 1
                 }}
                 onMouseDown={(e) => e.preventDefault()} // Prevent losing focus
@@ -624,12 +624,20 @@ export default function ImmersiveJournalPage() {
         const element = page.elements.find(el => el.id === id);
         if (!element || element.type !== 'image' || !element.src) return;
 
+        // 保存旧的 blob URL 以便稍后释放
+        const oldSrc = element.src;
+
         setIsProcessingBg(true);
         toast.info("Removing background... This may take a moment.");
 
         try {
             const blob = await imglyRemoveBackground(element.src);
             const url = URL.createObjectURL(blob);
+
+            // 释放旧的 blob URL 以避免内存泄漏
+            if (oldSrc && oldSrc.startsWith('blob:')) {
+                URL.revokeObjectURL(oldSrc);
+            }
 
             // Update element with new image
             const updatedPages = pages.map(p =>
@@ -1164,7 +1172,9 @@ export default function ImmersiveJournalPage() {
                 <button
                     onClick={() => {
                         if (currentPage === pages.length) {
-                            setPages([...pages, { id: pages.length + 1, elements: [] }]);
+                            // 使用当前最大ID + 1，避免删除页面后ID冲突
+                            const maxId = Math.max(...pages.map(p => p.id));
+                            setPages([...pages, { id: maxId + 1, background: '#ffffff', elements: [] }]);
                         }
                         setCurrentPage(currentPage + 1);
                     }}
