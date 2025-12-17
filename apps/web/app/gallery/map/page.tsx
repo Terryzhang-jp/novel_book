@@ -33,36 +33,64 @@ export default function GalleryMapPage() {
   const [selectedLocation, setSelectedLocation] = useState<PhotoLocation | null>(null);
 
   /**
-   * Fetch photos from API
+   * Fetch photos from API with progressive loading
    */
   useEffect(() => {
     fetchPhotos();
   }, []);
 
   const fetchPhotos = async () => {
+    const BATCH_SIZE = 200;
+    let offset = 0;
+    let hasMore = true;
+    const collected: Photo[] = [];
+    let statsData: PhotoStats | null = null;
+    let userIdData: string | null = null;
+
     try {
       setLoading(true);
-      // 获取所有照片（用于地图显示，需要完整数据集）
-      const response = await fetch('/api/photos?limit=10000');
 
-      if (!response.ok) {
-        if (response.status === 401) {
+      // 首次请求获取 stats 和 userId
+      const firstResponse = await fetch(`/api/photos?limit=${BATCH_SIZE}&offset=0`);
+
+      if (!firstResponse.ok) {
+        if (firstResponse.status === 401) {
           router.push('/login');
           return;
         }
         throw new Error('Failed to fetch photos');
       }
 
-      const data = await response.json();
-      console.log('[Gallery Map] Fetched photos:', data.photos.length);
-      console.log('[Gallery Map] Photos with location:', data.photos.filter((p: any) => p.metadata?.location).length);
-      console.log('[Gallery Map] Sample photo:', data.photos[0]);
-      setPhotos(data.photos);
-      setStats(data.stats);
-      setUserId(data.userId);
+      const firstData = await firstResponse.json();
+      collected.push(...firstData.photos);
+      statsData = firstData.stats;
+      userIdData = firstData.userId;
+
+      setPhotos([...collected]);
+      setStats(statsData);
+      setUserId(userIdData);
+      setLoading(false); // 首批数据后即显示地图
+
+      // 如果还有更多数据，继续后台加载
+      const total = statsData?.total || 0;
+      if (collected.length < total) {
+        offset = BATCH_SIZE;
+
+        while (offset < total) {
+          const response = await fetch(`/api/photos?limit=${BATCH_SIZE}&offset=${offset}`);
+          if (!response.ok) break;
+
+          const data = await response.json();
+          if (data.photos.length === 0) break;
+
+          collected.push(...data.photos);
+          setPhotos([...collected]); // 增量更新
+
+          offset += BATCH_SIZE;
+        }
+      }
     } catch (error) {
       console.error('Error fetching photos:', error);
-    } finally {
       setLoading(false);
     }
   };

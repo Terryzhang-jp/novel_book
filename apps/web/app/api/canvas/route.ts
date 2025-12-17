@@ -1,5 +1,5 @@
 /**
- * Canvas API - 项目列表和创建
+ * Canvas API - 项目列表和创建（无限画布版本）
  *
  * GET /api/canvas - 获取用户的所有 Canvas 项目
  * POST /api/canvas - 创建新的 Canvas 项目
@@ -41,14 +41,6 @@ export async function POST(req: Request) {
     const userId = session.userId;
 
     const body: CanvasSaveRequest = await req.json();
-
-    // 验证必需字段
-    if (!body.pages || !Array.isArray(body.pages)) {
-      return NextResponse.json(
-        { error: "Pages array is required" },
-        { status: 400 }
-      );
-    }
 
     const project = await canvasStorage.create(userId, body);
 

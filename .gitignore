@@ -49,3 +49,6 @@ packages/*/dist
 /test-results/
 /playwright-report/
 /playwright/.cache/
+
+# AI artifacts
+.gemini/

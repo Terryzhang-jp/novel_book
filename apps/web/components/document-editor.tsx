@@ -27,21 +27,13 @@ import GenerativeMenuSwitch from "./tailwind/generative/generative-menu-switch";
 import { uploadFn } from "./tailwind/image-upload";
 import { TextButtons } from "./tailwind/selectors/text-buttons";
 import { slashCommand, suggestionItems } from "./tailwind/slash-command";
-import { DecorationLayer } from "./journal/decoration-layer";
-import { StickerLibrary } from "./journal/sticker-library";
-import { DecorationToolbar } from "./journal/decoration-toolbar";
-import type { DecorationElement } from "@/types/storage";
-import type { Sticker, ToolbarAction } from "./journal/types";
-import { v4 as uuidv4 } from "uuid";
 
 const extensions = [...defaultExtensions, slashCommand];
 
 interface DocumentEditorProps {
   documentId: string;
   initialContent: JSONContent;
-  initialDecorations?: DecorationElement[];
   onSave: (content: JSONContent) => Promise<void>;
-  onDecorationsChange?: (decorations: DecorationElement[]) => void;
   onEditorReady?: (editor: EditorInstance) => void;
   onTyping?: (isTyping: boolean) => void;
   zenMode?: boolean;
@@ -50,9 +42,7 @@ interface DocumentEditorProps {
 const DocumentEditor = ({
   documentId,
   initialContent,
-  initialDecorations,
   onSave,
-  onDecorationsChange,
   onEditorReady,
   onTyping,
   zenMode = true,
@@ -65,11 +55,6 @@ const DocumentEditor = ({
   const [openColor, setOpenColor] = useState(false);
   const [openLink, setOpenLink] = useState(false);
   const [openAI, setOpenAI] = useState(false);
-
-  // Decoration layer state
-  const [decorations, setDecorations] = useState<DecorationElement[]>(initialDecorations || []);
-  const [selectedDecorationId, setSelectedDecorationId] = useState<string | null>(null);
-  const [showStickerLibrary, setShowStickerLibrary] = useState(false);
 
   const debouncedUpdates = useDebouncedCallback(
     async (editor: EditorInstance) => {
@@ -199,120 +184,8 @@ const DocumentEditor = ({
     }
   };
 
-  // Handle decoration updates
-  const handleDecorationsUpdate = (newDecorations: DecorationElement[]) => {
-    setDecorations(newDecorations);
-    onDecorationsChange?.(newDecorations);
-  };
-
-  // Handle toolbar actions
-  const handleToolbarAction = (action: ToolbarAction) => {
-    switch (action.type) {
-      case 'add-sticker':
-        setShowStickerLibrary(true);
-        break;
-      case 'add-text':
-        addTextBox();
-        break;
-      case 'add-shape':
-        addShape(action.shape);
-        break;
-      case 'delete':
-        if (selectedDecorationId) {
-          handleDecorationsUpdate(decorations.filter(d => d.id !== selectedDecorationId));
-          setSelectedDecorationId(null);
-        }
-        break;
-      case 'bring-forward':
-        if (selectedDecorationId) {
-          const maxZ = Math.max(...decorations.map(d => d.zIndex), 0);
-          handleDecorationsUpdate(
-            decorations.map(d =>
-              d.id === selectedDecorationId ? { ...d, zIndex: maxZ + 1 } : d
-            )
-          );
-        }
-        break;
-      case 'send-backward':
-        if (selectedDecorationId) {
-          const minZ = Math.min(...decorations.map(d => d.zIndex), 0);
-          handleDecorationsUpdate(
-            decorations.map(d =>
-              d.id === selectedDecorationId ? { ...d, zIndex: minZ - 1 } : d
-            )
-          );
-        }
-        break;
-    }
-  };
-
-  // Add sticker
-  const handleStickerSelect = (sticker: Sticker) => {
-    const newDecoration: DecorationElement = {
-      id: uuidv4(),
-      type: 'sticker',
-      position: { x: 100, y: 100 },
-      size: { width: 60, height: 60 },
-      rotation: 0,
-      zIndex: decorations.length,
-      data: sticker,
-      createdAt: new Date().toISOString(),
-    };
-    handleDecorationsUpdate([...decorations, newDecoration]);
-  };
-
-  // Add text box
-  const addTextBox = () => {
-    const newDecoration: DecorationElement = {
-      id: uuidv4(),
-      type: 'text',
-      position: { x: 150, y: 150 },
-      size: { width: 200, height: 80 },
-      rotation: 0,
-      zIndex: decorations.length,
-      data: {
-        text: 'Double click to edit',
-        fontSize: 16,
-        fontFamily: 'sans-serif',
-        color: '#333',
-      },
-      createdAt: new Date().toISOString(),
-    };
-    handleDecorationsUpdate([...decorations, newDecoration]);
-  };
-
-  // Add shape
-  const addShape = (shape: string) => {
-    const newDecoration: DecorationElement = {
-      id: uuidv4(),
-      type: 'shape',
-      position: { x: 200, y: 200 },
-      size: { width: 100, height: 100 },
-      rotation: 0,
-      zIndex: decorations.length,
-      data: {
-        shape,
-        fillColor: '#FFD700',
-        strokeColor: '#FFA500',
-        strokeWidth: 2,
-      },
-      createdAt: new Date().toISOString(),
-    };
-    handleDecorationsUpdate([...decorations, newDecoration]);
-  };
-
   return (
     <div ref={containerRef} className={`relative w-full max-w-screen-lg ${zenMode && isTyping ? 'zen-spotlight-active' : ''}`}>
-      {/* Decoration Toolbar */}
-      {zenMode && (
-        <div className="absolute right-5 top-20 z-30">
-          <DecorationToolbar
-            selectedElement={decorations.find(d => d.id === selectedDecorationId) || null}
-            onAction={handleToolbarAction}
-          />
-        </div>
-      )}
-
       <div className="absolute right-5 top-5 z-10 mb-5 flex gap-2">
         <div className="rounded-lg bg-accent px-2 py-1 text-sm text-muted-foreground">
           {saveStatus}
@@ -344,7 +217,7 @@ const DocumentEditor = ({
               handleImageDrop(view, event, moved, uploadFn),
             attributes: {
               class:
-                "prose prose-lg dark:prose-invert prose-headings:font-title font-default focus:outline-none max-w-full",
+                "prose dark:prose-invert prose-headings:font-title font-default focus:outline-none max-w-full",
             },
           }}
           onCreate={({ editor }) => {
@@ -396,24 +269,6 @@ const DocumentEditor = ({
           </GenerativeMenuSwitch>
         </EditorContent>
       </EditorRoot>
-
-      {/* Decoration Layer */}
-      {zenMode && (
-        <DecorationLayer
-          decorations={decorations}
-          onUpdate={handleDecorationsUpdate}
-          isEditable={true}
-          selectedId={selectedDecorationId}
-          onSelect={setSelectedDecorationId}
-        />
-      )}
-
-      {/* Sticker Library Modal */}
-      <StickerLibrary
-        isOpen={showStickerLibrary}
-        onClose={() => setShowStickerLibrary(false)}
-        onSelect={handleStickerSelect}
-      />
     </div>
   );
 };

@@ -4,11 +4,11 @@ import { useState, useEffect, use, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/tailwind/ui/button";
-import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, Loader2, Sparkles, Image as ImageIcon, List } from "lucide-react";
 import DocumentEditor from "@/components/document-editor";
 import { PhotoSidebar } from "@/components/documents/photo-sidebar";
+import { TableOfContents } from "@/components/documents/table-of-contents";
 import type { EditorInstance, JSONContent } from "novel";
-import type { DecorationElement } from "@/types/storage";
 
 interface Document {
   id: string;
@@ -16,7 +16,6 @@ interface Document {
   title: string;
   content: JSONContent;
   images: string[];
-  decorations?: DecorationElement[];
   tags?: string[];
   preview?: string;
   createdAt: string;
@@ -34,8 +33,10 @@ export default function EditDocumentPage({
   const [error, setError] = useState("");
   const router = useRouter();
   const editorRef = useRef<EditorInstance | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false); // Default closed for Zen mode
+  const [sidebarOpen, setSidebarOpen] = useState(false); // Right sidebar (Photos)
+  const [tocOpen, setTocOpen] = useState(false); // Left sidebar (TOC)
   const [isHoveringTopLeft, setIsHoveringTopLeft] = useState(false);
+  const [isHoveringLeftEdge, setIsHoveringLeftEdge] = useState(false); // For TOC trigger
   const [isHoveringRightEdge, setIsHoveringRightEdge] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [zenMode, setZenMode] = useState(true); // Toggle for Zen mode
@@ -102,21 +103,11 @@ export default function EditDocumentPage({
         },
         body: JSON.stringify({
           content,
-          decorations: document.decorations,
         }),
       });
     } catch (err) {
       console.error("Failed to save content:", err);
     }
-  };
-
-  const handleDecorationsChange = async (decorations: DecorationElement[]) => {
-    if (!document) return;
-
-    // Update local state immediately
-    setDocument({ ...document, decorations });
-
-    // Debounce save to server (save will happen with content)
   };
 
   const handleEditorReady = (editor: EditorInstance) => {
@@ -194,7 +185,7 @@ export default function EditDocumentPage({
           onClick={() => setZenMode(!zenMode)}
           variant={zenMode ? "ghost" : "outline"}
           size="sm"
-          className={`flex items-center gap-2 transition-opacity duration-500 ${zenMode && !isHoveringTopLeft ? 'opacity-30 hover:opacity-100' : 'opacity-100'}`}
+          className={`flex items-center gap-2 transition-opacity duration-500 ${zenMode && !isHoveringRightEdge ? 'opacity-30 hover:opacity-100' : 'opacity-100'}`}
         >
           <Sparkles className={`w-4 h-4 ${zenMode ? 'text-yellow-600' : 'text-muted-foreground'}`} />
           <span className="text-xs">{zenMode ? 'Zen' : 'Normal'}</span>
@@ -209,6 +200,13 @@ export default function EditDocumentPage({
             onMouseEnter={() => setIsHoveringTopLeft(true)}
             onMouseLeave={() => setIsHoveringTopLeft(false)}
           />
+          {/* Left edge for TOC */}
+          <div
+            className="fixed top-0 left-0 w-16 h-full z-40"
+            onMouseEnter={() => setIsHoveringLeftEdge(true)}
+            onMouseLeave={() => setIsHoveringLeftEdge(false)}
+          />
+          {/* Right edge for Photos */}
           <div
             className="fixed top-0 right-0 w-16 h-full z-40"
             onMouseEnter={() => setIsHoveringRightEdge(true)}
@@ -220,7 +218,7 @@ export default function EditDocumentPage({
       {/* Back Button */}
       {zenMode ? (
         <div
-          className={`fixed top-8 left-8 z-50 transition-opacity duration-500 ${!isTyping && isHoveringTopLeft ? 'opacity-100' : 'opacity-0'}`}
+          className={`fixed top-8 left-8 z-50 transition-opacity duration-500 ${isHoveringTopLeft ? 'opacity-100' : 'opacity-40 hover:opacity-100'}`}
         >
           <Link href="/documents">
             <Button variant="ghost" className="flex items-center space-x-2 text-muted-foreground hover:text-foreground">
@@ -240,11 +238,58 @@ export default function EditDocumentPage({
         </div>
       )}
 
+      {/* Table of Contents - Left Sidebar */}
+      {zenMode ? (
+        <>
+          <div className={`fixed top-0 left-0 h-full z-50 transition-transform duration-500 ease-in-out ${tocOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <TableOfContents
+              editor={editorRef.current}
+              isOpen={tocOpen}
+              onOpenChange={setTocOpen}
+            />
+          </div>
+
+          {/* TOC Trigger (Left Edge) */}
+          <div
+            className={`fixed top-1/2 left-0 -translate-y-1/2 p-4 cursor-pointer transition-opacity duration-500 z-40 ${!isTyping && !tocOpen && isHoveringLeftEdge ? 'opacity-100' : 'opacity-0'}`}
+            onClick={() => setTocOpen(true)}
+          >
+            <div className="writing-mode-vertical text-muted-foreground font-serif text-sm tracking-widest hover:text-foreground">
+              OUTLINE
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Normal Mode: TOC with Toggle Button */}
+          <div className={`fixed top-0 left-0 h-full z-50 transition-transform duration-300 ${tocOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <TableOfContents
+              editor={editorRef.current}
+              isOpen={tocOpen}
+              onOpenChange={setTocOpen}
+            />
+          </div>
+          {/* TOC Toggle Button (Normal Mode) */}
+          {!tocOpen && (
+            <Button
+              onClick={() => setTocOpen(true)}
+              variant="outline"
+              size="sm"
+              className="fixed top-28 left-8 z-50 flex items-center gap-2"
+            >
+              <List className="h-4 w-4" />
+              <span>Outline</span>
+            </Button>
+          )}
+        </>
+      )}
+
       {/* Photo Sidebar */}
       {zenMode ? (
         <>
           <div className={`fixed top-0 right-0 h-full z-50 transition-transform duration-500 ease-in-out ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
             <PhotoSidebar
+              isOpen={sidebarOpen}
               onPhotoInsert={handlePhotoInsert}
               onOpenChange={setSidebarOpen}
             />
@@ -261,19 +306,35 @@ export default function EditDocumentPage({
           </div>
         </>
       ) : (
-        <div className={`fixed top-0 right-0 h-full z-50 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-          <PhotoSidebar
-            onPhotoInsert={handlePhotoInsert}
-            onOpenChange={setSidebarOpen}
-          />
-        </div>
+        <>
+          {/* Normal Mode: Photo Sidebar with Toggle Button */}
+          <div className={`fixed top-0 right-0 h-full z-50 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+            <PhotoSidebar
+              isOpen={sidebarOpen}
+              onPhotoInsert={handlePhotoInsert}
+              onOpenChange={setSidebarOpen}
+            />
+          </div>
+          {/* Photo Sidebar Toggle Button (Normal Mode) */}
+          {!sidebarOpen && (
+            <Button
+              onClick={() => setSidebarOpen(true)}
+              variant="outline"
+              size="sm"
+              className="fixed top-16 right-8 z-50 flex items-center gap-2"
+            >
+              <ImageIcon className="h-4 w-4" />
+              <span>Photos</span>
+            </Button>
+          )}
+        </>
       )}
 
       {/* Main Content */}
       <div className={zenMode ? "mx-auto max-w-[800px] px-8 py-24 transition-all duration-500" : "mx-auto max-w-screen-lg px-8 py-8 transition-all duration-500"}>
 
         {/* Title */}
-        <div className={zenMode ? `mb-12 transition-opacity duration-500 ${isTyping ? 'opacity-20 hover:opacity-100' : 'opacity-100'}` : 'mb-8'}>
+        <div className={zenMode ? 'mb-12' : 'mb-8'}>
           <input
             type="text"
             value={document.title}
@@ -284,7 +345,7 @@ export default function EditDocumentPage({
               );
             }}
             onBlur={(e) => handleTitleChange(e.target.value)}
-            className={zenMode ? "w-full border-none bg-transparent text-5xl font-serif font-bold text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-0 text-center" : "w-full border-none bg-transparent text-3xl font-bold text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0"}
+            className={zenMode ? "w-full border-none bg-transparent text-3xl font-serif font-bold text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-0 text-center" : "w-full border-none bg-transparent text-2xl font-bold text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0"}
             placeholder="Untitled Story"
           />
         </div>
@@ -294,9 +355,7 @@ export default function EditDocumentPage({
           <DocumentEditor
             documentId={document.id}
             initialContent={document.content}
-            initialDecorations={document.decorations || []}
             onSave={handleContentSave}
-            onDecorationsChange={handleDecorationsChange}
             onEditorReady={handleEditorReady}
             onTyping={zenMode ? setIsTyping : undefined}
             zenMode={zenMode}

@@ -1,12 +1,12 @@
 .ProseMirror {
   @apply p-12 px-8 sm:px-12;
-  font-family: "Charter", "Bitstream Charter", "Sitka Text", "Cambria", serif;
+  font-family: inherit;
   font-variant-ligatures: none;
-  font-size: 1.25rem;
-  /* 20px */
-  line-height: 1.8;
+  font-size: 1rem;
+  /* 16px - matches prose base */
+  line-height: 1.75;
   color: #333;
-  max-width: 70ch;
+  max-width: 65ch;
   /* Optimal reading width */
   margin: 0 auto;
   position: relative;
@@ -32,9 +32,9 @@
 .ProseMirror h2,
 .ProseMirror h3,
 .ProseMirror h4 {
-  font-family: "Charter", "Bitstream Charter", "Sitka Text", "Cambria", serif;
-  font-weight: 700;
-  margin-top: 2em;
+  font-family: inherit;
+  font-weight: 600;
+  margin-top: 1.5em;
   margin-bottom: 0.5em;
   line-height: 1.3;
 }

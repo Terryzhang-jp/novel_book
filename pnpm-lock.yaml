@@ -30,6 +30,15 @@ importers:
       '@ai-sdk/openai':
         specifier: ^1.1.0
         version: 1.1.0(zod@3.24.1)
+      '@fontsource/liu-jian-mao-cao':
+        specifier: ^5.2.8
+        version: 5.2.8
+      '@fontsource/zcool-kuaile':
+        specifier: ^5.2.7
+        version: 5.2.7
+      '@fontsource/zcool-xiaowei':
+        specifier: ^5.2.8
+        version: 5.2.8
       '@gocapsule/column-extension':
         specifier: 1.0.0-beta-3
         version: 1.0.0-beta-3(@tiptap/core@2.11.2(@tiptap/pm@2.11.2))(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)
@@ -723,6 +732,15 @@ packages:
 
   '@floating-ui/utils@0.2.9':
     resolution: {integrity: sha512-MDWhGtE+eHw5JW7lq4qhc5yRLS11ERl1c7Z6Xd0a58DozHES6EnNNwUWbMiG4J9Cgj053Bhk8zvlhFYKVhULwg==}
+
+  '@fontsource/liu-jian-mao-cao@5.2.8':
+    resolution: {integrity: sha512-5K7Lx+g0JVrr0I8aHB2BBh2fD9m2BXwIQJLzZX+SnLrFSZV1tKT2rCRf0OEuTJDRuUEJa3UiFb58GoM4PvUUUg==}
+
+  '@fontsource/zcool-kuaile@5.2.7':
+    resolution: {integrity: sha512-EjC1RtoN/4sVcvmJ8HEDQjPyfNflZrUrVx4zPANz7yOcHpgr5xGnwFe2bIl2EB/X9hElQ02KwnI0aYFAxljIew==}
+
+  '@fontsource/zcool-xiaowei@5.2.8':
+    resolution: {integrity: sha512-HppFdc8Y0djYbSpK6FbMFhEaZJwfGE5yIKLN3d5q5V239NQxm3sULJjfbMYyAMKswhG6hNTtXQkt8lOl4OmoLA==}
 
   '@gocapsule/column-extension@1.0.0-beta-3':
     resolution: {integrity: sha512-bvxbmfJS4Hgt25hfQHEU7QDdDxNtjgUXCsBsFqMES/gi1fAQJ2ZptyuEdBHPCAUG0Tuzd7X9beiitG69as/1FQ==}
@@ -3177,6 +3195,7 @@ packages:
   next@15.1.4:
     resolution: {integrity: sha512-mTaq9dwaSuwwOrcu3ebjDYObekkxRnXpuVL21zotM8qE2W0HBOdVIdg2Li9QjMEZrj73LN96LcWcz62V19FjAg==}
     engines: {node: ^18.18.0 || ^19.8.0 || >= 20.0.0}
+    deprecated: This version has a security vulnerability. Please upgrade to a patched version. See https://nextjs.org/blog/CVE-2025-66478 for more details.
     hasBin: true
     peerDependencies:
       '@opentelemetry/api': ^1.1.0
@@ -4625,6 +4644,12 @@ snapshots:
       react-dom: 18.2.0(react@18.2.0)
 
   '@floating-ui/utils@0.2.9': {}
+
+  '@fontsource/liu-jian-mao-cao@5.2.8': {}
+
+  '@fontsource/zcool-kuaile@5.2.7': {}
+
+  '@fontsource/zcool-xiaowei@5.2.8': {}
 
   '@gocapsule/column-extension@1.0.0-beta-3(@tiptap/core@2.11.2(@tiptap/pm@2.11.2))(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)':
     dependencies:

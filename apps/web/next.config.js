@@ -26,8 +26,10 @@ const nextConfig = {
             value: 'same-origin',
           },
           {
+            // Use 'credentialless' instead of 'require-corp' to allow
+            // cross-origin images from Supabase Storage without CORP headers
             key: 'Cross-Origin-Embedder-Policy',
-            value: 'require-corp',
+            value: 'credentialless',
           },
         ],
       },

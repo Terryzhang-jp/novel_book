@@ -1,10 +1,19 @@
 /**
  * Sticker Data Library
  * 
- * Built-in stickers and decorations for journal/scrapbook mode
+ * Built-in stickers for canvas/journal features
  */
 
-import type { Sticker } from '@/components/journal/types';
+/**
+ * Sticker type definition
+ */
+export interface Sticker {
+    id: string;
+    type: 'emoji' | 'svg' | 'image';
+    content: string;  // emoji character, SVG string, or image URL
+    label: string;
+    category: string;
+}
 
 export const STICKER_CATEGORIES = [
     {

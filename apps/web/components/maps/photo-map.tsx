@@ -178,6 +178,31 @@ export function PhotoMap({
     return [avgLat, avgLng];
   }, [photoLocations]);
 
+  /**
+   * Calculate optimal zoom level based on photo distribution
+   */
+  const optimalZoom = useMemo((): number => {
+    if (photoLocations.length === 0) return 4;
+    if (photoLocations.length === 1) return 15;
+
+    // Calculate bounding box
+    const lats = photoLocations.map(l => l.latitude);
+    const lngs = photoLocations.map(l => l.longitude);
+    const latSpan = Math.max(...lats) - Math.min(...lats);
+    const lngSpan = Math.max(...lngs) - Math.min(...lngs);
+
+    // Choose zoom based on span
+    const maxSpan = Math.max(latSpan, lngSpan);
+    if (maxSpan < 0.01) return 15;      // ~1km
+    if (maxSpan < 0.05) return 13;      // ~5km
+    if (maxSpan < 0.1) return 11;       // ~10km
+    if (maxSpan < 0.5) return 9;        // ~50km
+    if (maxSpan < 1) return 8;          // ~100km
+    if (maxSpan < 5) return 6;          // ~500km
+    if (maxSpan < 10) return 5;         // ~1000km
+    return 4;                           // 全国/全球
+  }, [photoLocations]);
+
   // Show loading state until client-side
   if (!isClient || !mapComponents) {
     return (
@@ -392,7 +417,7 @@ export function PhotoMap({
       ) : (
         <MapContainer
           center={mapCenter}
-          zoom={initialZoom ?? (photoLocations.length === 1 ? 13 : 4)}
+          zoom={initialZoom ?? optimalZoom}
           style={{ height: '100%', width: '100%' }}
           className="rounded-lg z-0"
           zoomControl={false}
@@ -458,20 +483,22 @@ function PhotoMarker({ location, leaflet, Marker, Popup, LocationPopupContent }:
       className: 'custom-photo-marker',
       html: `
         <div class="relative group cursor-pointer transform transition-transform hover:scale-110 hover:z-50">
-          <div class="relative w-12 h-12 md:w-16 md:h-16 bg-white p-1 rounded-lg shadow-lg border border-gray-200 overflow-hidden">
+          <!-- Larger hit area for mobile -->
+          <div class="absolute inset-[-8px]"></div>
+          <div class="relative w-14 h-14 md:w-16 md:h-16 bg-white p-1 rounded-lg shadow-lg border border-gray-200 overflow-hidden">
             <img src="${firstPhoto.fileUrl}" crossorigin="anonymous" class="w-full h-full object-cover rounded-md" alt="marker" />
           </div>
           ${count > 1 ? `
-            <div class="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold w-5 h-5 md:w-6 md:h-6 flex items-center justify-center rounded-full border-2 border-white shadow-sm">
+            <div class="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full border-2 border-white shadow-sm">
               ${count}
             </div>
           ` : ''}
           <div class="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white filter drop-shadow-sm"></div>
         </div>
       `,
-      iconSize: [48, 48], // Base size, but CSS handles it
-      iconAnchor: [24, 54], // Center bottom (approximate)
-      popupAnchor: [0, -50],
+      iconSize: [56, 56],
+      iconAnchor: [28, 62],
+      popupAnchor: [0, -56],
     });
   }, [leaflet, firstPhoto, count]);
 

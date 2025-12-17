@@ -32,22 +32,6 @@ export const SECURITY_QUESTIONS = [
 export type SecurityQuestion = (typeof SECURITY_QUESTIONS)[number];
 
 /**
- * 装饰元素类型定义（手账功能）
- */
-export type DecorationType = 'sticker' | 'text' | 'shape' | 'drawing';
-
-export interface DecorationElement {
-  id: string;                                    // 唯一标识
-  type: DecorationType;                          // 元素类型
-  position: { x: number; y: number };           // 位置（像素）
-  size: { width: number; height: number };      // 尺寸（像素）
-  rotation: number;                              // 旋转角度（度）
-  zIndex: number;                                // 层级
-  data: Record<string, any>;                     // 元素特定数据
-  createdAt: string;                             // 创建时间
-}
-
-/**
  * 文档数据模型
  */
 export interface Document {
@@ -56,7 +40,6 @@ export interface Document {
   title: string; // 文档标题
   content: JSONContent; // Tiptap JSON 内容（包含所有格式）
   images: string[]; // 关联的图片文件名列表
-  decorations?: DecorationElement[]; // 装饰元素（手账功能）
   tags?: string[]; // 标签（可选）
   preview?: string; // 预览文本（前100字）
   createdAt: string; // ISO 8601
@@ -331,25 +314,41 @@ export interface AiMagicGenerateResponse {
 }
 
 // ============================================
-// Canvas/Journal 画布相关类型
+// Canvas/Journal 画布相关类型 - 无限画布版本
 // ============================================
+
+/**
+ * Canvas 工具类型
+ */
+export type CanvasToolType = "select" | "pan";
 
 /**
  * Canvas 元素类型
  */
-export type CanvasElementType = "text" | "image";
+export type CanvasElementType = "text" | "image" | "sticker";
 
 /**
- * Canvas 页面元素
+ * 视口状态（用于无限画布的平移和缩放）
  */
-export interface CanvasPageElement {
+export interface CanvasViewport {
+  x: number; // 视口偏移 X 坐标
+  y: number; // 视口偏移 Y 坐标
+  zoom: number; // 缩放比例 (0.1 - 5)
+}
+
+/**
+ * Canvas 元素（无限画布版本）
+ * 所有元素使用全局坐标系
+ */
+export interface CanvasElement {
   id: string; // 唯一标识
   type: CanvasElementType; // 元素类型
-  x: number; // X 坐标
-  y: number; // Y 坐标
+  x: number; // 全局 X 坐标
+  y: number; // 全局 Y 坐标
   width?: number; // 宽度
   height?: number; // 高度
-  draggable: boolean; // 是否可拖拽
+  rotation?: number; // 旋转角度（度）
+  opacity?: number; // 透明度 (0-1)
 
   // 文本元素属性
   text?: string; // 纯文本内容
@@ -364,28 +363,71 @@ export interface CanvasPageElement {
 }
 
 /**
- * Canvas 页面数据
+ * 文本编辑状态
  */
-export interface CanvasPageData {
-  id: number; // 页面 ID
-  background?: string; // 背景颜色
-  elements: CanvasPageElement[]; // 页面元素
+export interface TextEditingState {
+  id: string;
+  initialHtml: string;
+  x: number; // 屏幕坐标 X
+  y: number; // 屏幕坐标 Y
+  width: number; // 缩放后的宽度
+  height: number; // 缩放后的高度
+  zoom: number; // 当前缩放比例
+  style: {
+    fontSize: number; // 原始字体大小（未缩放）
+    fontFamily: string;
+    fill: string;
+  };
 }
 
 /**
- * Canvas 项目（完整的画布数据）
+ * Canvas 配置常量
+ */
+export const CANVAS_CONFIG = {
+  MIN_ZOOM: 0.1,
+  MAX_ZOOM: 5,
+  ZOOM_STEP: 0.1,
+  GRID_SIZE: 50,
+  VIRTUAL_SIZE: 10000,
+  SAVE_DEBOUNCE_MS: 1500,
+  VIEWPORT_SAVE_DEBOUNCE_MS: 3000,
+  MAX_IMAGE_WIDTH: 400,
+  TOOLBAR_HIDE_DELAY_MS: 3000,
+  // 数据限制
+  MAX_ELEMENTS: 500, // 最大元素数量
+  MAX_PAYLOAD_SIZE_MB: 10, // 最大请求体大小 (MB)
+  MAX_IMAGE_SIZE_MB: 5, // 单张图片最大大小 (MB)
+  WARNING_ELEMENTS_THRESHOLD: 400, // 元素数量警告阈值
+} as const;
+
+/**
+ * 手写字体列表 (使用 Fontsource 本地字体)
+ */
+export const JOURNAL_FONTS = [
+  "ZCOOL XiaoWei",  // 文艺衬线
+  "ZCOOL KuaiLe",   // 可爱活泼
+  "Liu Jian Mao Cao", // 毛笔草书
+] as const;
+
+export type JournalFont = (typeof JOURNAL_FONTS)[number];
+
+/**
+ * Canvas 项目（无限画布版本）
  */
 export interface CanvasProject {
   id: string; // UUID
   userId: string; // 所属用户 ID
   title: string; // 项目标题
 
-  // 画布数据
-  currentPage: number; // 当前页码
-  pages: CanvasPageData[]; // 所有页面
+  // 无限画布数据
+  viewport: CanvasViewport; // 视口状态
+  elements: CanvasElement[]; // 所有元素（全局坐标）
 
   // 缩略图
   thumbnailUrl?: string; // 缩略图 URL
+
+  // 版本控制
+  version: number; // 乐观锁版本号，每次保存递增
 
   // 时间戳
   createdAt: string; // ISO 8601
@@ -399,7 +441,7 @@ export interface CanvasProjectIndex {
   id: string;
   title: string;
   thumbnailUrl?: string;
-  pageCount: number;
+  elementCount: number; // 元素数量（替代 pageCount）
   updatedAt: string;
 }
 
@@ -408,8 +450,24 @@ export interface CanvasProjectIndex {
  */
 export interface CanvasSaveRequest {
   title?: string;
-  currentPage: number;
-  pages: CanvasPageData[];
+  viewport?: CanvasViewport;
+  elements?: CanvasElement[];
+  expectedVersion?: number; // 乐观锁：客户端期望的版本号
+}
+
+/**
+ * 版本冲突错误
+ */
+export class VersionConflictError extends Error {
+  readonly serverVersion: number;
+  readonly clientVersion: number;
+
+  constructor(serverVersion: number, clientVersion: number) {
+    super(`Version conflict: server has v${serverVersion}, client expected v${clientVersion}`);
+    this.name = "VersionConflictError";
+    this.serverVersion = serverVersion;
+    this.clientVersion = clientVersion;
+  }
 }
 
 /**

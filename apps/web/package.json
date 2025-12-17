@@ -12,6 +12,9 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.1.0",
+    "@fontsource/liu-jian-mao-cao": "^5.2.8",
+    "@fontsource/zcool-kuaile": "^5.2.7",
+    "@fontsource/zcool-xiaowei": "^5.2.8",
     "@gocapsule/column-extension": "1.0.0-beta-3",
     "@google/genai": "^1.30.0",
     "@imgly/background-removal": "^1.7.0",

@@ -2,6 +2,11 @@ import "@/styles/globals.css";
 import "@/styles/prosemirror.css";
 import 'katex/dist/katex.min.css';
 
+// Fontsource 本地字体
+import '@fontsource/zcool-kuaile';
+import '@fontsource/zcool-xiaowei';
+import '@fontsource/liu-jian-mao-cao';
+
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import Providers from "./providers";
@@ -34,13 +39,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&family=Noto+Serif+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+        {/* 不再需要 Google Fonts CDN，使用本地 Fontsource */}
       </head>
-      <body>
+      <body className="font-xiaowei">
         <Providers>{children}</Providers>
       </body>
     </html>
   );
 }
+

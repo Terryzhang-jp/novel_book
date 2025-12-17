@@ -69,6 +69,63 @@ export async function getHistoryIndex(
 }
 
 /**
+ * 从 base64 data URL 提取数据
+ */
+function extractBase64Data(dataUrl: string): {
+  data: string;
+  mimeType: string;
+  extension: string;
+} | null {
+  const match = dataUrl.match(
+    /^data:image\/(png|jpeg|jpg|webp|gif);base64,(.+)$/
+  );
+  if (!match) return null;
+
+  const type = match[1];
+  const data = match[2];
+  const mimeType = type === "jpg" ? "image/jpeg" : `image/${type}`;
+  const extension = type === "jpg" ? "jpeg" : type;
+
+  return { data, mimeType, extension };
+}
+
+/**
+ * 上传 AI 生成的图片到 Storage
+ */
+async function uploadResultImage(
+  userId: string,
+  historyId: string,
+  resultImage: string
+): Promise<string> {
+  const extracted = extractBase64Data(resultImage);
+  if (!extracted) {
+    throw new Error("Invalid image data URL");
+  }
+
+  const { data, mimeType, extension } = extracted;
+  const buffer = Buffer.from(data, "base64");
+  const storagePath = `${userId}/ai-magic/${historyId}.${extension}`;
+
+  const { error } = await supabaseAdmin.storage
+    .from("ai-magic-images")
+    .upload(storagePath, buffer, {
+      contentType: mimeType,
+      upsert: true,
+    });
+
+  if (error) {
+    throw new Error(`Failed to upload AI magic image: ${error.message}`);
+  }
+
+  // 获取公开 URL
+  const { data: urlData } = supabaseAdmin.storage
+    .from("ai-magic-images")
+    .getPublicUrl(storagePath);
+
+  return urlData.publicUrl;
+}
+
+/**
  * 添加新的历史记录
  */
 export async function addHistoryItem(
@@ -77,6 +134,12 @@ export async function addHistoryItem(
 ): Promise<AiMagicHistoryItem> {
   const historyId = uuidv4();
   const now = new Date().toISOString();
+
+  // 上传图片到 Storage，获取 URL
+  let resultImageUrl = item.resultImage;
+  if (item.resultImage && item.resultImage.startsWith("data:image/")) {
+    resultImageUrl = await uploadResultImage(userId, historyId, item.resultImage);
+  }
 
   const { data, error } = await supabaseAdmin
     .from('ai_magic_history')
@@ -88,7 +151,7 @@ export async function addHistoryItem(
       style_image_count: item.styleImageCount,
       optimized_prompt: item.optimizedPrompt,
       reasoning: item.reasoning || null,
-      result_image: item.resultImage,
+      result_image: resultImageUrl, // 现在存储的是 URL 而不是 base64
       model: item.model,
       created_at: now,
     })

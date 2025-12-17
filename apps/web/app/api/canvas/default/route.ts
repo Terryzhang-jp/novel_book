@@ -24,11 +24,12 @@ export async function GET(req: Request) {
     const project = await canvasStorage.getOrCreateDefault(userId);
 
     return NextResponse.json({ project });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Canvas default error:", error);
+    const status = error?.code === "UNAUTHORIZED" || error?.statusCode === 401 ? 401 : 500;
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to get default project" },
-      { status: error instanceof Error && error.message.includes("Unauthorized") ? 401 : 500 }
+      { status }
     );
   }
 }

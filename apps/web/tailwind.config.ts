@@ -20,21 +20,39 @@ const config = {
     },
     extend: {
       fontFamily: {
+        // 主字体 - ZCOOL XiaoWei (文艺衬线)
         sans: [
-          'Inter',
-          'Noto Sans SC',
+          'ZCOOL XiaoWei',
           '-apple-system',
           'BlinkMacSystemFont',
           'Segoe UI',
-          'Roboto',
           'sans-serif',
         ],
+        // 衬线字体 - ZCOOL XiaoWei
         serif: [
-          'Noto Serif SC',
+          'ZCOOL XiaoWei',
           'Georgia',
-          'Cambria',
-          'Times New Roman',
           'serif',
+        ],
+        // 手写/草书字体 - Liu Jian Mao Cao
+        cursive: [
+          'Liu Jian Mao Cao',
+          'cursive',
+        ],
+        // 快乐字体 - ZCOOL KuaiLe (可爱风格)
+        kuaile: [
+          'ZCOOL KuaiLe',
+          'sans-serif',
+        ],
+        // 小薇字体 - ZCOOL XiaoWei
+        xiaowei: [
+          'ZCOOL XiaoWei',
+          'serif',
+        ],
+        // 毛草字体 - Liu Jian Mao Cao
+        maocao: [
+          'Liu Jian Mao Cao',
+          'cursive',
         ],
         mono: [
           'JetBrainsMono',
@@ -44,8 +62,8 @@ const config = {
           'Courier New',
           'monospace',
         ],
-        title: ['Noto Serif SC', 'serif'],
-        default: ['Inter', 'Noto Sans SC', 'sans-serif'],
+        title: ['ZCOOL XiaoWei', 'serif'],
+        default: ['ZCOOL XiaoWei', 'sans-serif'],
       },
       typography: {
         DEFAULT: {

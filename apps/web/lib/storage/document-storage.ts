@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
-import type { Document, DocumentIndex, JSONContent, DecorationElement } from "@/types/storage";
+import type { Document, DocumentIndex, JSONContent } from "@/types/storage";
 import { NotFoundError, UnauthorizedError } from "./errors";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -14,8 +14,7 @@ export class DocumentStorage {
   async create(
     userId: string,
     title: string,
-    content?: JSONContent,
-    decorations?: DecorationElement[]
+    content?: JSONContent
   ): Promise<Document> {
     const defaultContent: JSONContent = {
       type: "doc",
@@ -34,7 +33,6 @@ export class DocumentStorage {
         title,
         content: docContent,
         images: content ? this.extractImages(content) : [],
-        decorations: decorations || [],
         tags: [],
         preview: content ? this.generatePreview(content) : "",
         is_public: false,
@@ -54,7 +52,6 @@ export class DocumentStorage {
       title: data.title,
       content: data.content,
       images: data.images,
-      decorations: data.decorations || [],
       tags: data.tags,
       preview: data.preview,
       createdAt: data.created_at,
@@ -82,7 +79,6 @@ export class DocumentStorage {
       title: data.title,
       content: data.content,
       images: data.images,
-      decorations: data.decorations || [],
       tags: data.tags,
       preview: data.preview,
       createdAt: data.created_at,
@@ -148,7 +144,6 @@ export class DocumentStorage {
       updateData.images = this.extractImages(data.content);
       updateData.preview = this.generatePreview(data.content);
     }
-    if (data.decorations !== undefined) updateData.decorations = data.decorations;
     if (data.tags !== undefined) updateData.tags = data.tags;
 
     const { data: updated, error } = await supabaseAdmin
@@ -169,7 +164,6 @@ export class DocumentStorage {
       title: updated.title,
       content: updated.content,
       images: updated.images,
-      decorations: updated.decorations || [],
       tags: updated.tags,
       preview: updated.preview,
       createdAt: updated.created_at,

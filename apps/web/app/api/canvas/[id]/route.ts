@@ -8,8 +8,9 @@
 
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/session";
-import { canvasStorage } from "@/lib/storage/canvas-storage";
+import { canvasStorage, DataValidationError } from "@/lib/storage/canvas-storage";
 import type { CanvasSaveRequest } from "@/types/storage";
+import { VersionConflictError } from "@/types/storage";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -69,6 +70,32 @@ export async function PUT(req: Request, { params }: RouteParams) {
     return NextResponse.json({ project });
   } catch (error) {
     console.error("Canvas update error:", error);
+
+    // 版本冲突错误 - 返回 409 和服务器最新数据
+    if (error instanceof VersionConflictError) {
+      const latestProject = await canvasStorage.findById((await params).id);
+      return NextResponse.json(
+        {
+          error: "Version conflict",
+          code: "VERSION_CONFLICT",
+          serverVersion: error.serverVersion,
+          clientVersion: error.clientVersion,
+          latestProject,
+        },
+        { status: 409 }
+      );
+    }
+
+    // 数据验证错误 - 返回 400
+    if (error instanceof DataValidationError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: error.code,
+        },
+        { status: 400 }
+      );
+    }
 
     if (error instanceof Error) {
       if (error.message.includes("not found")) {

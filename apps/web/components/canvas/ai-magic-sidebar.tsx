@@ -128,24 +128,37 @@ export function AiMagicSidebar({ onInsertImage }: AiMagicSidebarProps) {
       animate={{ x: 0 }}
       exit={{ x: "100%" }}
       transition={{ type: "spring", damping: 25, stiffness: 200 }}
-      className="fixed right-0 top-0 bottom-0 w-[400px] bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200"
+      className="fixed right-0 top-0 bottom-0 w-[380px] z-50 flex flex-col"
+      style={{
+        background: "rgba(255, 255, 255, 0.75)",
+        backdropFilter: "blur(20px) saturate(180%)",
+        WebkitBackdropFilter: "blur(20px) saturate(180%)",
+        borderLeft: "1px solid rgba(255, 255, 255, 0.3)",
+        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.12)",
+      }}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-purple-50">
+      {/* Header - Frosted Glass */}
+      <div
+        className="flex items-center justify-between px-5 py-4"
+        style={{
+          background: "rgba(255, 255, 255, 0.5)",
+          borderBottom: "1px solid rgba(0, 0, 0, 0.06)",
+        }}
+      >
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl text-white">
-            <Sparkles className="w-5 h-5" />
+          <div className="p-2 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl text-white shadow-lg shadow-purple-500/25">
+            <Sparkles className="w-4 h-4" />
           </div>
           <div>
-            <h2 className="font-semibold text-gray-900">AI Magic</h2>
-            <p className="text-xs text-gray-500">Powered by Gemini</p>
+            <h2 className="font-semibold text-gray-800 text-sm">AI Magic</h2>
+            <p className="text-[10px] text-gray-500">Powered by Gemini</p>
           </div>
         </div>
         <button
           onClick={closeSidebar}
-          className="p-2 hover:bg-white/50 rounded-lg transition-colors"
+          className="p-2 hover:bg-black/5 rounded-lg transition-colors"
         >
-          <X className="w-5 h-5 text-gray-500" />
+          <X className="w-4 h-4 text-gray-400" />
         </button>
       </div>
 
@@ -181,24 +194,24 @@ export function AiMagicSidebar({ onInsertImage }: AiMagicSidebarProps) {
             >
               {/* User Prompt */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-xs font-medium text-gray-600 mb-2">
                   Describe what you want to create
                 </label>
                 <textarea
                   value={userPrompt}
                   onChange={(e) => setUserPrompt(e.target.value)}
                   placeholder="e.g., A person standing on a beach during sunset with warm golden light..."
-                  className="w-full h-32 p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none text-sm"
+                  className="w-full h-28 p-3 bg-white/60 border border-gray-200/60 rounded-xl focus:ring-2 focus:ring-purple-500/50 focus:border-purple-300 focus:bg-white/80 resize-none text-sm placeholder:text-gray-400 transition-all"
                 />
               </div>
 
               {/* Input Images */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                    <ImageIcon className="w-4 h-4" />
+                  <label className="text-xs font-medium text-gray-600 flex items-center gap-2">
+                    <ImageIcon className="w-3.5 h-3.5" />
                     Input Images
-                    <span className="text-gray-400 font-normal">
+                    <span className="text-gray-400 font-normal text-[10px]">
                       (optional, max 6)
                     </span>
                   </label>
@@ -278,16 +291,16 @@ export function AiMagicSidebar({ onInsertImage }: AiMagicSidebarProps) {
               <button
                 onClick={optimize}
                 disabled={!userPrompt.trim() || isOptimizing}
-                className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-medium rounded-xl hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-medium rounded-xl hover:from-violet-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20"
               >
                 {isOptimizing ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin" />
                     Optimizing...
                   </>
                 ) : (
                   <>
-                    <Wand2 className="w-5 h-5" />
+                    <Wand2 className="w-4 h-4" />
                     Optimize Prompt
                   </>
                 )}
