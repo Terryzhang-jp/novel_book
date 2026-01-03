@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/tailwind/ui/button";
 import { ArrowLeft, Loader2, Sparkles, Image as ImageIcon, List } from "lucide-react";
-import DocumentEditor from "@/components/document-editor";
+import DocumentEditorWithAI from "@/components/document-editor-with-ai";
 import { PhotoSidebar } from "@/components/documents/photo-sidebar";
 import { TableOfContents } from "@/components/documents/table-of-contents";
 import type { EditorInstance, JSONContent } from "novel";
@@ -352,13 +352,14 @@ export default function EditDocumentPage({
 
         {/* Editor */}
         <main>
-          <DocumentEditor
+          <DocumentEditorWithAI
             documentId={document.id}
             initialContent={document.content}
             onSave={handleContentSave}
             onEditorReady={handleEditorReady}
             onTyping={zenMode ? setIsTyping : undefined}
             zenMode={zenMode}
+            aiPartnerEnabled={true}
           />
         </main>
       </div>

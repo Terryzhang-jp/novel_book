@@ -41,3 +41,18 @@ data/
 # 上传的图片（不要提交到 git）
 public/images/*
 !public/images/.gitkeep
+
+# SQL scripts（包含本地开发脚本）
+scripts/
+
+# Supabase 本地配置和迁移
+supabase/
+
+# 部署脚本（包含敏感信息）
+deploy-to-vercel.sh
+
+# 内部文档
+MIGRATION_INSTRUCTIONS.md
+SUPABASE_MIGRATION.md
+MINIMAL_DESIGN.md
+PHOTO_EDITOR_OPTIMIZATION.md

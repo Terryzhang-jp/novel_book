@@ -58,6 +58,21 @@ export async function GET(req: Request, { params }: RouteParams) {
  * 更新项目
  */
 export async function PUT(req: Request, { params }: RouteParams) {
+  return handleUpdate(req, params);
+}
+
+/**
+ * POST /api/canvas/[id]
+ * 更新项目 (用于 sendBeacon 紧急保存，因为 sendBeacon 只支持 POST)
+ */
+export async function POST(req: Request, { params }: RouteParams) {
+  return handleUpdate(req, params);
+}
+
+/**
+ * 共享的更新处理函数
+ */
+async function handleUpdate(req: Request, params: RouteParams["params"]) {
   try {
     const session = await requireAuth(req);
     const userId = session.userId;
@@ -65,11 +80,27 @@ export async function PUT(req: Request, { params }: RouteParams) {
 
     const body: Partial<CanvasSaveRequest> = await req.json();
 
+    console.log("[API Canvas Update] Request:", {
+      id,
+      userId,
+      isMagazineMode: (body as any).isMagazineMode,
+      pagesCount: (body as any).pages?.length,
+      elementsCount: body.elements?.length,
+      pageDetails: (body as any).pages?.map((p: any, i: number) => ({
+        index: i,
+        pageId: p?.id,
+        elementsCount: p?.elements?.length ?? 'undefined',
+      })),
+    });
+
     const project = await canvasStorage.update(id, userId, body);
+
+    console.log("[API Canvas Update] Success, version:", project.version);
 
     return NextResponse.json({ project });
   } catch (error) {
-    console.error("Canvas update error:", error);
+    console.error("[API Canvas Update] ERROR:", error);
+    console.error("[API Canvas Update] Error stack:", error instanceof Error ? error.stack : "no stack");
 
     // 版本冲突错误 - 返回 409 和服务器最新数据
     if (error instanceof VersionConflictError) {

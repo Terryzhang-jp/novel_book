@@ -2,144 +2,54 @@
  * useCanvasAutoSave Hook
  *
  * Handles automatic saving with:
- * - Debounced save (1.5s for elements, 3s for viewport)
- * - Retry on failure
+ * - Debounced save
  * - Save on window unload
- * - Version conflict detection
+ * - Uses store's saveToServer for proper magazine mode support
  */
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import { useCanvasStore } from "../canvas-store";
 import { CANVAS_CONFIG } from "@/types/storage";
-import { toast } from "sonner";
 
 interface UseCanvasAutoSaveOptions {
   enabled?: boolean;
-  maxRetries?: number;
-  retryDelay?: number;
 }
 
 export function useCanvasAutoSave(options: UseCanvasAutoSaveOptions = {}) {
-  const { enabled = true, maxRetries = 3, retryDelay = 2000 } = options;
+  const { enabled = true } = options;
 
   const {
     projectId,
-    elements,
-    viewport,
     hasUnsavedChanges,
     saveStatus,
     saveToServer,
-    setSaveStatus,
     isLoading,
-    hasConflict,
-    projectVersion,
-    resolveConflict,
+    // Magazine mode
+    isMagazineMode,
+    pages,
+    elements,
+    viewport,
   } = useCanvasStore();
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const retryCountRef = useRef(0);
-  const lastSavedRef = useRef({ elements: "", viewport: "" });
 
-  // Check if data has actually changed
-  const hasDataChanged = useCallback(() => {
-    const elementsStr = JSON.stringify(elements);
-    const viewportStr = JSON.stringify(viewport);
-
-    const changed =
-      elementsStr !== lastSavedRef.current.elements ||
-      viewportStr !== lastSavedRef.current.viewport;
-
-    if (changed) {
-      lastSavedRef.current = { elements: elementsStr, viewport: viewportStr };
-    }
-
-    return changed;
-  }, [elements, viewport]);
-
-  // Save with retry logic
-  const saveWithRetry = useCallback(async () => {
-    if (!projectId || !enabled || hasConflict) return;
-
-    // Check if data actually changed
-    if (!hasDataChanged()) {
-      return;
-    }
-
-    setSaveStatus("saving");
-
-    try {
-      const response = await fetch(`/api/canvas/${projectId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ elements, viewport, expectedVersion: projectVersion }),
-      });
-
-      // 处理版本冲突
-      if (response.status === 409) {
-        const data = await response.json();
-        setSaveStatus("error");
-
-        // 存储服务器数据
-        if (data.latestProject) {
-          (window as any).__serverCanvasData = {
-            elements: data.latestProject.elements,
-            viewport: data.latestProject.viewport,
-            version: data.latestProject.version,
-          };
-        }
-
-        // 显示冲突提示
-        toast.error("检测到版本冲突，其他地方有更新", {
-          description: "请选择保留本地更改或使用服务器数据",
-          duration: 10000,
-          action: {
-            label: "使用服务器数据",
-            onClick: () => resolveConflict(true),
-          },
-        });
-
-        retryCountRef.current = 0;
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error("Failed to save");
-      }
-
-      const data = await response.json();
-      // 更新本地版本号
-      useCanvasStore.getState().setServerData({
-        elements: data.project.elements,
-        viewport: data.project.viewport,
-        version: data.project.version,
-      });
-
-      setSaveStatus("saved");
-      retryCountRef.current = 0;
-    } catch (error) {
-      console.error("Save error:", error);
-
-      if (retryCountRef.current < maxRetries) {
-        retryCountRef.current++;
-        setSaveStatus("saving");
-
-        // Schedule retry
-        setTimeout(() => {
-          saveWithRetry();
-        }, retryDelay);
-
-        toast.warning(`保存失败，正在重试... (${retryCountRef.current}/${maxRetries})`);
-      } else {
-        setSaveStatus("error");
-        retryCountRef.current = 0;
-        toast.error("多次保存失败，请检查网络连接");
-      }
-    }
-  }, [projectId, elements, viewport, enabled, maxRetries, retryDelay, setSaveStatus, hasDataChanged, hasConflict, projectVersion, resolveConflict]);
+  // 使用 store 的 saveToServer，它会正确处理杂志模式
+  const triggerSave = async () => {
+    if (!projectId || !enabled) return;
+    await saveToServer();
+  };
 
   // Debounced auto-save
   useEffect(() => {
+    console.log("[AutoSave] Effect triggered", {
+      enabled, isLoading, projectId, hasUnsavedChanges,
+      elementsCount: elements.length,
+      isMagazineMode,
+      pagesCount: pages?.length
+    });
+
     if (!enabled || isLoading || !projectId || !hasUnsavedChanges) {
+      console.log("[AutoSave] Skipping save - conditions not met");
       return;
     }
 
@@ -148,9 +58,9 @@ export function useCanvasAutoSave(options: UseCanvasAutoSaveOptions = {}) {
       clearTimeout(saveTimeoutRef.current);
     }
 
-    // Set new timeout
+    // Set new timeout - 使用 store 的 saveToServer
     saveTimeoutRef.current = setTimeout(() => {
-      saveWithRetry();
+      triggerSave();
     }, CANVAS_CONFIG.SAVE_DEBOUNCE_MS);
 
     return () => {
@@ -158,19 +68,42 @@ export function useCanvasAutoSave(options: UseCanvasAutoSaveOptions = {}) {
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [elements, viewport, enabled, isLoading, projectId, hasUnsavedChanges, saveWithRetry]);
+    // 依赖项：杂志模式下监听 pages 和 elements，非杂志模式只监听 elements
+  }, [isMagazineMode ? pages : null, elements, viewport, enabled, isLoading, projectId, hasUnsavedChanges]);
 
-  // Save before unload
+  // Save before unload - try to save synchronously
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasUnsavedChanges) {
-        // Try to save synchronously (not guaranteed to complete)
-        navigator.sendBeacon?.(
-          `/api/canvas/${projectId}`,
-          JSON.stringify({ elements, viewport })
-        );
+      if (hasUnsavedChanges && projectId) {
+        // Try to save using sendBeacon for reliable delivery
+        const state = useCanvasStore.getState();
+        const { elements, viewport, projectVersion, isMagazineMode, pages, currentPageIndex, magazineViewMode } = state;
 
-        // Show browser warning
+        const saveData: Record<string, unknown> = {
+          viewport,
+          expectedVersion: projectVersion,
+          isMagazineMode,
+        };
+
+        if (isMagazineMode) {
+          let pagesToSave = pages;
+          if (magazineViewMode === "edit") {
+            pagesToSave = pages.map((page, idx) =>
+              idx === currentPageIndex ? { ...page, elements } : page
+            );
+          }
+          saveData.pages = pagesToSave;
+          saveData.currentPageIndex = currentPageIndex;
+          saveData.elements = [];
+        } else {
+          saveData.elements = elements;
+        }
+
+        // Use sendBeacon for reliable delivery during page unload
+        const blob = new Blob([JSON.stringify(saveData)], { type: 'application/json' });
+        navigator.sendBeacon(`/api/canvas/${projectId}`, blob);
+
+        // Also show browser warning
         e.preventDefault();
         e.returnValue = "";
       }
@@ -181,13 +114,11 @@ export function useCanvasAutoSave(options: UseCanvasAutoSaveOptions = {}) {
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [projectId, elements, viewport, hasUnsavedChanges]);
+  }, [hasUnsavedChanges, projectId]);
 
   return {
     saveStatus,
     hasUnsavedChanges,
-    hasConflict,
-    saveNow: saveWithRetry,
-    resolveConflict,
+    saveNow: triggerSave,
   };
 }

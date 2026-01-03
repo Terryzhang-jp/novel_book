@@ -1,11 +1,9 @@
 /**
- * Infinite Canvas Journal
+ * Canvas Journal Page
  *
- * A full-featured canvas for creating visual journals with:
- * - Infinite pan/zoom
- * - Text, images, and stickers
- * - AI-powered image generation
- * - Auto-save to Supabase
+ * Supports two modes:
+ * - Magazine Mode: A4 pages with dual-spread preview and single-page editing
+ * - Infinite Canvas Mode: Traditional infinite pan/zoom canvas (legacy)
  */
 
 "use client";
@@ -41,6 +39,7 @@ import {
   CanvasHints,
 } from "@/components/canvas/toolbars";
 import { StickerPicker } from "@/components/canvas/sticker-picker";
+import { DocumentPicker } from "@/components/canvas/document-picker";
 import { AiSpotlight } from "@/components/canvas/ai-spotlight";
 import { AiMagicSidebar } from "@/components/canvas/ai-magic-sidebar";
 import { CanvasPhotoSidebar } from "@/components/canvas/canvas-photo-sidebar";
@@ -49,11 +48,51 @@ import { CanvasErrorBoundary } from "@/components/canvas/canvas-error-boundary";
 import { CanvasEmptyState } from "@/components/canvas/canvas-empty-state";
 import { CanvasLoading } from "@/components/canvas/canvas-loading";
 
+// Magazine Mode Components
+import { MagazineCanvas } from "@/components/canvas/magazine";
+
 // Types
 import type { CanvasElement, TextEditingState } from "@/types/storage";
 import { CANVAS_CONFIG } from "@/types/storage";
 
-export default function InfiniteCanvasPage() {
+/**
+ * Main Canvas Page Component
+ * Routes to Magazine or Infinite Canvas based on project mode
+ */
+export default function CanvasPage() {
+  const { isLoading, loadProject, isMagazineMode } = useCanvasStore();
+
+  // Load project on mount
+  useEffect(() => {
+    loadProject();
+  }, [loadProject]);
+
+  // Show loading state
+  if (isLoading) {
+    return <CanvasLoading />;
+  }
+
+  // Route to appropriate canvas mode
+  if (isMagazineMode) {
+    return (
+      <CanvasErrorBoundary>
+        <MagazineCanvas />
+      </CanvasErrorBoundary>
+    );
+  }
+
+  // Fallback to infinite canvas mode
+  return (
+    <CanvasErrorBoundary>
+      <InfiniteCanvas />
+    </CanvasErrorBoundary>
+  );
+}
+
+/**
+ * Infinite Canvas Component (Legacy Mode)
+ */
+function InfiniteCanvas() {
   // Refs
   const stageRef = useRef<Konva.Stage>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
@@ -67,8 +106,6 @@ export default function InfiniteCanvasPage() {
 
   // Store
   const {
-    isLoading,
-    loadProject,
     viewport,
     setViewport,
     zoomToPoint,
@@ -101,6 +138,9 @@ export default function InfiniteCanvasPage() {
     startMarqueeSelect,
     updateMarqueeSelect,
     endMarqueeSelect,
+    // Document picker
+    showDocumentPicker,
+    toggleDocumentPicker,
   } = useCanvasStore();
 
   // AI Magic
@@ -111,11 +151,6 @@ export default function InfiniteCanvasPage() {
   useCanvasAutoSave();
   const toolbarVisible = useToolbarVisibility();
   useFontLoader();
-
-  // Load project on mount
-  useEffect(() => {
-    loadProject();
-  }, [loadProject]);
 
   // Update stage size on resize
   useEffect(() => {
@@ -389,6 +424,27 @@ export default function InfiniteCanvasPage() {
     [addElement, getCanvasCenter, stageSize]
   );
 
+  // Handle document text selection
+  const handleDocumentTextSelect = useCallback(
+    (text: string) => {
+      const center = getCanvasCenter(stageSize.width, stageSize.height);
+      addElement({
+        id: `doc-text-${Date.now()}`,
+        type: "text",
+        x: center.x - 150,
+        y: center.y - 25,
+        text,
+        html: text,
+        width: 300,
+        fontSize: 24,
+        fontFamily: "Noto Sans SC",
+        fill: "#333333",
+      });
+      toggleDocumentPicker();
+    },
+    [addElement, getCanvasCenter, stageSize, toggleDocumentPicker]
+  );
+
   const handleTextDblClick = useCallback(
     (element: CanvasElement) => {
       const stage = stageRef.current;
@@ -507,10 +563,6 @@ export default function InfiniteCanvasPage() {
 
   // ==================== Render ====================
 
-  if (isLoading) {
-    return <CanvasLoading />;
-  }
-
   const selectedElement = getSelectedElement();
 
   return (
@@ -543,6 +595,7 @@ export default function InfiniteCanvasPage() {
           onAddText={handleAddText}
           onToggleStickerPicker={() => setShowStickerPicker(!showStickerPicker)}
           onOpenAiMagic={openAiMagicSidebar}
+          onOpenDocumentPicker={toggleDocumentPicker}
           visible={toolbarVisible}
         />
 
@@ -561,6 +614,14 @@ export default function InfiniteCanvasPage() {
         {/* Sticker Picker */}
         {showStickerPicker && (
           <StickerPicker onSelect={handleAddSticker} onClose={() => setShowStickerPicker(false)} />
+        )}
+
+        {/* Document Picker */}
+        {showDocumentPicker && (
+          <DocumentPicker
+            onSelect={handleDocumentTextSelect}
+            onClose={toggleDocumentPicker}
+          />
         )}
 
         {/* AI Spotlight */}

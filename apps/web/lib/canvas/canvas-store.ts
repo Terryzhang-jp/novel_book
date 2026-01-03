@@ -18,8 +18,17 @@ import type {
   CanvasToolType,
   TextEditingState,
   CanvasProject,
+  MagazinePage,
+  MagazineViewMode,
 } from "@/types/storage";
-import { CANVAS_CONFIG } from "@/types/storage";
+import { CANVAS_CONFIG, A4_CONFIG } from "@/types/storage";
+import { v4 as uuidv4 } from "uuid";
+
+// ============================================
+// 模块级保存锁 - 完全同步，比 store 状态更可靠
+// ============================================
+let _saveInProgress = false;
+let _pendingSave = false;
 
 // ============================================
 // Types
@@ -45,8 +54,15 @@ interface CanvasState {
   // Viewport
   viewport: CanvasViewport;
 
-  // Elements
+  // Elements (无限画布模式使用)
   elements: CanvasElement[];
+
+  // Magazine Mode (杂志模式)
+  isMagazineMode: boolean;
+  magazineViewMode: MagazineViewMode; // 'preview' | 'edit'
+  pages: MagazinePage[];
+  currentPageIndex: number; // 当前编辑的页面索引
+  currentSpreadIndex: number; // 当前显示的 spread 索引 (0=封面, 1=1-2页, 2=3-4页...)
 
   // Selection & Editing
   selectedId: string | null;
@@ -67,6 +83,7 @@ interface CanvasState {
   showToolbar: boolean;
   showStickerPicker: boolean;
   showPhotoSidebar: boolean;
+  showDocumentPicker: boolean;
 
   // Processing
   isProcessingBg: boolean;
@@ -74,8 +91,6 @@ interface CanvasState {
   // Save
   saveStatus: SaveStatus;
   hasUnsavedChanges: boolean;
-  hasConflict: boolean; // 是否有版本冲突
-  serverConflictData: { elements: CanvasElement[]; viewport: CanvasViewport; version: number } | null; // 冲突时服务器数据
 
   // History
   history: HistoryEntry[];
@@ -143,6 +158,8 @@ interface CanvasActions {
   setShowToolbar: (show: boolean) => void;
   setShowStickerPicker: (show: boolean) => void;
   setShowPhotoSidebar: (show: boolean) => void;
+  setShowDocumentPicker: (show: boolean) => void;
+  toggleDocumentPicker: () => void;
 
   // Processing
   setIsProcessingBg: (processing: boolean) => void;
@@ -151,7 +168,6 @@ interface CanvasActions {
   setSaveStatus: (status: SaveStatus) => void;
   markUnsaved: () => void;
   saveToServer: () => Promise<void>;
-  resolveConflict: (useServer: boolean) => void; // 解决版本冲突
   setServerData: (data: { elements: CanvasElement[]; viewport: CanvasViewport; version: number }) => void;
 
   // History actions
@@ -175,6 +191,26 @@ interface CanvasActions {
   // Helpers
   getCanvasCenter: (stageWidth: number, stageHeight: number) => { x: number; y: number };
   getSelectedElement: () => CanvasElement | undefined;
+
+  // Magazine Mode Actions
+  setMagazineMode: (enabled: boolean) => void;
+  setMagazineViewMode: (mode: MagazineViewMode) => void;
+  enterEditMode: (pageIndex: number) => void;
+  exitEditMode: () => void;
+
+  // Page Management
+  addPage: (afterIndex?: number) => void;
+  deletePage: (pageIndex: number) => void;
+  reorderPages: (fromIndex: number, toIndex: number) => void;
+  updatePageElements: (pageIndex: number, elements: CanvasElement[]) => void;
+
+  // Spread Navigation
+  nextSpread: () => void;
+  prevSpread: () => void;
+  goToSpread: (spreadIndex: number) => void;
+  getTotalSpreads: () => number;
+  getSpreadPages: (spreadIndex: number) => [MagazinePage | null, MagazinePage | null];
+  getCurrentPageElements: () => CanvasElement[];
 }
 
 type CanvasStore = CanvasState & CanvasActions;
@@ -193,6 +229,13 @@ const initialState: CanvasState = {
   loadError: null,
   viewport: DEFAULT_VIEWPORT,
   elements: [],
+  // Magazine Mode
+  isMagazineMode: true, // 默认启用杂志模式
+  magazineViewMode: "preview",
+  pages: [],
+  currentPageIndex: 0,
+  currentSpreadIndex: 0,
+  // Selection
   selectedId: null,
   selectedIds: [],
   editingState: null,
@@ -201,15 +244,14 @@ const initialState: CanvasState = {
   marqueeRect: null,
   tool: "select",
   isPanning: false,
-  showGrid: true,
+  showGrid: false, // 杂志模式默认不显示网格
   showToolbar: true,
   showStickerPicker: false,
   showPhotoSidebar: false,
+  showDocumentPicker: false,
   isProcessingBg: false,
   saveStatus: "idle",
   hasUnsavedChanges: false,
-  hasConflict: false,
-  serverConflictData: null,
   history: [],
   historyIndex: -1,
   lastHistoryPushTime: 0,
@@ -241,16 +283,45 @@ export const useCanvasStore = create<CanvasStore>()(
         const data = await response.json();
         const project: CanvasProject = data.project;
 
+        console.log("[Store.loadProject] Loaded from server:", {
+          projectId: project.id,
+          isMagazineMode: project.isMagazineMode,
+          pagesCount: project.pages?.length,
+          pageElementsCounts: project.pages?.map(p => p.elements?.length),
+          elementsCount: project.elements?.length,
+          version: project.version,
+        });
+
+        // 判断是否为杂志模式
+        const isMagazineMode = project.isMagazineMode ?? true; // 默认为杂志模式
+        let pages = project.pages || [];
+
+        // 如果是杂志模式但没有页面，创建一个初始封面页
+        if (isMagazineMode && pages.length === 0) {
+          pages = [
+            {
+              id: uuidv4(),
+              index: 0,
+              elements: [],
+            },
+          ];
+        }
+
         set({
           projectId: project.id,
           projectTitle: project.title,
           projectVersion: project.version || 1,
           viewport: project.viewport || DEFAULT_VIEWPORT,
           elements: project.elements || [],
+          // Magazine Mode
+          isMagazineMode,
+          pages,
+          currentPageIndex: project.currentPageIndex || 0,
+          currentSpreadIndex: 0,
+          magazineViewMode: "preview",
           isLoading: false,
           saveStatus: "saved",
           hasUnsavedChanges: false,
-          hasConflict: false,
           // Initialize history with loaded state
           history: [
             {
@@ -596,6 +667,14 @@ export const useCanvasStore = create<CanvasStore>()(
       set({ showPhotoSidebar: show });
     },
 
+    setShowDocumentPicker: (show) => {
+      set({ showDocumentPicker: show });
+    },
+
+    toggleDocumentPicker: () => {
+      set((state) => ({ showDocumentPicker: !state.showDocumentPicker }));
+    },
+
     // ==========================================
     // Processing
     // ==========================================
@@ -617,34 +696,58 @@ export const useCanvasStore = create<CanvasStore>()(
     },
 
     saveToServer: async () => {
-      const { projectId, elements, viewport, hasUnsavedChanges, projectVersion } = get();
+      const { projectId, hasUnsavedChanges } = get();
 
-      if (!projectId || !hasUnsavedChanges) return;
+      if (!projectId || !hasUnsavedChanges) {
+        return;
+      }
 
+      // 模块级锁 - 完全同步，保证串行化
+      if (_saveInProgress) {
+        _pendingSave = true;
+        return;
+      }
+
+      _saveInProgress = true;
+      _pendingSave = false;
       set({ saveStatus: "saving" });
 
       try {
+        const {
+          elements,
+          viewport,
+          isMagazineMode,
+          pages,
+          currentPageIndex,
+          magazineViewMode,
+        } = get();
+
+        // 构建保存数据
+        const saveData: Record<string, unknown> = {
+          viewport,
+          isMagazineMode,
+        };
+
+        if (isMagazineMode) {
+          // 杂志模式：保存 pages
+          let pagesToSave = pages;
+          if (magazineViewMode === "edit") {
+            pagesToSave = pages.map((page, idx) =>
+              idx === currentPageIndex ? { ...page, elements } : page
+            );
+          }
+          saveData.pages = pagesToSave;
+          saveData.currentPageIndex = currentPageIndex;
+          saveData.elements = [];
+        } else {
+          saveData.elements = elements;
+        }
+
         const response = await fetch(`/api/canvas/${projectId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ elements, viewport, expectedVersion: projectVersion }),
+          body: JSON.stringify(saveData),
         });
-
-        if (response.status === 409) {
-          // 版本冲突
-          const data = await response.json();
-          set({
-            saveStatus: "error",
-            hasConflict: true,
-            // 存储服务器数据到 store 而不是 window
-            serverConflictData: data.latestProject ? {
-              elements: data.latestProject.elements,
-              viewport: data.latestProject.viewport,
-              version: data.latestProject.version,
-            } : null,
-          });
-          return;
-        }
 
         if (!response.ok) {
           throw new Error("Failed to save");
@@ -654,53 +757,43 @@ export const useCanvasStore = create<CanvasStore>()(
         set({
           saveStatus: "saved",
           hasUnsavedChanges: false,
-          hasConflict: false,
-          projectVersion: data.project.version, // 更新版本号
+          projectVersion: data.project.version,
         });
       } catch (error) {
         console.error("Save error:", error);
         set({ saveStatus: "error" });
-      }
-    },
+      } finally {
+        _saveInProgress = false;
 
-    // 解决版本冲突
-    resolveConflict: (useServer: boolean) => {
-      const { serverConflictData } = get();
-
-      if (useServer && serverConflictData) {
-        // 使用服务器数据
-        set({
-          elements: serverConflictData.elements,
-          viewport: serverConflictData.viewport,
-          projectVersion: serverConflictData.version,
-          hasConflict: false,
-          hasUnsavedChanges: false,
-          saveStatus: "saved",
-          serverConflictData: null,
-        });
-      } else {
-        // 使用本地数据，强制保存（不带版本检查）
-        const newVersion = serverConflictData ? serverConflictData.version : get().projectVersion;
-
-        set({
-          projectVersion: newVersion,
-          hasConflict: false,
-          serverConflictData: null,
-        });
-
-        // 重新触发保存
-        get().saveToServer();
+        // 检查待处理的保存
+        if (_pendingSave && get().hasUnsavedChanges) {
+          _pendingSave = false;
+          setTimeout(() => get().saveToServer(), 50);
+        }
       }
     },
 
     // 设置服务器数据
+    // 注意：杂志编辑模式下不覆盖 elements，因为 elements 是当前编辑页面的临时数据
     setServerData: (data) => {
+      const { isMagazineMode, magazineViewMode } = get();
+
+      // 杂志编辑模式下，不覆盖 elements（避免丢失当前编辑内容）
+      if (isMagazineMode && magazineViewMode === "edit") {
+        set({
+          viewport: data.viewport,
+          projectVersion: data.version,
+          hasUnsavedChanges: false,
+          saveStatus: "saved",
+        });
+        return;
+      }
+
       set({
         elements: data.elements,
         viewport: data.viewport,
         projectVersion: data.version,
         hasUnsavedChanges: false,
-        hasConflict: false,
         saveStatus: "saved",
       });
     },
@@ -849,6 +942,200 @@ export const useCanvasStore = create<CanvasStore>()(
       const { elements, selectedId } = get();
       return elements.find((el) => el.id === selectedId);
     },
+
+    // ==========================================
+    // Magazine Mode Actions
+    // ==========================================
+
+    setMagazineMode: (enabled) => {
+      set({ isMagazineMode: enabled });
+      if (enabled && get().pages.length === 0) {
+        // 创建初始封面页
+        set({
+          pages: [{ id: uuidv4(), index: 0, elements: [] }],
+        });
+      }
+    },
+
+    setMagazineViewMode: (mode) => {
+      set({ magazineViewMode: mode });
+    },
+
+    enterEditMode: (pageIndex) => {
+      const { pages } = get();
+      if (pageIndex >= 0 && pageIndex < pages.length) {
+        set({
+          magazineViewMode: "edit",
+          currentPageIndex: pageIndex,
+          // 将当前页面的元素设置为活动元素（用于编辑）
+          elements: pages[pageIndex].elements,
+          selectedId: null,
+          selectedIds: [],
+        });
+      }
+    },
+
+    exitEditMode: () => {
+      const { pages, currentPageIndex, elements } = get();
+      // 保存当前编辑的元素回到页面
+      const updatedPages = pages.map((page, idx) =>
+        idx === currentPageIndex ? { ...page, elements } : page
+      );
+
+      set({
+        magazineViewMode: "preview",
+        pages: updatedPages,
+        elements: [], // 清空活动元素
+        selectedId: null,
+        selectedIds: [],
+      });
+      get().markUnsaved();
+    },
+
+    // ==========================================
+    // Page Management
+    // ==========================================
+
+    addPage: (afterIndex) => {
+      const { pages } = get();
+      const insertIndex = afterIndex !== undefined ? afterIndex + 1 : pages.length;
+
+      const newPage: MagazinePage = {
+        id: uuidv4(),
+        index: insertIndex,
+        elements: [],
+      };
+
+      const newPages = [...pages];
+      newPages.splice(insertIndex, 0, newPage);
+
+      // 更新后续页面的 index
+      const updatedPages = newPages.map((page, idx) => ({
+        ...page,
+        index: idx,
+      }));
+
+      set({ pages: updatedPages });
+      get().pushHistory();
+      get().markUnsaved();
+    },
+
+    deletePage: (pageIndex) => {
+      const { pages } = get();
+      if (pages.length <= 1) return; // 至少保留一页
+
+      const newPages = pages.filter((_, idx) => idx !== pageIndex);
+      // 更新 index
+      const updatedPages = newPages.map((page, idx) => ({
+        ...page,
+        index: idx,
+      }));
+
+      // 调整当前 spread
+      const totalSpreads = get().getTotalSpreads();
+      const currentSpread = get().currentSpreadIndex;
+
+      set({
+        pages: updatedPages,
+        currentSpreadIndex: Math.min(currentSpread, Math.max(0, totalSpreads - 1)),
+      });
+      get().pushHistory();
+      get().markUnsaved();
+    },
+
+    reorderPages: (fromIndex, toIndex) => {
+      const { pages } = get();
+      if (fromIndex === toIndex) return;
+
+      const newPages = [...pages];
+      const [removed] = newPages.splice(fromIndex, 1);
+      newPages.splice(toIndex, 0, removed);
+
+      // 更新 index
+      const updatedPages = newPages.map((page, idx) => ({
+        ...page,
+        index: idx,
+      }));
+
+      set({ pages: updatedPages });
+      get().pushHistory();
+      get().markUnsaved();
+    },
+
+    updatePageElements: (pageIndex, elements) => {
+      const { pages } = get();
+      const updatedPages = pages.map((page, idx) =>
+        idx === pageIndex ? { ...page, elements } : page
+      );
+      set({ pages: updatedPages });
+      get().markUnsaved();
+    },
+
+    // ==========================================
+    // Spread Navigation
+    // ==========================================
+
+    getTotalSpreads: () => {
+      const { pages } = get();
+      if (pages.length === 0) return 0;
+      if (pages.length === 1) return 1; // 只有封面
+      // 封面占一个 spread，其余页面两两配对
+      return 1 + Math.ceil((pages.length - 1) / 2);
+    },
+
+    getSpreadPages: (spreadIndex) => {
+      const { pages } = get();
+
+      if (spreadIndex === 0) {
+        // 封面独占一个 spread
+        return [pages[0] || null, null];
+      }
+
+      // 其他 spread：左右两页配对
+      const leftPageIndex = spreadIndex * 2 - 1;
+      const rightPageIndex = leftPageIndex + 1;
+
+      return [
+        pages[leftPageIndex] || null,
+        pages[rightPageIndex] || null,
+      ];
+    },
+
+    nextSpread: () => {
+      const totalSpreads = get().getTotalSpreads();
+      const current = get().currentSpreadIndex;
+      if (current < totalSpreads - 1) {
+        set({ currentSpreadIndex: current + 1 });
+      }
+    },
+
+    prevSpread: () => {
+      const current = get().currentSpreadIndex;
+      if (current > 0) {
+        set({ currentSpreadIndex: current - 1 });
+      }
+    },
+
+    goToSpread: (spreadIndex) => {
+      const totalSpreads = get().getTotalSpreads();
+      if (spreadIndex >= 0 && spreadIndex < totalSpreads) {
+        set({ currentSpreadIndex: spreadIndex });
+      }
+    },
+
+    getCurrentPageElements: () => {
+      const { isMagazineMode, magazineViewMode, pages, currentPageIndex, elements } = get();
+
+      if (!isMagazineMode) {
+        return elements;
+      }
+
+      if (magazineViewMode === "edit" && pages[currentPageIndex]) {
+        return elements; // 编辑模式下使用活动元素
+      }
+
+      return pages[currentPageIndex]?.elements || [];
+    },
   }))
 );
 
@@ -865,5 +1152,11 @@ export const selectShowGrid = (state: CanvasStore) => state.showGrid;
 export const selectShowToolbar = (state: CanvasStore) => state.showToolbar;
 export const selectIsLoading = (state: CanvasStore) => state.isLoading;
 export const selectEditingState = (state: CanvasStore) => state.editingState;
-export const selectHasConflict = (state: CanvasStore) => state.hasConflict;
 export const selectProjectVersion = (state: CanvasStore) => state.projectVersion;
+
+// Magazine Mode Selectors
+export const selectIsMagazineMode = (state: CanvasStore) => state.isMagazineMode;
+export const selectMagazineViewMode = (state: CanvasStore) => state.magazineViewMode;
+export const selectPages = (state: CanvasStore) => state.pages;
+export const selectCurrentPageIndex = (state: CanvasStore) => state.currentPageIndex;
+export const selectCurrentSpreadIndex = (state: CanvasStore) => state.currentSpreadIndex;

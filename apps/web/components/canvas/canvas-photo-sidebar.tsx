@@ -5,20 +5,23 @@
  * - Toggle open/closed with smooth animation
  * - Grid view of photos with category filter
  * - Click to add photo to canvas center
+ * - Infinite scroll for loading more photos
  * - Loading and empty states
  */
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   ChevronLeft,
   ChevronRight,
   Image as ImageIcon,
   Loader2,
 } from "lucide-react";
-import type { Photo, PhotoCategory } from "@/types/storage";
+import type { Photo, PhotoCategory, PhotoStats } from "@/types/storage";
 import { CANVAS_CONFIG } from "@/types/storage";
+
+const PAGE_SIZE = 50;
 
 interface CanvasPhotoSidebarProps {
   isOpen: boolean;
@@ -33,34 +36,105 @@ export function CanvasPhotoSidebar({
 }: CanvasPhotoSidebarProps) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<PhotoCategory | "all">("all");
+  const [stats, setStats] = useState<PhotoStats | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
 
-  // Fetch photos on mount
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isLoadingRef = useRef(false); // Sync loading flag to prevent race conditions
+  const isMountedRef = useRef(false);
+
+  // Fetch photos when category changes (including initial mount)
   useEffect(() => {
-    fetchPhotos();
-  }, []);
+    // Skip the first mount since we'll handle it in the same effect
+    if (!isMountedRef.current) {
+      isMountedRef.current = true;
+    }
 
-  const fetchPhotos = async () => {
+    setPhotos([]);
+    setOffset(0);
+    setHasMore(true);
+    fetchPhotos(true, 0);
+  }, [selectedCategory]);
+
+  const fetchPhotos = async (isInitial = false, customOffset?: number) => {
+    // Prevent concurrent fetches using sync ref
+    if (isLoadingRef.current && !isInitial) return;
+
+    const currentOffset = customOffset ?? offset;
+    isLoadingRef.current = true;
+
     try {
-      setLoading(true);
-      const response = await fetch("/api/photos");
+      if (isInitial) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+
+      const params = new URLSearchParams({
+        limit: PAGE_SIZE.toString(),
+        offset: currentOffset.toString(),
+      });
+
+      if (selectedCategory !== "all") {
+        params.set("category", selectedCategory);
+      }
+
+      const response = await fetch(`/api/photos?${params}`);
 
       if (response.ok) {
         const data = await response.json();
-        setPhotos(data.photos || []);
+        const newPhotos: Photo[] = data.photos || [];
+
+        if (isInitial) {
+          setPhotos(newPhotos);
+        } else {
+          // Deduplicate when appending
+          setPhotos(prev => {
+            const existingIds = new Set(prev.map(p => p.id));
+            const uniqueNew = newPhotos.filter(p => !existingIds.has(p.id));
+            return [...prev, ...uniqueNew];
+          });
+        }
+
+        setStats(data.stats || null);
+        setHasMore(newPhotos.length === PAGE_SIZE);
+        setOffset(currentOffset + newPhotos.length);
       }
     } catch (error) {
       console.error("Failed to fetch photos:", error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+      isLoadingRef.current = false;
     }
   };
 
-  // Filter photos by category
-  const filteredPhotos =
-    selectedCategory === "all"
-      ? photos
-      : photos.filter((photo) => photo.category === selectedCategory);
+  // Handle scroll for infinite loading
+  const handleScroll = useCallback(() => {
+    const container = scrollContainerRef.current;
+    // Use ref for immediate check to prevent race conditions
+    if (!container || isLoadingRef.current || !hasMore) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    // Load more when within 100px of bottom
+    if (scrollHeight - scrollTop - clientHeight < 100) {
+      fetchPhotos(false);
+    }
+  }, [hasMore, offset, selectedCategory]);
+
+  // Photos are already filtered by category from API
+  // No client-side filtering needed
+  const filteredPhotos = photos;
+
+  // Calculate total for current view
+  const getTotalForCategory = () => {
+    if (!stats) return photos.length;
+    if (selectedCategory === "all") return stats.total;
+    return stats.byCategory[selectedCategory] || 0;
+  };
 
   // Handle photo click - load image to get dimensions, then add to canvas
   const handlePhotoClick = useCallback(
@@ -157,7 +231,11 @@ export function CanvasPhotoSidebar({
         </div>
 
         {/* Photos Grid */}
-        <div className="flex-1 overflow-y-auto p-3">
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto p-3"
+        >
           {loading ? (
             <div className="flex flex-col items-center justify-center py-16">
               <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-2" />
@@ -176,50 +254,67 @@ export function CanvasPhotoSidebar({
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2">
-              {filteredPhotos.map((photo) => (
-                <button
-                  key={photo.id}
-                  type="button"
-                  onClick={() => handlePhotoClick(photo)}
-                  className="relative aspect-square bg-gray-100 rounded-lg overflow-hidden transition-all group cursor-pointer hover:ring-2 hover:ring-blue-500 hover:shadow-lg"
-                  title={`Add to canvas: ${photo.originalName || photo.fileName}`}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={photo.fileUrl}
-                    alt={photo.originalName || photo.fileName}
-                    className="absolute inset-0 w-full h-full object-cover"
-                    loading="lazy"
-                  />
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                {filteredPhotos.map((photo) => (
+                  <button
+                    key={photo.id}
+                    type="button"
+                    onClick={() => handlePhotoClick(photo)}
+                    className="relative aspect-square bg-gray-100 rounded-lg overflow-hidden transition-all group cursor-pointer hover:ring-2 hover:ring-blue-500 hover:shadow-lg"
+                    title={`Add to canvas: ${photo.originalName || photo.fileName}`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo.thumbnailUrl || photo.fileUrl}
+                      alt={photo.originalName || photo.fileName}
+                      className="absolute inset-0 w-full h-full object-cover"
+                      loading="lazy"
+                    />
 
-                  {/* Hover overlay */}
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-full">
-                        Add
+                    {/* Hover overlay */}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-full">
+                          Add
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Category badge */}
-                  <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-black/60 text-white text-[10px] rounded">
-                    {photo.category === "time-location" && "📍⏰"}
-                    {photo.category === "time-only" && "⏰"}
-                    {photo.category === "location-only" && "📍"}
-                    {photo.category === "neither" && "📷"}
-                  </div>
-                </button>
-              ))}
-            </div>
+                    {/* Category badge */}
+                    <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-black/60 text-white text-[10px] rounded">
+                      {photo.category === "time-location" && "📍⏰"}
+                      {photo.category === "time-only" && "⏰"}
+                      {photo.category === "location-only" && "📍"}
+                      {photo.category === "neither" && "📷"}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Loading more indicator */}
+              {loadingMore && (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-5 h-5 animate-spin text-blue-500 mr-2" />
+                  <span className="text-sm text-gray-500">Loading more...</span>
+                </div>
+              )}
+
+              {/* End of list indicator */}
+              {!hasMore && filteredPhotos.length > 0 && (
+                <div className="text-center py-4 text-xs text-gray-400">
+                  All photos loaded
+                </div>
+              )}
+            </>
           )}
         </div>
 
         {/* Footer with photo count */}
         <div className="p-3 border-t border-gray-200 bg-gray-50 flex-shrink-0">
           <p className="text-xs text-gray-500 text-center">
-            {filteredPhotos.length} photo{filteredPhotos.length !== 1 ? "s" : ""}
-            {selectedCategory !== "all" && ` in this category`}
+            {filteredPhotos.length} / {getTotalForCategory()} photo{getTotalForCategory() !== 1 ? "s" : ""}
+            {selectedCategory !== "all" && ` in ${selectedCategory.replace("-", " ")}`}
           </p>
         </div>
       </div>

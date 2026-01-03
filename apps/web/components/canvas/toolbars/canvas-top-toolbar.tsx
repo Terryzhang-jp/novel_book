@@ -24,6 +24,7 @@ import {
   Images,
   CircleDot,
   ArrowLeft,
+  FileText,
 } from "lucide-react";
 import { useCanvasStore } from "@/lib/canvas/canvas-store";
 import type { CanvasToolType } from "@/types/storage";
@@ -33,6 +34,7 @@ interface CanvasTopToolbarProps {
   onAddText: () => void;
   onToggleStickerPicker: () => void;
   onOpenAiMagic: () => void;
+  onOpenDocumentPicker: () => void;
   visible: boolean;
 }
 
@@ -41,6 +43,7 @@ function CanvasTopToolbarComponent({
   onAddText,
   onToggleStickerPicker,
   onOpenAiMagic,
+  onOpenDocumentPicker,
   visible,
 }: CanvasTopToolbarProps) {
   const {
@@ -51,6 +54,7 @@ function CanvasTopToolbarComponent({
     showStickerPicker,
     showPhotoSidebar,
     setShowPhotoSidebar,
+    showDocumentPicker,
     saveStatus,
     undo,
     redo,
@@ -64,11 +68,10 @@ function CanvasTopToolbarComponent({
 
   return (
     <div
-      className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 transition-all duration-500 ${
-        visible
-          ? "opacity-100 translate-y-0"
-          : "opacity-0 -translate-y-6 pointer-events-none"
-      }`}
+      className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 transition-all duration-500 ${visible
+        ? "opacity-100 translate-y-0"
+        : "opacity-0 -translate-y-6 pointer-events-none"
+        }`}
     >
       <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-lg px-4 py-2.5 flex items-center gap-2 border border-amber-100/60">
         {/* 返回按钮 */}
@@ -167,6 +170,15 @@ function CanvasTopToolbarComponent({
             gradient="from-pink-500 to-rose-500"
           />
 
+          {/* 文档 */}
+          <CreativeToolButton
+            icon={<FileText className="w-4 h-4" />}
+            label="文档"
+            onClick={onOpenDocumentPicker}
+            active={showDocumentPicker}
+            gradient="from-indigo-500 to-blue-500"
+          />
+
           {/* AI 魔法 */}
           <CreativeToolButton
             icon={<Sparkles className="w-4 h-4" />}
@@ -200,13 +212,12 @@ function IconButton({ icon, onClick, disabled, active, title }: IconButtonProps)
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`p-2 rounded-xl transition-all duration-200 ${
-        disabled
-          ? "opacity-30 cursor-not-allowed"
-          : active
-            ? "bg-amber-100 text-amber-700"
-            : "hover:bg-gray-100 text-gray-600 hover:text-gray-800"
-      }`}
+      className={`p-2 rounded-xl transition-all duration-200 ${disabled
+        ? "opacity-30 cursor-not-allowed"
+        : active
+          ? "bg-amber-100 text-amber-700"
+          : "hover:bg-gray-100 text-gray-600 hover:text-gray-800"
+        }`}
       title={title}
     >
       {icon}
@@ -226,11 +237,10 @@ function ToolButton({ icon, active, onClick, title }: ToolButtonProps) {
   return (
     <button
       onClick={onClick}
-      className={`p-2 rounded-lg transition-all duration-200 ${
-        active
-          ? "bg-white shadow-sm text-gray-800"
-          : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
-      }`}
+      className={`p-2 rounded-lg transition-all duration-200 ${active
+        ? "bg-white shadow-sm text-gray-800"
+        : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
+        }`}
       title={title}
     >
       {icon}
@@ -259,13 +269,12 @@ function CreativeToolButton({
   return (
     <button
       onClick={onClick}
-      className={`group relative flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all duration-300 ${
-        active
-          ? "bg-gradient-to-r " + gradient + " text-white shadow-md"
-          : special
-            ? "bg-gradient-to-r " + gradient + " text-white shadow-sm hover:shadow-md hover:scale-105"
-            : "bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 hover:border-gray-300 hover:shadow-sm"
-      }`}
+      className={`group relative flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all duration-300 ${active
+        ? "bg-gradient-to-r " + gradient + " text-white shadow-md"
+        : special
+          ? "bg-gradient-to-r " + gradient + " text-white shadow-sm hover:shadow-md hover:scale-105"
+          : "bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 hover:border-gray-300 hover:shadow-sm"
+        }`}
     >
       <span className={`transition-transform duration-200 ${!active && !special ? "group-hover:scale-110" : ""}`}>
         {icon}

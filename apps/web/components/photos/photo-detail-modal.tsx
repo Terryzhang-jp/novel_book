@@ -18,11 +18,12 @@ import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { X, ChevronLeft, ChevronRight, Camera, Loader2, BookOpen, FileText, Edit2, FileImage } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Camera, Loader2, BookOpen, FileText, Edit2, FileImage, Download } from 'lucide-react';
 import { LocationAssignment } from './location-assignment';
 import { DateTimeAssignment } from './datetime-assignment';
 import type { Photo } from '@/types/storage';
 import { extractTextFromJSON, isJSONContentEmpty } from '@/lib/utils/json-content';
+import { downloadPhoto } from '@/lib/utils/photo-download';
 
 interface PhotoDetailModalProps {
   isOpen: boolean;
@@ -55,6 +56,7 @@ export function PhotoDetailModal({
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   /**
    * Fetch full photo details
@@ -120,6 +122,22 @@ export function PhotoDetailModal({
   };
 
   /**
+   * Handle photo download
+   */
+  const handleDownload = async () => {
+    if (!photo || isDownloading) return;
+
+    setIsDownloading(true);
+    try {
+      await downloadPhoto(photo);
+    } catch (err) {
+      console.error('Failed to download photo:', err);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  /**
    * Format date for display
    */
   const formatDate = (dateString?: string): string | null => {
@@ -151,6 +169,24 @@ export function PhotoDetailModal({
     <div className="fixed inset-0 z-[9999] bg-background/95 backdrop-blur-sm">
       {/* Action Buttons */}
       <div className="fixed top-4 right-4 z-[10000] flex gap-2">
+        {/* Download Button */}
+        {photo && (
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={isDownloading}
+            className="p-2 bg-card border border-border rounded-full hover:bg-accent transition-colors disabled:opacity-50"
+            aria-label="Download photo"
+            title="下载照片"
+          >
+            {isDownloading ? (
+              <Loader2 className="w-6 h-6 animate-spin" />
+            ) : (
+              <Download className="w-6 h-6" />
+            )}
+          </button>
+        )}
+
         {/* Generate Poster Button */}
         {photo && (
           <button

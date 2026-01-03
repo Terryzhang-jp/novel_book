@@ -3,15 +3,14 @@
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/tailwind/ui/button";
 import { LogOut } from "lucide-react";
+import { authClient } from "@/lib/auth-client";
 
 export default function LogoutButton() {
   const router = useRouter();
 
   const handleLogout = async () => {
     try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-      });
+      await authClient.signOut();
       router.push("/login");
       router.refresh();
     } catch (error) {

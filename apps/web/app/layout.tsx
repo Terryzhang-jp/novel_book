@@ -3,9 +3,22 @@ import "@/styles/prosemirror.css";
 import 'katex/dist/katex.min.css';
 
 // Fontsource 本地字体
+// 中文字体
 import '@fontsource/zcool-kuaile';
 import '@fontsource/zcool-xiaowei';
 import '@fontsource/liu-jian-mao-cao';
+import '@fontsource/noto-sans-sc';
+import '@fontsource/noto-serif-sc';
+import '@fontsource/ma-shan-zheng';
+
+// 日语字体
+import '@fontsource/noto-sans-jp';
+import '@fontsource/noto-serif-jp';
+import '@fontsource/zen-maru-gothic';
+
+// 英文字体
+import '@fontsource/playfair-display';
+import '@fontsource/dancing-script';
 
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";

@@ -100,6 +100,7 @@ export interface Photo {
   fileName: string; // 存储的文件名
   originalName: string; // 原始文件名
   fileUrl: string; // Supabase Storage 公开 URL
+  thumbnailUrl?: string; // 缩略图 URL (300x300)
 
   // 地点库关联（优先级高于EXIF）
   locationId?: string; // 关联的地点库ID
@@ -401,27 +402,74 @@ export const CANVAS_CONFIG = {
 } as const;
 
 /**
- * 手写字体列表 (使用 Fontsource 本地字体)
+ * A4 页面配置（杂志模式）
+ * A4 纸张比例: 210mm x 297mm ≈ 1:1.414
+ */
+export const A4_CONFIG = {
+  WIDTH_MM: 210,
+  HEIGHT_MM: 297,
+  ASPECT_RATIO: 210 / 297, // ~0.707
+  // 预览模式单页尺寸（用于双页展开视图）
+  PREVIEW_WIDTH: 360,
+  PREVIEW_HEIGHT: 509,
+  // 编辑模式页面尺寸
+  EDIT_WIDTH: 800,
+  EDIT_HEIGHT: 1132,
+} as const;
+
+/**
+ * 杂志页面
+ * 每个页面包含独立的元素数组，元素坐标相对于页面 (0,0 = 页面左上角)
+ */
+export interface MagazinePage {
+  id: string; // UUID
+  index: number; // 页面顺序 (0 = 封面)
+  elements: CanvasElement[]; // 页面内的元素（坐标相对于页面）
+}
+
+/**
+ * 杂志视图模式
+ */
+export type MagazineViewMode = "preview" | "edit";
+
+/**
+ * Canvas 字体列表 (使用 Fontsource 本地字体)
  */
 export const JOURNAL_FONTS = [
-  "ZCOOL XiaoWei",  // 文艺衬线
-  "ZCOOL KuaiLe",   // 可爱活泼
-  "Liu Jian Mao Cao", // 毛笔草书
+  // 中文字体
+  "ZCOOL XiaoWei",      // 文艺衬线
+  "ZCOOL KuaiLe",       // 可爱活泼
+  "Liu Jian Mao Cao",   // 毛笔草书
+  "Noto Sans SC",       // 思源黑体
+  "Noto Serif SC",      // 思源宋体
+  "Ma Shan Zheng",      // 楷书
+  // 日语字体
+  "Noto Sans JP",       // 思源黑体日文
+  "Noto Serif JP",      // 思源明朝
+  "Zen Maru Gothic",    // 圆体
+  // 英文字体
+  "Playfair Display",   // 优雅衬线
+  "Dancing Script",     // 手写体
 ] as const;
 
 export type JournalFont = (typeof JOURNAL_FONTS)[number];
 
 /**
- * Canvas 项目（无限画布版本）
+ * Canvas 项目（支持无限画布和杂志模式）
  */
 export interface CanvasProject {
   id: string; // UUID
   userId: string; // 所属用户 ID
   title: string; // 项目标题
 
-  // 无限画布数据
+  // 无限画布数据（isMagazineMode = false 时使用）
   viewport: CanvasViewport; // 视口状态
   elements: CanvasElement[]; // 所有元素（全局坐标）
+
+  // 杂志模式数据（isMagazineMode = true 时使用）
+  isMagazineMode?: boolean; // 是否为杂志模式（默认 false = 无限画布）
+  pages?: MagazinePage[]; // 杂志页面数组
+  currentPageIndex?: number; // 当前编辑的页面索引
 
   // 缩略图
   thumbnailUrl?: string; // 缩略图 URL

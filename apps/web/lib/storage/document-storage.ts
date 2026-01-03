@@ -187,6 +187,29 @@ export class DocumentStorage {
       );
     }
 
+    // 删除关联的图片文件
+    if (doc.content) {
+      try {
+        const { extractImageUrls, parseSupabaseImagePath } = await import('@/lib/utils/image-cleanup');
+        const { deleteFile } = await import('@/lib/supabase/storage');
+
+        const imageUrls = extractImageUrls(doc.content);
+        for (const url of imageUrls) {
+          const parsed = parseSupabaseImagePath(url);
+          if (parsed) {
+            try {
+              await deleteFile(parsed.bucket, parsed.path);
+              console.log(`Deleted image on document delete: ${parsed.bucket}/${parsed.path}`);
+            } catch (error) {
+              console.error(`Failed to delete image: ${url}`, error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error during image cleanup on document delete:', error);
+      }
+    }
+
     const { error } = await supabaseAdmin
       .from('documents')
       .delete()
@@ -196,9 +219,6 @@ export class DocumentStorage {
     if (error) {
       throw new Error(`Failed to delete document: ${error.message}`);
     }
-
-    // TODO: 删除关联的图片文件
-    // 这里可以遍历 doc.images 数组，删除对应的图片
   }
 
   /**

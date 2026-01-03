@@ -130,7 +130,14 @@ export default function UploadPage() {
         `Compressed ${file.name}: ${(file.size / 1024 / 1024).toFixed(2)}MB → ${(compressed.size / 1024 / 1024).toFixed(2)}MB`
       );
 
-      return compressed;
+      // imageCompression returns a Blob with name="blob", we need to convert it back
+      // to a File with the original filename to preserve extension and name
+      const compressedFile = new File([compressed], file.name, {
+        type: compressed.type,
+        lastModified: file.lastModified,
+      });
+
+      return compressedFile;
     } catch (error) {
       console.error("Compression error:", error);
       return file;  // Return original on error

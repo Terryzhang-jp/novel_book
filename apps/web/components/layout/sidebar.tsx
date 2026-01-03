@@ -18,6 +18,7 @@ import {
   Palette,
 } from "lucide-react";
 import { Button } from "@/components/tailwind/ui/button";
+import { authClient } from "@/lib/auth-client";
 
 interface NavItem {
   name: string;
@@ -95,7 +96,7 @@ export function Sidebar({ userEmail, userName }: SidebarProps) {
 
   const handleLogout = async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await authClient.signOut();
       router.push("/login");
       router.refresh();
     } catch (err) {

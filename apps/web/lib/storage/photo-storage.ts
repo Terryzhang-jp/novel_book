@@ -1,10 +1,15 @@
 import { v4 as uuidv4 } from "uuid";
 import exifr from "exifr";
+import sharp from "sharp";
 import type { JSONContent } from "novel";
 import type { Photo, PhotoIndex, PhotoCategory, PhotoStats } from "@/types/storage";
 import { NotFoundError, UnauthorizedError } from "./errors";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { uploadFile, deleteFile as deleteStorageFile, getPublicUrl } from "@/lib/supabase/storage";
+
+// Thumbnail configuration
+const THUMBNAIL_SIZE = 300; // 300x300 max dimension
+const THUMBNAIL_QUALITY = 80; // JPEG quality
 
 /**
  * 照片存储类 - Supabase版本
@@ -123,6 +128,24 @@ export class PhotoStorage {
   }
 
   /**
+   * 生成缩略图
+   */
+  private async generateThumbnail(buffer: Buffer): Promise<Buffer> {
+    try {
+      return await sharp(buffer)
+        .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, {
+          fit: 'cover',
+          position: 'centre',
+        })
+        .jpeg({ quality: THUMBNAIL_QUALITY })
+        .toBuffer();
+    } catch (error) {
+      console.error('Thumbnail generation error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 创建新照片记录（上传照片）
    */
   async create(
@@ -152,7 +175,7 @@ export class PhotoStorage {
     // 确定分类
     const category = this.categorize(metadata);
 
-    // 上传到 Supabase Storage
+    // 上传原图到 Supabase Storage
     const storagePath = `${userId}/gallery/${fileName}`;
     await uploadFile('photos', storagePath, buffer, {
       contentType: file.type,
@@ -161,6 +184,24 @@ export class PhotoStorage {
 
     // 获取公开 URL
     const fileUrl = getPublicUrl('photos', storagePath);
+
+    // 生成并上传缩略图
+    let thumbnailUrl: string | undefined;
+    try {
+      const thumbnailBuffer = await this.generateThumbnail(buffer);
+      const thumbnailFileName = `thumb_${fileName.replace(/\.[^.]+$/, '.jpg')}`;
+      const thumbnailPath = `${userId}/thumbnails/${thumbnailFileName}`;
+
+      await uploadFile('photos', thumbnailPath, thumbnailBuffer, {
+        contentType: 'image/jpeg',
+        upsert: false,
+      });
+
+      thumbnailUrl = getPublicUrl('photos', thumbnailPath);
+    } catch (error) {
+      console.error('Failed to generate thumbnail, using original:', error);
+      // 如果缩略图生成失败，继续使用原图
+    }
 
     // 创建照片记录
     const photoId = uuidv4();
@@ -174,6 +215,7 @@ export class PhotoStorage {
         file_name: fileName,
         original_name: file.name,
         file_url: fileUrl,
+        thumbnail_url: thumbnailUrl,
         metadata,
         category,
         is_public: true,
@@ -193,6 +235,7 @@ export class PhotoStorage {
       fileName: data.file_name,
       originalName: data.original_name,
       fileUrl: data.file_url,
+      thumbnailUrl: data.thumbnail_url,
       metadata: data.metadata,
       category: data.category,
       locationId: data.location_id,
@@ -230,6 +273,7 @@ export class PhotoStorage {
       fileName: data.file_name,
       originalName: data.original_name,
       fileUrl: data.file_url,
+      thumbnailUrl: data.thumbnail_url,
       metadata: data.metadata,
       category: data.category,
       locationId: data.location_id,
@@ -259,9 +303,12 @@ export class PhotoStorage {
     // 确定排序方向
     const ascending = options?.sortOrder === 'oldest';
 
+    // Only select fields needed for gallery display (much faster)
+    const selectFields = 'id, file_url, file_name, original_name, category, thumbnail_url, created_at, metadata->dateTime';
+
     let query = supabaseAdmin
       .from('photos')
-      .select('*')
+      .select(selectFields)
       .eq('user_id', userId)
       .is('trashed', false); // 过滤掉回收站照片
 
@@ -289,25 +336,14 @@ export class PhotoStorage {
 
     return data.map(photo => ({
       id: photo.id,
-      userId: photo.user_id,
+      userId: userId,
       fileName: photo.file_name,
       originalName: photo.original_name,
       fileUrl: photo.file_url,
-      metadata: photo.metadata,
+      thumbnailUrl: photo.thumbnail_url,
       category: photo.category,
-      locationId: photo.location_id,
-      title: photo.title,
-      description: photo.description,
-      tags: photo.tags,
-      isPublic: photo.is_public,
-      trashed: photo.trashed,
-      trashedAt: photo.trashed_at,
-      originalFileUrl: photo.original_file_url,
-      edited: photo.edited,
-      editedAt: photo.edited_at,
       createdAt: photo.created_at,
-      updatedAt: photo.updated_at,
-    }));
+    } as Photo));
   }
 
   /**
@@ -356,6 +392,7 @@ export class PhotoStorage {
       fileName: photo.file_name,
       originalName: photo.original_name,
       fileUrl: photo.file_url,
+      thumbnailUrl: photo.thumbnail_url,
       metadata: photo.metadata,
       category: photo.category,
       locationId: photo.location_id,

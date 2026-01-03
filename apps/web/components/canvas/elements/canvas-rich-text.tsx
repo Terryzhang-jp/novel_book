@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback, memo, useMemo } from "react";
 import { Text, Group, Rect } from "react-konva";
 import type { CanvasElement } from "@/types/storage";
 import Konva from "konva";
@@ -20,6 +20,22 @@ interface CanvasRichTextProps {
   onDblClick: () => void;
 }
 
+// 将 HTML 转换为纯文本，保留换行（移到组件外避免重复创建）
+const htmlToText = (html: string): string => {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/div><div>/gi, "\n")
+    .replace(/<\/p><p>/gi, "\n")
+    .replace(/<div>/gi, "")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<p>/gi, "")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\n+/g, "\n")
+    .trim();
+};
+
 function CanvasRichTextComponent({
   element,
   isSelected,
@@ -28,42 +44,34 @@ function CanvasRichTextComponent({
   onDblClick,
 }: CanvasRichTextProps) {
   const textRef = useRef<Konva.Text>(null);
+  const lastHeightRef = useRef<number>(element.height || 0);
 
   const width = element.width || 200;
   const fontSize = element.fontSize || 24;
   const fontFamily = element.fontFamily || "ZCOOL XiaoWei";
-
-  // 将 HTML 转换为纯文本，保留换行
-  const htmlToText = (html: string): string => {
-    return html
-      .replace(/<br\s*\/?>/gi, "\n")           // <br> -> 换行
-      .replace(/<\/div><div>/gi, "\n")          // </div><div> -> 换行
-      .replace(/<\/p><p>/gi, "\n")              // </p><p> -> 换行
-      .replace(/<div>/gi, "")                   // 移除开始 div
-      .replace(/<\/div>/gi, "\n")               // </div> -> 换行
-      .replace(/<p>/gi, "")                     // 移除开始 p
-      .replace(/<\/p>/gi, "\n")                 // </p> -> 换行
-      .replace(/<[^>]*>/g, "")                  // 移除其他 HTML 标签
-      .replace(/&nbsp;/g, " ")                  // &nbsp; -> 空格
-      .replace(/\n+/g, "\n")                    // 合并多个换行
-      .trim();
-  };
-
   const content = element.text || (element.html ? htmlToText(element.html) : "");
   const fill = element.fill || "#333333";
 
-  // 自动调整高度
-  useEffect(() => {
-    if (textRef.current) {
-      const textNode = textRef.current;
-      const newHeight = textNode.height();
+  // 使用 useCallback 稳定高度更新函数
+  const updateHeight = useCallback(() => {
+    if (!textRef.current) return;
 
-      // 只有当高度变化超过阈值时才更新，避免频繁更新
-      if (element.height && Math.abs(newHeight - element.height) > 5) {
-        onUpdate(element.id, { height: newHeight });
-      }
+    const newHeight = textRef.current.height();
+    // 只有当高度变化超过阈值且与上次不同时才更新
+    if (Math.abs(newHeight - lastHeightRef.current) > 5) {
+      lastHeightRef.current = newHeight;
+      onUpdate(element.id, { height: newHeight });
     }
-  }, [content, width, fontSize, fontFamily, element.id, element.height, onUpdate]);
+  }, [element.id, onUpdate]);
+
+  // 自动调整高度 - 只在内容/尺寸变化时触发，不依赖 onUpdate
+  useEffect(() => {
+    // 延迟执行，等待 Konva 完成渲染
+    const timer = requestAnimationFrame(() => {
+      updateHeight();
+    });
+    return () => cancelAnimationFrame(timer);
+  }, [content, width, fontSize, fontFamily, updateHeight]);
 
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
     onUpdate(element.id, {
@@ -129,5 +137,5 @@ function CanvasRichTextComponent({
   );
 }
 
-export const CanvasRichText = CanvasRichTextComponent;
+export const CanvasRichText = memo(CanvasRichTextComponent);
 

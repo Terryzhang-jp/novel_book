@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Upload, Trash2, X, MapPin, Zap, ArrowUpDown, Wand2 } from "lucide-react";
+import { Upload, Trash2, X, MapPin, Zap, ArrowUpDown, Wand2, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Photo, PhotoCategory, PhotoStats, Location } from "@/types/storage";
 import { CategoryFilter } from "@/components/gallery/category-filter";
@@ -21,6 +21,10 @@ import {
   clusterPhotosByTime,
   DEFAULT_CLUSTER_THRESHOLD,
 } from "@/lib/utils/photo-clustering";
+import {
+  downloadPhotosAsZip,
+  generateZipFilename,
+} from "@/lib/utils/photo-download";
 
 const PAGE_SIZE = 50; // 每次加载50张照片
 
@@ -336,6 +340,9 @@ export default function GalleryPage() {
   // Sculpting State
   const [isSculpting, setIsSculpting] = useState(false);
 
+  // Download State
+  const [isDownloading, setIsDownloading] = useState(false);
+
   /**
    * Handle "Sculpt Story" action
    */
@@ -363,6 +370,31 @@ export default function GalleryPage() {
       console.error("Error sculpting story:", error);
       toast.error("Failed to sculpt story. Please try again.");
       setIsSculpting(false);
+    }
+  };
+
+  /**
+   * Handle batch download
+   */
+  const handleBatchDownload = async () => {
+    if (selectedPhotos.size === 0 || isDownloading) return;
+
+    setIsDownloading(true);
+    try {
+      // Get selected photos from the filtered list
+      const photosToDownload = filteredPhotos.filter((p) =>
+        selectedPhotos.has(p.id)
+      );
+
+      const zipFilename = generateZipFilename('gallery');
+      await downloadPhotosAsZip(photosToDownload, zipFilename);
+
+      toast.success(`Downloaded ${photosToDownload.length} photo${photosToDownload.length > 1 ? 's' : ''}`);
+    } catch (error) {
+      console.error('Failed to download photos:', error);
+      toast.error('Failed to download photos. Please try again.');
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -576,6 +608,20 @@ export default function GalleryPage() {
                       title="Delete Selected"
                     >
                       <Trash2 className="w-4 h-4" />
+                    </button>
+
+                    {/* Download Button */}
+                    <button
+                      onClick={handleBatchDownload}
+                      disabled={selectedPhotos.size === 0 || isDownloading}
+                      className="p-1.5 hover:bg-green-500/10 hover:text-green-500 rounded-full text-foreground disabled:opacity-50 transition-colors"
+                      title="Download Selected"
+                    >
+                      {isDownloading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4" />
+                      )}
                     </button>
 
                     <div className="w-px h-4 bg-border mx-1" />

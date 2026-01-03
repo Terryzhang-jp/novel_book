@@ -1,9 +1,23 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { verifyToken } from "./lib/auth/jwt";
+
+/**
+ * 检查用户是否有有效的 session cookie
+ *
+ * Better Auth 使用 cookie 存储 session token。
+ * 在 middleware 中我们只检查 cookie 是否存在，
+ * 详细的 session 验证在 API 路由中进行。
+ */
+function hasSessionCookie(request: NextRequest): boolean {
+  // Better Auth 的 session cookie 名称
+  // 在 HTTPS 环境下使用 __Secure- 前缀
+  const sessionCookie =
+    request.cookies.get("__Secure-better-auth.session_token") ||
+    request.cookies.get("better-auth.session_token");
+  return !!sessionCookie?.value;
+}
 
 export async function middleware(request: NextRequest) {
-  const token = request.cookies.get("auth-token")?.value;
   const pathname = request.nextUrl.pathname;
 
   // Public routes (不需要认证)
@@ -19,12 +33,16 @@ export async function middleware(request: NextRequest) {
   );
 
   // API routes (有自己的认证逻辑)
+  // Better Auth 路由由 [...all] 处理
   if (pathname.startsWith("/api/")) {
     return NextResponse.next();
   }
 
-  // 如果没有 token
-  if (!token) {
+  // 检查是否有 session cookie
+  const hasSession = hasSessionCookie(request);
+
+  // 如果没有 session cookie
+  if (!hasSession) {
     // 如果访问受保护的路由，重定向到登录
     if (!isPublicRoute) {
       return NextResponse.redirect(new URL("/login", request.url));
@@ -33,39 +51,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 有 token，验证是否有效
-  try {
-    const payload = await verifyToken(token);
-
-    // Token 有效
-    // 检查是否需要强制修改密码
-    if (payload.requirePasswordChange) {
-      // 如果用户需要修改密码，但不在修改密码页面，则重定向
-      if (pathname !== "/change-password") {
-        return NextResponse.redirect(new URL("/change-password", request.url));
-      }
-      // 已经在修改密码页面，允许访问
-      return NextResponse.next();
-    }
-
-    // 不需要修改密码，如果在修改密码页面，重定向到文档列表
-    if (pathname === "/change-password") {
-      return NextResponse.redirect(new URL("/documents", request.url));
-    }
-
-    // 如果访问登录/注册页面（而不是其他公开页面），重定向到文档列表
-    if (isAuthOnlyRoute) {
-      return NextResponse.redirect(new URL("/documents", request.url));
-    }
-
-    // 其他页面（包括 /chichibu）正常访问
-    return NextResponse.next();
-  } catch (error) {
-    // Token 无效，删除 cookie 并重定向到登录
-    const response = NextResponse.redirect(new URL("/login", request.url));
-    response.cookies.delete("auth-token");
-    return response;
+  // 有 session cookie
+  // 如果访问登录/注册页面，重定向到文档列表
+  if (isAuthOnlyRoute) {
+    return NextResponse.redirect(new URL("/documents", request.url));
   }
+
+  // 其他页面正常访问
+  return NextResponse.next();
 }
 
 export const config = {

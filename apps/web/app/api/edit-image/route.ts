@@ -1,6 +1,41 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
 
+/**
+ * Convert image URL or data URL to base64
+ */
+async function getBase64FromImage(image: string): Promise<{ data: string; mimeType: string }> {
+    // Check if it's a data URL
+    const dataUrlMatch = image.match(/^data:image\/(png|jpeg|jpg|webp|gif);base64,(.+)$/);
+    if (dataUrlMatch) {
+        const type = dataUrlMatch[1] === 'jpg' ? 'jpeg' : dataUrlMatch[1];
+        return {
+            data: dataUrlMatch[2],
+            mimeType: `image/${type}`
+        };
+    }
+
+    // Check if it's a URL (http/https)
+    if (image.startsWith('http://') || image.startsWith('https://')) {
+        const response = await fetch(image);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch image: ${response.status}`);
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        const base64 = Buffer.from(arrayBuffer).toString('base64');
+
+        // Get mime type from response headers or URL
+        const contentType = response.headers.get('content-type') || 'image/png';
+        const mimeType = contentType.split(';')[0].trim();
+
+        return { data: base64, mimeType };
+    }
+
+    // Assume it's already base64
+    return { data: image, mimeType: 'image/png' };
+}
+
 export async function POST(req: Request) {
     try {
         const { image, prompt } = await req.json();
@@ -21,15 +56,15 @@ export async function POST(req: Request) {
 
         const ai = new GoogleGenAI({ apiKey });
 
-        // Remove data URL prefix if present (e.g., "data:image/png;base64,")
-        const base64Image = image.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, "");
+        // Convert image to base64 (handles URLs and data URLs)
+        const { data: base64Image, mimeType } = await getBase64FromImage(image);
 
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash-image",
             contents: [
                 {
                     inlineData: {
-                        mimeType: "image/png",
+                        mimeType: mimeType,
                         data: base64Image
                     }
                 },
