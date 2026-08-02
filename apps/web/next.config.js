@@ -90,7 +90,10 @@ const nextConfig = {
       },
     ];
   },
-  productionBrowserSourceMaps: true,
+  // 生产 sourcemap 会把 27MB 的 .map 部署到 CDN 且任何人可下载 ——
+  // 等于公开完整源码。需要线上排查时临时打开。
+  // 见 PERFORMANCE-AUDIT.md 第二组 #12。
+  productionBrowserSourceMaps: false,
 };
 
 module.exports = nextConfig;

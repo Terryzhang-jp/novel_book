@@ -88,7 +88,6 @@ export async function GET(req: Request) {
   try {
     // 验证用户身份
     const session = await requireAuth(req);
-    console.log("[GET /api/photos] User authenticated:", session.userId);
 
     // 获取查询参数
     const { searchParams } = new URL(req.url);
@@ -96,8 +95,6 @@ export async function GET(req: Request) {
     const limit = Number.parseInt(searchParams.get("limit") || "50", 10);
     const offset = Number.parseInt(searchParams.get("offset") || "0", 10);
     const sortOrder = searchParams.get("sortOrder") as 'newest' | 'oldest' | null;
-
-    console.log("[GET /api/photos] Query params:", { category, limit, offset, sortOrder });
 
     // 分页选项（包含排序方式）
     const paginationOptions = {
@@ -113,18 +110,9 @@ export async function GET(req: Request) {
     } else {
       photos = await photoStorage.findByUserId(session.userId, paginationOptions);
     }
-    console.log("[GET /api/photos] Found photos:", photos.length);
-
-    // Debug: Log photos with location data
-    const photosWithLocation = photos.filter(p => p.metadata?.location);
-    console.log("[GET /api/photos] Photos with location field:", photosWithLocation.length);
-    if (photosWithLocation.length > 0) {
-      console.log("[GET /api/photos] Sample photo with location:", JSON.stringify(photosWithLocation[0]));
-    }
 
     // 获取统计信息
     const stats = await photoStorage.getStats(session.userId);
-    console.log("[GET /api/photos] Stats:", JSON.stringify(stats));
 
     return NextResponse.json({
       photos,

@@ -53,3 +53,4 @@ packages/*/dist
 
 # AI artifacts
 .gemini/
+.gstack/

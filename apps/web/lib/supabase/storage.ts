@@ -28,7 +28,10 @@ export async function uploadFile(
     .from(bucket)
     .upload(path, file, {
       contentType: options?.contentType,
-      cacheControl: options?.cacheControl || '3600',
+      // 所有上传路径都带 uuid/时间戳，内容永不变 —— 可以长期不可变缓存。
+      // 此前默认只有 1 小时，导致同一张图被反复重新下载。
+      // 见 PERFORMANCE-AUDIT.md 第六组 #14。
+      cacheControl: options?.cacheControl || 'public, max-age=31536000, immutable',
       upsert: options?.upsert || false,
     });
 
