@@ -20,16 +20,37 @@ const config = {
     },
     extend: {
       fontFamily: {
-        // 主字体 - ZCOOL XiaoWei (文艺衬线)
+        // ── 正文：纯系统字体栈，零网络请求 ──────────────────────────
+        // 此前 sans/serif 都以 ZCOOL XiaoWei 打头，而 body 挂了 font-xiaowei，
+        // 等于整站正文都用网络字体。实测后果：中文内容较多的页面会命中
+        // 9–10 个 unicode-range 子集、约 510 KB 字体流量。
+        // 见 PERFORMANCE-AUDIT.md Q6 的更正说明。
+        //
+        // 现在正文一律用系统字体（macOS/iOS 用苹方，Windows 用微软雅黑，
+        // Android 用思源黑体），品牌感通过 font-brand 保留在标题/Logo 上。
         sans: [
-          'ZCOOL XiaoWei',
           '-apple-system',
           'BlinkMacSystemFont',
           'Segoe UI',
+          'PingFang SC',
+          'Hiragino Sans GB',
+          'Microsoft YaHei',
+          'Noto Sans CJK SC',
+          'Source Han Sans SC',
           'sans-serif',
         ],
-        // 衬线字体 - ZCOOL XiaoWei
         serif: [
+          'Georgia',
+          'Songti SC',
+          'SimSun',
+          'Noto Serif CJK SC',
+          'Source Han Serif SC',
+          'serif',
+        ],
+        // ── 品牌字体：只用在标题 / Logo 等少量文字上 ────────────────
+        // 字符少 → 命中的 unicode 子集就少 → 下载量小。
+        // 不要用在正文或长文上。
+        brand: [
           'ZCOOL XiaoWei',
           'Georgia',
           'serif',

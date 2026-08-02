@@ -150,7 +150,8 @@ export function Sidebar({ userEmail, userName }: SidebarProps) {
           {/* Logo/Brand */}
           <div className="p-6 pb-4">
             <Link href="/documents" onClick={closeMobileMenu} className="block group">
-              <h1 className="text-2xl font-serif font-bold text-foreground tracking-tight group-hover:text-primary transition-colors">
+              {/* font-brand = ZCOOL XiaoWei，只用在 Logo/标题这类少量文字上 */}
+              <h1 className="text-2xl font-brand font-bold text-foreground tracking-tight group-hover:text-primary transition-colors">
                 Travel Creation
               </h1>
               <p className="text-xs text-muted-foreground font-medium tracking-widest uppercase mt-1">

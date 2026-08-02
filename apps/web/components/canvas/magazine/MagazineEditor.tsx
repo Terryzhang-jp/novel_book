@@ -68,6 +68,7 @@ import {
   CloudOff,
 } from 'lucide-react';
 import { JOURNAL_FONTS } from '@/types/storage';
+import { loadFontFamily, preloadFonts } from '@/lib/fonts/registry';
 import { cn } from '@/lib/utils';
 
 export function MagazineEditor() {
@@ -514,11 +515,17 @@ export function MagazineEditor() {
   const currentPage = pages[currentPageIndex];
 
   // Stable callbacks for text properties
-  const handleFontChange = useCallback((fontFamily: string) => {
-    if (selectedElement?.type === 'text') {
-      updateElement(selectedElement.id, { fontFamily });
-    }
+  // 字体按需加载（lib/fonts/registry.ts），先等字形可用再改元素，
+  // 否则 Konva 会用回退字体测宽，文本框尺寸会跳一下。
+  const handleFontChange = useCallback(async (fontFamily: string) => {
+    if (selectedElement?.type !== 'text') return;
+    await loadFontFamily(fontFamily);
+    updateElement(selectedElement.id, { fontFamily });
   }, [selectedElement?.id, selectedElement?.type, updateElement]);
+
+  const handleFontMenuOpen = useCallback(() => {
+    void preloadFonts(JOURNAL_FONTS);
+  }, []);
 
   const handleFontSizeChange = useCallback((fontSize: number) => {
     if (selectedElement?.type === 'text') {
@@ -548,7 +555,9 @@ export function MagazineEditor() {
                 {/* Font Family */}
                 <select
                   value={selectedElement.fontFamily || 'Arial'}
-                  onChange={(e) => handleFontChange(e.target.value)}
+                  onChange={(e) => void handleFontChange(e.target.value)}
+                  onFocus={handleFontMenuOpen}
+                  onMouseDown={handleFontMenuOpen}
                   className="w-28 h-9 px-2 text-xs bg-neutral-100 dark:bg-neutral-700 rounded-lg border-0 outline-none cursor-pointer text-neutral-700 dark:text-neutral-200"
                 >
                   {JOURNAL_FONTS.map((font) => (

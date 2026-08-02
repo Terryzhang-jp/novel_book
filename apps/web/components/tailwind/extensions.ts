@@ -1,3 +1,6 @@
+// 数学公式渲染样式。放在这里而不是根 layout —— 只有用到编辑器的页面才加载。
+import 'katex/dist/katex.min.css';
+
 import {
   AIHighlight,
   CharacterCount,

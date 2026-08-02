@@ -16,6 +16,7 @@ import { memo, useCallback } from "react";
 import { Type } from "lucide-react";
 import { useCanvasStore } from "@/lib/canvas/canvas-store";
 import { JOURNAL_FONTS } from "@/types/storage";
+import { loadFontFamily, preloadFonts } from "@/lib/fonts/registry";
 import type { CanvasElement } from "@/types/storage";
 
 // 预设字体大小
@@ -40,14 +41,21 @@ function TextPropertiesToolbarComponent({
   // 只对 text 类型显示（不包括 sticker，emoji 不需要字体设置）
   const shouldShow = targetElement && targetElement.type === "text";
 
+  // 字体是按需加载的（见 lib/fonts/registry.ts）。选中之后要等字形真正
+  // 可用再更新元素，否则 Konva 会用回退字体测量宽度，导致文本框尺寸跳变。
   const handleFontChange = useCallback(
-    (fontFamily: string) => {
-      if (targetElement) {
-        updateElement(targetElement.id, { fontFamily });
-      }
+    async (fontFamily: string) => {
+      if (!targetElement) return;
+      await loadFontFamily(fontFamily);
+      updateElement(targetElement.id, { fontFamily });
     },
     [targetElement, updateElement]
   );
+
+  // 打开下拉框时才把候选字体拉起来，让每一项显示真实字形
+  const handleFontMenuOpen = useCallback(() => {
+    void preloadFonts(JOURNAL_FONTS);
+  }, []);
 
   const handleFontSizeChange = useCallback(
     (fontSize: number) => {
@@ -90,9 +98,13 @@ function TextPropertiesToolbarComponent({
         {/* Font Family */}
         <select
           value={targetElement.fontFamily || "Arial"}
-          onChange={(e) => handleFontChange(e.target.value)}
+          onChange={(e) => void handleFontChange(e.target.value)}
+          onFocus={handleFontMenuOpen}
           className="bg-transparent text-sm font-medium outline-none cursor-pointer"
-          onMouseDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            handleFontMenuOpen();
+          }}
         >
           {JOURNAL_FONTS.map((font) => (
             <option key={font} value={font} style={{ fontFamily: font }}>
