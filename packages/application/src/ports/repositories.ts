@@ -1,0 +1,241 @@
+/**
+ * Repository 端口 —— Phase 2A 的九张核心表
+ *
+ * ## 三条硬规则
+ *
+ * 1. **每个方法的第一个参数是 `actor: Actor`。**
+ *    由 scripts/check-architecture.mjs 静态强制（ADR-001）。
+ *    实现里 user_id 条件必须写进 SQL，而不是取出来再比对 —— 后者一旦有人
+ *    删掉那行 if 就是静默越权。
+ *
+ * 2. **跨用户访问返回 `NotFoundError`，不返回 403。**
+ *    区分 403 和 404 会泄露「这个 id 存在」，可被用来枚举资源。
+ *
+ * 3. **这里只有接口，没有 SQL。**
+ *    实现在 packages/infrastructure-postgres。换库、换测试替身都不需要动
+ *    用例代码 —— 这是 ADR-000 供应商无关的落点。
+ *
+ * ## 命名约定
+ *
+ *   findXxx  找不到返回 null（调用方决定这是不是错误）
+ *   getXxx   找不到抛 NotFoundError
+ *   listXxx  返回数组，可能为空
+ */
+
+import type {
+  Actor,
+  CreateJourneyInput,
+  CreateMomentInput,
+  InterpretationRevision,
+  InterpretationRevisionId,
+  Journey,
+  JourneyId,
+  Moment,
+  MomentId,
+  MomentTombstone,
+  Observation,
+  ObservationId,
+  PresentationConfig,
+  Publication,
+  PublicationId,
+  RendererType,
+  Visibility,
+  Work,
+  WorkBlock,
+  WorkBlockId,
+  WorkBlockType,
+  WorkId,
+  WorkPresentation,
+  WorkSnapshot,
+  WorkVersion,
+  WorkVersionId,
+} from '@tc/domain';
+
+// ── 通用 ─────────────────────────────────────────────────────────────────────
+
+export interface Page {
+  readonly limit?: number;
+  readonly offset?: number;
+}
+
+// ── Journey ──────────────────────────────────────────────────────────────────
+
+export interface JourneyRepository {
+  create(actor: Actor, input: CreateJourneyInput): Promise<Journey>;
+  findById(actor: Actor, id: JourneyId): Promise<Journey | null>;
+  listByUser(actor: Actor, page?: Page): Promise<Journey[]>;
+  /**
+   * 删除 Journey。
+   *
+   * J-2：**Moment 不跟着删**，只是 journey_id 置空变成「未归类」。
+   * 由外键的 ON DELETE SET NULL 保证，不靠应用层记得去清。
+   */
+  delete(actor: Actor, id: JourneyId): Promise<void>;
+}
+
+// ── Moment ───────────────────────────────────────────────────────────────────
+
+export interface MomentFilter extends Page {
+  /** 传 null 表示「只要未归类的」；不传表示全部 */
+  readonly journeyId?: JourneyId | null;
+}
+
+export interface MomentRepository {
+  create(actor: Actor, input: CreateMomentInput): Promise<Moment>;
+  findById(actor: Actor, id: MomentId): Promise<Moment | null>;
+  listByUser(actor: Actor, filter?: MomentFilter): Promise<Moment[]>;
+  /** 归类 / 取消归类。传 null 把 Moment 变回未归类。 */
+  assignToJourney(actor: Actor, id: MomentId, journeyId: JourneyId | null): Promise<Moment>;
+  /**
+   * 删除 Moment。
+   *
+   * ⚠️ 调用前必须先给引用它的 work_blocks 写墓碑，否则 chk_block_shape 会
+   * 让删除失败。编排在 use-cases/moment.ts 的 deleteMoment 里。
+   */
+  delete(actor: Actor, id: MomentId): Promise<void>;
+}
+
+// ── Observation ──────────────────────────────────────────────────────────────
+
+export interface AddObservationInput {
+  readonly content: string;
+  /** 什么时候记的。不传则由数据库取 now()。 */
+  readonly recordedAt?: string;
+}
+
+export interface ObservationRepository {
+  /** Moment 不属于 actor 时抛 NotFoundError —— 不先查再判断，避免 TOCTOU */
+  add(actor: Actor, momentId: MomentId, input: AddObservationInput): Promise<Observation>;
+  listByMoment(actor: Actor, momentId: MomentId): Promise<Observation[]>;
+  /** 批量取，给发布快照用 —— 避免 N+1 */
+  listByMoments(actor: Actor, momentIds: readonly MomentId[]): Promise<Observation[]>;
+}
+
+// ── Interpretation ───────────────────────────────────────────────────────────
+
+export interface AppendInterpretationInput {
+  readonly content: string;
+  /** 首版为 undefined；之后必须等于当前 revision 的 id */
+  readonly supersedesId?: InterpretationRevisionId;
+  readonly basedOnObservationIds: readonly ObservationId[];
+}
+
+export interface InterpretationRepository {
+  /** 全部 revision，按 created_at 升序。链的形状交给 buildInterpretationChain 还原。 */
+  listByMoment(actor: Actor, momentId: MomentId): Promise<InterpretationRevision[]>;
+  findCurrent(actor: Actor, momentId: MomentId): Promise<InterpretationRevision | null>;
+  /** 批量取当前理解，给发布快照用 */
+  listCurrentByMoments(
+    actor: Actor,
+    momentIds: readonly MomentId[]
+  ): Promise<InterpretationRevision[]>;
+  /**
+   * 追加一版理解。
+   *
+   * **必须在事务里调用** —— 它做两件事：把被取代的那版标记为 superseded，
+   * 插入新的 current。中间断开会留下零个或两个 current，
+   * 数据库的 uq_interpretation_current 会挡住后者，但前者是静默的数据损坏。
+   */
+  append(
+    actor: Actor,
+    momentId: MomentId,
+    input: AppendInterpretationInput
+  ): Promise<InterpretationRevision>;
+}
+
+// ── Work ─────────────────────────────────────────────────────────────────────
+
+export interface AppendBlockInput {
+  readonly type: WorkBlockType;
+  readonly textContent?: string;
+  readonly momentId?: MomentId;
+}
+
+export interface WorkRepository {
+  create(actor: Actor, input: { title: string }): Promise<Work>;
+  findById(actor: Actor, id: WorkId): Promise<Work | null>;
+  listByUser(actor: Actor, page?: Page): Promise<Work[]>;
+  /** P-5：已发布版本不跟着删，work_versions.work_id 置空 */
+  delete(actor: Actor, id: WorkId): Promise<void>;
+
+  listBlocks(actor: Actor, workId: WorkId): Promise<WorkBlock[]>;
+  appendBlock(actor: Actor, workId: WorkId, input: AppendBlockInput): Promise<WorkBlock>;
+  removeBlock(actor: Actor, workId: WorkId, blockId: WorkBlockId): Promise<void>;
+  /**
+   * 按给定顺序重排。orderedIds 必须是该 Work 全部 block 的一个排列。
+   *
+   * uq_work_block_position 是 DEFERRABLE 的，所以可以在一个事务里直接改成
+   * 目标顺序，不需要先挪到临时的负数位置。
+   */
+  reorderBlocks(actor: Actor, workId: WorkId, orderedIds: readonly WorkBlockId[]): Promise<WorkBlock[]>;
+  /**
+   * 给所有引用某 Moment 的 block 写墓碑。删 Moment 之前必须先调。
+   *
+   * 刻意**不按 actor 过滤 block** —— 这是数据库完整性操作，漏掉任何一行都会
+   * 让后续的 DELETE 撞上 chk_block_shape。跨用户引用在
+   * addMomentToWork 处已被禁止，所以正常情况下不会有别人的 block；
+   * 真出现了也必须一并处理，而不是留一行坏数据。
+   */
+  tombstoneBlocksReferencing(
+    actor: Actor,
+    momentId: MomentId,
+    tombstone: MomentTombstone
+  ): Promise<number>;
+
+  listPresentations(actor: Actor, workId: WorkId): Promise<WorkPresentation[]>;
+  findPresentation(
+    actor: Actor,
+    workId: WorkId,
+    rendererType: RendererType
+  ): Promise<WorkPresentation | null>;
+  /** (work_id, renderer_type) 唯一 —— 每种输出各一套，互不覆盖（ADR-005 修正） */
+  upsertPresentation(
+    actor: Actor,
+    workId: WorkId,
+    rendererType: RendererType,
+    config: PresentationConfig
+  ): Promise<WorkPresentation>;
+}
+
+// ── Publication ──────────────────────────────────────────────────────────────
+
+/**
+ * 一个可渲染的已发布页面。
+ *
+ * `version.snapshot` 自带渲染所需的全部内容 —— 拿到这个对象之后
+ * **不允许再查任何实时表**（ADR-006 判定标准）。
+ */
+export interface PublishedPage {
+  readonly publication: Publication;
+  readonly version: WorkVersion;
+}
+
+export interface PublicationRepository {
+  /** 该 Work 的下一个版本号。没有历史版本时返回 1。 */
+  nextVersionNumber(actor: Actor, workId: WorkId): Promise<number>;
+  createVersion(
+    actor: Actor,
+    input: { workId: WorkId; versionNumber: number; snapshot: WorkSnapshot }
+  ): Promise<WorkVersion>;
+  listVersions(actor: Actor, workId: WorkId): Promise<WorkVersion[]>;
+
+  create(
+    actor: Actor,
+    input: { workVersionId: WorkVersionId; slug: string; visibility: Visibility }
+  ): Promise<Publication>;
+  /** 再次发布：同一个 slug 指向新版本，链接不变 */
+  repoint(actor: Actor, id: PublicationId, workVersionId: WorkVersionId): Promise<Publication>;
+  /** P-4：撤回**不删记录**，只写 withdrawn_at */
+  withdraw(actor: Actor, id: PublicationId): Promise<Publication>;
+
+  findByWork(actor: Actor, workId: WorkId): Promise<PublishedPage | null>;
+  listByUser(actor: Actor, page?: Page): Promise<PublishedPage[]>;
+  /**
+   * 按 slug 读取，**允许 anonymous**。
+   *
+   * 只 JOIN publications 和 work_versions 两张表。
+   * 可见性判断交给调用方（use-cases/publication.ts），因为「已下架」
+   * 和「不存在」在产品上是两种不同的页面。
+   */
+  findBySlug(actor: Actor, slug: string): Promise<PublishedPage | null>;
+}

@@ -119,6 +119,27 @@ export function assertValidMomentInput(input: CreateMomentInput): void {
   // Moment 可以只有一句观察。见 ADR-004 M1。
 }
 
+/**
+ * 为用户亲手填写的字段标记来源。
+ *
+ * 建 Moment 的时候就写下 provenance，而不是等接入 EXIF / AI 之后再补 ——
+ * 补的那天没人记得哪些历史数据是用户填的，整列就退化成装饰。
+ *
+ * `recordedAt` 由调用方传入而不是在这里取 now()：领域层不做 IO，
+ * 也不引入不可测的时间依赖。
+ */
+export function userProvenance(
+  fields: Readonly<Record<string, unknown>>,
+  recordedAt: string
+): MomentProvenance {
+  const out: Record<string, FieldProvenance | 1> = { _v: 1 };
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined || value === null || value === '') continue;
+    out[key] = { source: 'user', recordedAt };
+  }
+  return out as MomentProvenance;
+}
+
 export function assertValidObservationContent(content: string): void {
   if (!content?.trim()) {
     throw new InvariantViolation('M-4', 'Observation 内容不能为空');

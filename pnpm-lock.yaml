@@ -78,9 +78,15 @@ importers:
       '@tailwindcss/typography':
         specifier: ^0.5.10
         version: 0.5.16(tailwindcss@3.4.17)
+      '@tc/application':
+        specifier: workspace:*
+        version: link:../../packages/application
       '@tc/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@tc/infrastructure-postgres':
+        specifier: workspace:*
+        version: link:../../packages/infrastructure-postgres
       '@tc/infrastructure-storage':
         specifier: workspace:*
         version: link:../../packages/infrastructure-storage
@@ -272,6 +278,19 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/debug@4.1.12)(@types/node@20.11.24)(jiti@2.4.2)(jsdom@15.2.1(canvas@2.11.2))(yaml@2.7.0)
 
+  packages/application:
+    dependencies:
+      '@tc/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      tsconfig:
+        specifier: workspace:*
+        version: link:../tsconfig
+      typescript:
+        specifier: ^5.7.3
+        version: 5.7.3
+
   packages/domain:
     devDependencies:
       tsconfig:
@@ -395,6 +414,28 @@ importers:
       tsup:
         specifier: ^8.3.5
         version: 8.3.5(jiti@2.4.2)(postcss@8.5.25)(typescript@5.7.3)(yaml@2.7.0)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.7.3
+
+  packages/infrastructure-postgres:
+    dependencies:
+      '@tc/application':
+        specifier: workspace:*
+        version: link:../application
+      '@tc/domain':
+        specifier: workspace:*
+        version: link:../domain
+      pg:
+        specifier: ^8.16.3
+        version: 8.16.3
+    devDependencies:
+      '@types/pg':
+        specifier: ^8.15.6
+        version: 8.15.6
+      tsconfig:
+        specifier: workspace:*
+        version: link:../tsconfig
       typescript:
         specifier: ^5.7.3
         version: 5.7.3

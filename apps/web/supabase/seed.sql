@@ -231,3 +231,214 @@ BEGIN
     n_users, n_photos, n_alice, n_bob, n_public;
 END
 $seed$;
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- Phase 2A 核心链路种子数据
+-- ════════════════════════════════════════════════════════════════════════════
+--
+-- 目的不是「有点数据可看」，而是让**新核心的完整纵向链路**在
+-- `supabase db reset` 之后立刻可见：
+--
+--   Journey → 无照片 Moment → Observation ×2 → Interpretation v1→v2 → Work → Publication
+--
+-- 特意让 Publication 停在 v1、而实时 Interpretation 已经到 v2 ——
+-- 打开 /p/chichibu-santian 看到的是当时的想法，打开 /studio 看到的是现在的想法。
+-- 这就是整个产品要证明的那件事，seed 里直接摆出来。
+--
+-- Bob 的数据只有一条链，用来验证隔离：Alice 不该看见任何一行。
+--
+-- 固定 UUID：测试断言需要可预测的 ID，不要改。
+-- ════════════════════════════════════════════════════════════════════════════
+
+-- ── Journey ─────────────────────────────────────────────────────────────────
+INSERT INTO journeys (id, user_id, title, type, intent, started_at, ended_at) VALUES
+  ('20000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   '秩父三日', 'trip', '想看看离开东京两小时的地方，人是怎么过日子的',
+   '2026-03-14T09:00:00+09', '2026-03-16T20:00:00+09'),
+  -- 进行中的 Journey（ended_at 为空）—— 列表页要能正确显示「进行中」
+  ('20000000-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111',
+   '周末散步', 'outing', NULL, '2026-04-05T14:00:00+09', NULL),
+  ('20000000-0000-0000-0000-000000000003', '22222222-2222-2222-2222-222222222222',
+   'Bob 的濑户内海', 'trip', NULL, '2026-02-01T08:00:00+09', '2026-02-05T18:00:00+09')
+ON CONFLICT (id) DO NOTHING;
+
+-- ── Moment ──────────────────────────────────────────────────────────────────
+-- ⚠️ 三条 Moment **全都没有照片**。这不是数据没准备好，
+--    而是 ADR-004 M1 的直接体现：Moment 不必须有素材。
+INSERT INTO moments (id, user_id, journey_id, title, occurred_at, place_label, provenance) VALUES
+  ('30000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   '20000000-0000-0000-0000-000000000001', '神社后面的坡道', '2026-03-14T16:20:00+09', '秩父神社',
+   '{"_v":1,"title":{"source":"user"},"placeLabel":{"source":"user"}}'::jsonb),
+  ('30000000-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111',
+   '20000000-0000-0000-0000-000000000001', NULL, '2026-03-15T07:10:00+09', NULL,
+   '{"_v":1}'::jsonb),
+  -- 未归类的 Moment（journey_id 为空）—— 现场先速记、之后再归类（M4）
+  ('30000000-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111',
+   NULL, '路口那只猫', NULL, NULL,
+   '{"_v":1,"title":{"source":"user"}}'::jsonb),
+  ('30000000-0000-0000-0000-000000000004', '22222222-2222-2222-2222-222222222222',
+   '20000000-0000-0000-0000-000000000003', 'Bob 的岛', NULL, NULL, '{"_v":1}'::jsonb)
+ON CONFLICT (id) DO NOTHING;
+
+-- ── Observation ─────────────────────────────────────────────────────────────
+-- 同一个 Moment 两条观察：现场记一条、当晚回旅馆再记一条。
+-- 这是**两次不同的观察**，不是对同一条的编辑 —— 所以是两行，不是一行被改过。
+INSERT INTO observations (id, moment_id, user_id, content, recorded_at) VALUES
+  ('40000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001',
+   '11111111-1111-1111-1111-111111111111',
+   '坡道两侧都是住家，没有一家挂招牌。走到一半有人在扫落叶。',
+   '2026-03-14T16:25:00+09'),
+  ('40000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000001',
+   '11111111-1111-1111-1111-111111111111',
+   '晚上想起来，那个扫落叶的人扫的是别人家门口。',
+   '2026-03-14T22:40:00+09'),
+  ('40000000-0000-0000-0000-000000000003', '30000000-0000-0000-0000-000000000002',
+   '11111111-1111-1111-1111-111111111111',
+   '七点的车站只有三个人，站务员挨个鞠躬。',
+   '2026-03-15T07:15:00+09'),
+  ('40000000-0000-0000-0000-000000000004', '30000000-0000-0000-0000-000000000004',
+   '22222222-2222-2222-2222-222222222222', 'Bob 的观察', '2026-02-02T10:00:00+09')
+ON CONFLICT (id) DO NOTHING;
+
+-- ── Interpretation：v1 → v2 ────────────────────────────────────────────────
+-- v1 不会消失，它变成 superseded 留在链上。
+-- 「我的理解之后又改变了」这句话能被看见，靠的就是这一点。
+INSERT INTO interpretation_revisions
+  (id, moment_id, user_id, content, supersedes_id, based_on_observation_ids, status) VALUES
+  ('50000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001',
+   '11111111-1111-1111-1111-111111111111',
+   '这里的人对公共空间有种默认的责任感。',
+   NULL,
+   ARRAY['40000000-0000-0000-0000-000000000001']::uuid[],
+   'superseded'),
+  ('50000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000001',
+   '11111111-1111-1111-1111-111111111111',
+   '一周后再想，与其说是责任感，不如说是这里的人还相信自己会一直住在这条街上。',
+   '50000000-0000-0000-0000-000000000001',
+   ARRAY['40000000-0000-0000-0000-000000000001',
+         '40000000-0000-0000-0000-000000000002']::uuid[],
+   'current')
+ON CONFLICT (id) DO NOTHING;
+
+-- ── Work ────────────────────────────────────────────────────────────────────
+INSERT INTO works (id, user_id, title) VALUES
+  ('60000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
+   '秩父三日'),
+  ('60000000-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222',
+   'Bob 的作品')
+ON CONFLICT (id) DO NOTHING;
+
+-- Work 引用 Moment，**不复制内容**。改一次理解，草稿跟着变新。
+INSERT INTO work_blocks (id, work_id, position, type, text_content, moment_id) VALUES
+  ('70000000-0000-0000-0000-000000000001', '60000000-0000-0000-0000-000000000001',
+   0, 'text', '三天，两个地方，一个没想明白的问题。', NULL),
+  ('70000000-0000-0000-0000-000000000002', '60000000-0000-0000-0000-000000000001',
+   1, 'moment_ref', NULL, '30000000-0000-0000-0000-000000000001'),
+  ('70000000-0000-0000-0000-000000000003', '60000000-0000-0000-0000-000000000001',
+   2, 'moment_ref', NULL, '30000000-0000-0000-0000-000000000002')
+ON CONFLICT (id) DO NOTHING;
+
+-- 每种输出各一套配置，互不覆盖（ADR-005 修正）
+INSERT INTO work_presentations (id, work_id, renderer_type, config) VALUES
+  ('80000000-0000-0000-0000-000000000001', '60000000-0000-0000-0000-000000000001',
+   'web', '{"_v":1,"theme":"plain"}'::jsonb)
+ON CONFLICT (id) DO NOTHING;
+
+-- ── 发布快照 ────────────────────────────────────────────────────────────────
+-- ⚠️ 注意 blocks[1].moment.interpretation 冻的是 **v1** 的文字，
+--    而实时表里当前理解已经是 v2。这正是要证明的事：
+--    改变理解不会改写已经发出去的作品。
+--
+-- 快照里没有任何一个「只有 id 没有内容」的引用 ——
+-- 渲染它不需要碰 moments / observations / interpretation_revisions。
+INSERT INTO work_versions (id, work_id, user_id, version_number, snapshot) VALUES
+  ('90000000-0000-0000-0000-000000000001', '60000000-0000-0000-0000-000000000001',
+   '11111111-1111-1111-1111-111111111111', 1,
+   '{
+      "_v": 1,
+      "work": { "id": "60000000-0000-0000-0000-000000000001", "title": "秩父三日" },
+      "presentation": { "rendererType": "web", "config": { "_v": 1, "theme": "plain" } },
+      "blocks": [
+        { "type": "text", "position": 0, "text": "三天，两个地方，一个没想明白的问题。" },
+        { "type": "moment_ref", "position": 1,
+          "momentId": "30000000-0000-0000-0000-000000000001",
+          "moment": {
+            "title": "神社后面的坡道",
+            "occurredAt": "2026-03-14T07:20:00.000Z",
+            "placeLabel": "秩父神社",
+            "observations": [
+              { "id": "40000000-0000-0000-0000-000000000001",
+                "content": "坡道两侧都是住家，没有一家挂招牌。走到一半有人在扫落叶。",
+                "recordedAt": "2026-03-14T07:25:00.000Z" },
+              { "id": "40000000-0000-0000-0000-000000000002",
+                "content": "晚上想起来，那个扫落叶的人扫的是别人家门口。",
+                "recordedAt": "2026-03-14T13:40:00.000Z" }
+            ],
+            "interpretation": {
+              "revisionId": "50000000-0000-0000-0000-000000000001",
+              "content": "这里的人对公共空间有种默认的责任感。",
+              "createdAt": "2026-03-14T14:00:00.000Z"
+            }
+          } },
+        { "type": "moment_ref", "position": 2,
+          "momentId": "30000000-0000-0000-0000-000000000002",
+          "moment": {
+            "occurredAt": "2026-03-14T22:10:00.000Z",
+            "observations": [
+              { "id": "40000000-0000-0000-0000-000000000003",
+                "content": "七点的车站只有三个人，站务员挨个鞠躬。",
+                "recordedAt": "2026-03-14T22:15:00.000Z" }
+            ]
+          } }
+      ]
+    }'::jsonb)
+ON CONFLICT (id) DO NOTHING;
+
+-- 默认 unlisted（知道链接才能看），不是 public ——
+-- 「点了发布 = 全网可搜」是个危险的默认值。
+INSERT INTO publications (id, work_version_id, user_id, slug, visibility) VALUES
+  ('a0000000-0000-0000-0000-000000000001', '90000000-0000-0000-0000-000000000001',
+   '11111111-1111-1111-1111-111111111111', 'chichibu-santian', 'unlisted')
+ON CONFLICT (id) DO NOTHING;
+
+-- ── Phase 2A 自检 ───────────────────────────────────────────────────────────
+-- seed 静默地少插几行，测试仍然会绿（它们大多自己造数据），
+-- 但开发时打开 /studio 会看到一个空页面，然后花半小时怀疑是代码坏了。
+-- 所以这里显式断言。
+DO $seed_check$
+DECLARE
+  n_journeys int; n_moments int; n_obs int; n_chain int; n_pub int;
+  frozen text; live text;
+BEGIN
+  SELECT count(*) INTO n_journeys FROM journeys;
+  SELECT count(*) INTO n_moments  FROM moments;
+  SELECT count(*) INTO n_obs      FROM observations;
+  SELECT count(*) INTO n_chain    FROM interpretation_revisions
+    WHERE moment_id = '30000000-0000-0000-0000-000000000001';
+  SELECT count(*) INTO n_pub      FROM publications;
+
+  IF n_journeys < 3 OR n_moments < 4 OR n_obs < 4 OR n_chain <> 2 OR n_pub < 1 THEN
+    RAISE EXCEPTION 'Phase 2A seed 不完整: % journeys / % moments / % observations / % revisions / % publications',
+      n_journeys, n_moments, n_obs, n_chain, n_pub;
+  END IF;
+
+  -- 没有照片的 Moment 必须存在 —— 这是 ADR-004 M1 在 seed 里的体现
+  IF NOT EXISTS (SELECT 1 FROM moments WHERE title IS NULL AND occurred_at IS NOT NULL) THEN
+    RAISE EXCEPTION 'seed 里缺少「无标题无素材」的 Moment';
+  END IF;
+
+  -- 核心断言：快照冻的是 v1，实时表已经是 v2。
+  -- 这两者一旦相等，说明快照跟着实时内容变了 —— 整个发布模型就垮了。
+  SELECT snapshot -> 'blocks' -> 1 -> 'moment' -> 'interpretation' ->> 'content'
+    INTO frozen FROM work_versions WHERE id = '90000000-0000-0000-0000-000000000001';
+  SELECT content INTO live FROM interpretation_revisions
+    WHERE moment_id = '30000000-0000-0000-0000-000000000001' AND status = 'current';
+
+  IF frozen IS NULL OR live IS NULL OR frozen = live THEN
+    RAISE EXCEPTION '发布快照应当冻结在 v1，与当前理解不同（frozen=%, live=%）', frozen, live;
+  END IF;
+
+  RAISE NOTICE 'Phase 2A seed 自检通过: % journeys / % moments / % observations / 理解链 % 版 / % publications（快照冻结在 v1）',
+    n_journeys, n_moments, n_obs, n_chain, n_pub;
+END
+$seed_check$;

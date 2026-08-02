@@ -10,7 +10,14 @@
  * 用户必须一开始选工具 = 提前选定最终输出格式。
  */
 
-import type { MomentId, ObservationId, InterpretationRevisionId } from './moment';
+import type {
+  InterpretationRevision,
+  InterpretationRevisionId,
+  Moment,
+  MomentId,
+  Observation,
+  ObservationId,
+} from './moment';
 import type { UserId } from './journey';
 import { InvariantViolation } from './journey';
 
@@ -220,6 +227,34 @@ export function renumber<T extends { position: number }>(blocks: readonly T[]): 
   return [...blocks]
     .sort((a, b) => a.position - b.position)
     .map((b, i) => ({ ...b, position: i }));
+}
+
+/**
+ * 从一个即将被删除的 Moment 生成墓碑。
+ *
+ * ## 为什么这一步不能省
+ *
+ * `work_blocks.moment_id` 是 `ON DELETE SET NULL`，而 `chk_block_shape` 要求
+ * moment_ref 类型的 block **必须有 moment_id 或 tombstone 之一**。
+ * 所以删一个被引用的 Moment 时，如果不先写墓碑，数据库会直接抛
+ * check 约束错误 —— 删除失败。
+ *
+ * 这个「不方便」是刻意留下的：它逼着删除路径正面回答
+ * 「Work 里那个位置将来显示什么」，而不是留一个无法解释的空洞。
+ */
+export function buildMomentTombstone(
+  moment: Pick<Moment, 'title'>,
+  observations: readonly Pick<Observation, 'content'>[],
+  interpretation: Pick<InterpretationRevision, 'content'> | null,
+  deletedAt: string
+): MomentTombstone {
+  return {
+    _v: 1,
+    ...(moment.title ? { title: moment.title } : {}),
+    observations: observations.map((o) => o.content),
+    ...(interpretation ? { interpretation: interpretation.content } : {}),
+    deletedAt,
+  };
 }
 
 /** slug 生成。同名冲突由 Repository 加后缀解决。 */

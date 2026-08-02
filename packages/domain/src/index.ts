@@ -10,6 +10,7 @@
  * 需要 IO 的实现在 infrastructure-*，用例编排在 application。
  */
 export * from './actor';
+export * from './errors';
 export * from './storage';
 export * from './journey';
 export * from './moment';
