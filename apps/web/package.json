@@ -8,7 +8,14 @@
     "start": "next start",
     "lint": "biome lint .",
     "format": "biome format . ",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:status": "supabase status",
+    "db:verify": "./scripts/verify-schema-rebuild.sh",
+    "db:snapshot": "./scripts/verify-schema-rebuild.sh --update",
+    "db:types": "supabase gen types typescript --local > types/database.generated.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.1.0",

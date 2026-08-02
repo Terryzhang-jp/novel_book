@@ -25,6 +25,12 @@
       "prosemirror-state": "1.4.4",
       "prosemirror-view": "1.41.3",
       "prosemirror-transform": "1.10.2"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "supabase",
+      "sharp",
+      "@biomejs/biome",
+      "esbuild"
+    ]
   }
 }

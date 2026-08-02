@@ -1,0 +1,99 @@
+# Supabase 本地开发环境配置
+#
+# 目标：全新 clone 之后，一条命令起完整环境 —— 不进 Dashboard，不手工执行 SQL，
+#      不手工建 bucket。
+#
+#   pnpm db:start     启动本地 Supabase（Postgres + Auth + Storage + Studio）
+#   pnpm db:reset     删库 → 按顺序重放 migrations → 加载 seed
+#   pnpm db:verify    验证 schema 能从零重建且 DDL 与基线一致
+#   pnpm db:stop      停止
+#
+# 这个文件必须纳入版本控制。
+
+project_id = "travel-creation"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+# 与 Supabase 托管环境保持一致，避免本地能跑、线上炸的版本差异
+major_version = 15
+
+[db.pooler]
+enabled = false
+port = 54329
+pool_mode = "transaction"
+
+[studio]
+enabled = true
+port = 54323
+api_url = "http://127.0.0.1:54321"
+
+# 本地邮件测试箱 —— 注册/找回密码的邮件不会真的发出去
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+file_size_limit = "10MiB"   # 与 /api/photos 和 /api/upload 的上限一致
+
+# ── Storage buckets ─────────────────────────────────────────────────────────
+# 声明式创建，db reset 时自动重建。此前需要手工进 Dashboard 点，
+# 那不该是开发流程的一部分。
+#
+# ⚠️ public = true 的含义：任何人知道 URL 就能读取文件，与数据库里的
+#    is_public 字段无关。这是当前架构的已知隐私缺口
+#    （见 DOMAIN-MODEL-REVIEW.md P6）——发布素材应改为独立的公开副本，
+#    原图走 private bucket + Signed URL。
+#    这里暂时保持与旧系统一致，以便旧代码能跑起来做能力验证。
+
+[storage.buckets.photos]
+public = true
+file_size_limit = "10MiB"
+allowed_mime_types = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]
+
+[storage.buckets.documents]
+public = true
+file_size_limit = "10MiB"
+allowed_mime_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = ["http://127.0.0.1:3000", "http://localhost:3000"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+# 本地开发不要求确认邮件，否则每次注册都要去 inbucket 点链接
+enable_confirmations = false
+
+# ⚠️ 身份模型待决（DOMAIN-MODEL-REVIEW.md I1）：
+#    本项目当前用 Better Auth（自建 user/session/account 表 + 直连 pg），
+#    不是 Supabase Auth。这里的 [auth] 配置只为让本地 Supabase 完整启动，
+#    **应用并不使用它**。
+#
+#    后果：RLS 策略里的 auth.uid() 永远返回 NULL，所有 RLS 实际失效，
+#    数据隔离完全依赖 storage 层手写的 .eq('user_id', userId)。
+#    这是必须在 Phase 2 建表前解决的红色决策。
+
+[analytics]
+enabled = false
