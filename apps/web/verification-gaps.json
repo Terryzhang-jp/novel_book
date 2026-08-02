@@ -8,7 +8,7 @@
     "",
     "规则：新增缺口必须写 impact 和 closeWhen。closeWhen 不能是「以后」。"
   ],
-  "generatedAt": "2026-08-02",
+  "generatedAt": "2026-08-03",
   "gaps": [
     {
       "id": "legacy-photostorage-full-path",
@@ -22,12 +22,12 @@
     },
     {
       "id": "e2e-data-operations-need-supabase",
-      "title": "E2E 覆盖不到数据操作（照片/文档/地点/画布的增删改查）",
+      "title": "E2E 覆盖不到**遗留应用**的数据操作（照片/文档/地点/画布）",
       "severity": "medium",
-      "area": "e2e/auth-and-isolation.spec.ts",
-      "impact": "遗留应用的数据操作全部走 supabaseAdmin → PostgREST，需要完整 Supabase 本地栈（Docker）。E2E 环境里没有，因此浏览器层只覆盖了认证链路（Better Auth 直连 pg）：注册/登录/session 持久化/路由保护/未登录 401。",
-      "mitigation": "资源级跨用户隔离、默认私有、软删除、字段映射已由 44 条 Repository 契约在集成层证明（test/integration/photo-repository.contract.ts）。缺的是「同样的语义在真实 HTTP + 中间件 + 路由处理器上也成立」这一层。",
-      "closeWhen": "Docker 可用后跑 pnpm db:start，把 E2E 指向本地 Supabase；或新核心的数据路径改用 PostgresRepository 后直接覆盖。",
+      "area": "e2e/auth-and-isolation.spec.ts；不含 e2e/studio-vertical-slice.spec.ts",
+      "impact": "遗留应用的数据操作全部走 supabaseAdmin → PostgREST，需要完整 Supabase 本地栈（Docker）。E2E 环境里没有，因此遗留页面的增删改查在浏览器层没有被验证。",
+      "mitigation": "新核心（Phase 2A 的九张表）已经不受这个限制：它走标准 pg driver，e2e/studio-vertical-slice.spec.ts 在真实浏览器里完整走通了 Journey → Moment → Observation → Interpretation 修订 → Work 引用 → 发布 → 撤回。遗留侧的资源隔离、默认私有、软删除、字段映射由 44 条 Repository 契约在集成层证明。",
+      "closeWhen": "遗留页面按 Strangler 计划迁到新核心之后，这条缺口自然消失；在那之前若需要提前覆盖，可用 Docker 起 pnpm db:start 把 E2E 指向本地 Supabase。",
       "owner": "engineering"
     },
     {
@@ -59,6 +59,16 @@
       "mitigation": "集成测试用已知存在的他人 ID 验证 6 个操作全部 404。这是唯一能证明隔离生效的手段。",
       "closeWhen": "不打算关闭 —— 这是静态分析的固有边界，写在 ADR-001 正文里作为常识。",
       "owner": "engineering"
+    },
+    {
+      "id": "presentation-and-reorder-no-ui",
+      "title": "Presentation 配置与 block 重排有 API 但没有界面",
+      "severity": "low",
+      "area": "packages/infrastructure-postgres/src/work-repository.ts",
+      "impact": "reorderBlocks 和 upsertPresentation 已实现并有约束保护，但 Phase 2A 的页面没有接入 —— 用户目前只能按追加顺序排列内容，也不能换版式。",
+      "mitigation": "两者都不在用户为 Phase 2A 划定的范围内（明确要求暂不接复杂模板与编辑器）。reorderBlocks 的排列校验有单元级断言，upsertPresentation 在每次发布时被真实调用。",
+      "closeWhen": "Phase 2B 接入编辑器与版式系统时一并补 UI 和 E2E。",
+      "owner": "product"
     }
   ]
 }

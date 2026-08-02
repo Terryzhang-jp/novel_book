@@ -150,13 +150,88 @@ jobs:
         working-directory: apps/web
         run: pnpm test:integration
 
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # E2E —— 真实浏览器、真实 HTTP、真实 cookie
+  #
+  # 这一层证明的不是「函数返回了正确的值」，而是**用户真的能看见**。
+  # Phase 2A 的纵向链路（Journey → Moment → Observation → Interpretation
+  # → Work → Publication）就靠这个 job 守着。
+  # ══════════════════════════════════════════════════════════════════════════
+  e2e:
+    name: E2E（Playwright）
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      TEST_PG_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      BETTER_AUTH_SECRET: ci-only-secret-not-used-for-anything-real-32
+      BETTER_AUTH_URL: http://127.0.0.1:3210
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+      SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with: { version: '${{ env.PNPM_VERSION }}' }
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: 构建 headless 包
+        run: pnpm --filter novel build
+
+      # global-setup 只负责建库和 `next start`，**不会重新构建** ——
+      # 少了这一步，跑的就是上一次的产物（本地第一次跑就踩到了：新页面全是 404）
+      - name: 生产构建
+        working-directory: apps/web
+        run: pnpm build
+
+      - name: 安装 Chromium
+        working-directory: apps/web
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: E2E
+        working-directory: apps/web
+        run: pnpm e2e
+
+      - name: 失败时上传 trace 和截图
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: apps/web/test-results/
+          retention-days: 7
+
   # ══════════════════════════════════════════════════════════════════════════
   # 门禁汇总 —— 分支保护规则只需要盯这一个 job
   # ══════════════════════════════════════════════════════════════════════════
   gate:
     name: 门禁
     runs-on: ubuntu-latest
-    needs: [static, unit, database]
+    needs: [static, unit, database, e2e]
     if: always()
     steps:
       - name: 汇总
@@ -164,9 +239,11 @@ jobs:
           echo "static:   ${{ needs.static.result }}"
           echo "unit:     ${{ needs.unit.result }}"
           echo "database: ${{ needs.database.result }}"
+          echo "e2e:      ${{ needs.e2e.result }}"
           if [ "${{ needs.static.result }}" != "success" ] || \
              [ "${{ needs.unit.result }}" != "success" ] || \
-             [ "${{ needs.database.result }}" != "success" ]; then
+             [ "${{ needs.database.result }}" != "success" ] || \
+             [ "${{ needs.e2e.result }}" != "success" ]; then
             echo "::error::有门禁未通过"
             exit 1
           fi
@@ -174,10 +251,6 @@ jobs:
 
 # ────────────────────────────────────────────────────────────────────────────
 # 尚未加入 CI 的门禁（有意为之，不伪装成已覆盖）
-#
-#   E2E (Playwright)   骨架已建，但还没有真实流程测试。
-#                      放一个永远通过的空测试比没有测试更有害。
-#                      Commit 10 补上登录链路后再接进来。
 #
 #   性能门槛           脚本已建（pnpm perf:*），但需要一个跑得起来的应用
 #                      才能测量。当前会输出 not-measured，不设阈值 ——

@@ -25,55 +25,9 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { freshEmail, login, PASSWORD, register } from './helpers';
 
-/** 每次运行用不同邮箱，避免和上一次的残留冲突 */
-function freshEmail(tag: string): string {
-  return `e2e-${tag}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}@dev.local`;
-}
-
-const PASSWORD = 'e2e-password-123456';
-
-/**
- * 走完整的注册表单。
- *
- * 密保问题两个字段是必填的（这个产品没有邮件系统，密码找回靠它）。
- * 漏填时表单静默不提交、页面上也没有明显报错 —— 第一次写这个测试就卡在
- * 这里，所以封装成一处，避免每条测试各漏一个字段。
- */
-async function register(page: import('@playwright/test').Page, email: string, name: string) {
-  await page.goto('/register');
-  await page.fill('#email', email);
-  await page.fill('#name', name);
-  await page.fill('#password', PASSWORD);
-  await page.fill('#confirmPassword', PASSWORD);
-  await page.selectOption('#securityQuestion', { index: 1 });
-  await page.fill('#securityAnswer', 'e2e-answer');
-  await page.click('button[type="submit"]');
-  // 注册成功会离开 /register。断言 URL 变化而不是等某个具体元素 ——
-  // 后者会因为一次 UI 调整就红，而它其实不关心页面长什么样。
-  await expect(page).not.toHaveURL(/\/register/, { timeout: 25_000 });
-}
-
-async function login(page: import('@playwright/test').Page, email: string) {
-  await page.goto('/login');
-
-  // 登录页默认展示的是 Google 登录，邮箱表单藏在一个切换后面。
-  // 不硬编码那个按钮的文案 —— 直接等 #email 可见，不可见才去找切换入口。
-  // 这样将来 UI 文案改了，测试也不会红。
-  const emailField = page.locator('#email');
-  if (!(await emailField.isVisible().catch(() => false))) {
-    // 界面是中文的：按钮文案是「邮箱登录」。同时匹配英文，
-    // 免得将来做 i18n 时这条测试悄悄失效。
-    const toggle = page.getByRole('button', { name: /邮箱登录|email/i });
-    if (await toggle.count()) await toggle.first().click();
-  }
-  await emailField.waitFor({ state: 'visible', timeout: 15_000 });
-
-  await emailField.fill(email);
-  await page.fill('#password', PASSWORD);
-  await page.click('button[type="submit"]');
-  await expect(page).not.toHaveURL(/\/login/, { timeout: 25_000 });
-}
+// 注册 / 登录的表单细节见 e2e/helpers.ts —— 两条链路共用，避免各修各的一份
 
 /**
  * 通过**产品真实的登出按钮**登出。
