@@ -43,6 +43,11 @@ export function getPool(): pg.Pool {
   return pool;
 }
 
+/** 本 worker 测试库的连接串。给需要自己建连接的被测代码用。 */
+export function getDsn(): string {
+  return dsnFor(getDbName());
+}
+
 export function getDbName(): string {
   if (!dbName) throw new Error('数据库尚未初始化');
   return dbName;
@@ -109,6 +114,15 @@ beforeAll(async () => {
   const workerId = process.env.VITEST_POOL_ID ?? '1';
 
   dbName = await createWorkerDatabase(runId, workerId);
+
+  // 让被测代码连到本 worker 的库。
+  // 必须在任何 `await import('@/lib/...')` 之前设置 —— lib/auth.ts 在模块
+  // 顶层就用 DATABASE_URL 建了 pg.Pool，所以测试里要用动态 import 而不是
+  // 顶部静态 import，否则拿到的是指向错误数据库的实例。
+  process.env.DATABASE_URL = dsnFor(dbName);
+  process.env.BETTER_AUTH_SECRET ??= 'integration-test-secret-at-least-32-chars';
+  process.env.BETTER_AUTH_URL ??= 'http://127.0.0.1:3000';
+
   pool = new Pool({
     connectionString: dsnFor(dbName),
     // 每 worker 少量连接即可。worker 数 × max 不能超过 Postgres 的 max_connections。

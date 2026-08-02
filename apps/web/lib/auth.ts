@@ -17,6 +17,17 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
+/**
+ * 暴露连接池，仅供集成测试在结束时关闭它。
+ *
+ * 不导出的话，测试删除临时数据库时触发的 pg_terminate_backend 会让这个池
+ * 抛出未捕获的 "terminating connection due to administrator command"，
+ * 污染测试输出并可能造成误报。
+ *
+ * 应用代码不应该使用它 —— Better Auth 自己管理生命周期。
+ */
+export const authDbPool = pool;
+
 export const auth = betterAuth({
   // 数据库配置
   database: pool,

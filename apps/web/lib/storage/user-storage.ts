@@ -179,11 +179,15 @@ export class UserStorage {
    * 根据 ID 查找用户
    */
   async findById(id: string): Promise<Omit<User, "passwordHash"> | null> {
+    // 读 Better Auth 的 "user" 表，不是已废弃的 users。
+    // 见 ADR-001 与 migration 20260802010000_unify_identity.sql：
+    // 全部业务外键已改指向 "user"，users 不再是身份来源。
+    // 继续读 users 会让新注册用户的 /api/profile 返回 404。
     const { data, error } = await supabaseAdmin
-      .from('users')
+      .from('user')
       .select('id, email, name, require_password_change, created_at, updated_at')
       .eq('id', id)
-      .single();
+      .maybeSingle();
 
     if (error || !data) {
       return null;
@@ -253,11 +257,12 @@ export class UserStorage {
    * 返回不包含密码哈希的用户列表
    */
   async findAll(): Promise<Omit<User, "passwordHash">[]> {
+    // 同 findById：身份来源是 "user" 表
     const { data, error } = await supabaseAdmin
-      .from('users')
+      .from('user')
       .select('id, email, name, require_password_change, created_at, updated_at');
 
-    if (error) {
+    if (error || !data) {
       return [];
     }
 

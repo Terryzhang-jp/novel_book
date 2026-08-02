@@ -9,20 +9,20 @@
     ADD CONSTRAINT account_provider_id_account_id_key UNIQUE (provider_id, account_id);
     ADD CONSTRAINT account_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
     ADD CONSTRAINT ai_magic_history_pkey PRIMARY KEY (id);
-    ADD CONSTRAINT ai_magic_history_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+    ADD CONSTRAINT ai_magic_history_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
     ADD CONSTRAINT canvas_projects_pkey PRIMARY KEY (id);
-    ADD CONSTRAINT canvas_projects_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+    ADD CONSTRAINT canvas_projects_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
     ADD CONSTRAINT documents_pkey PRIMARY KEY (id);
-    ADD CONSTRAINT documents_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+    ADD CONSTRAINT documents_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
     ADD CONSTRAINT fk_photos_location FOREIGN KEY (location_id) REFERENCES public.locations(id) ON DELETE SET NULL;
     ADD CONSTRAINT locations_pkey PRIMARY KEY (id);
-    ADD CONSTRAINT locations_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+    ADD CONSTRAINT locations_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
     ADD CONSTRAINT photo_embeddings_photo_id_fkey FOREIGN KEY (photo_id) REFERENCES public.photos(id) ON DELETE CASCADE;
     ADD CONSTRAINT photo_embeddings_photo_id_key UNIQUE (photo_id);
     ADD CONSTRAINT photo_embeddings_pkey PRIMARY KEY (id);
-    ADD CONSTRAINT photo_embeddings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+    ADD CONSTRAINT photo_embeddings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
     ADD CONSTRAINT photos_pkey PRIMARY KEY (id);
-    ADD CONSTRAINT photos_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+    ADD CONSTRAINT photos_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
     ADD CONSTRAINT session_pkey PRIMARY KEY (id);
     ADD CONSTRAINT session_token_key UNIQUE (token);
     ADD CONSTRAINT session_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
@@ -144,12 +144,12 @@
     user_agent text,
     user_id text NOT NULL,
     user_id text NOT NULL,
-    user_id uuid NOT NULL,
-    user_id uuid NOT NULL,
-    user_id uuid NOT NULL,
-    user_id uuid NOT NULL,
-    user_id uuid NOT NULL,
-    user_id uuid NOT NULL,
+    user_id text NOT NULL,
+    user_id text NOT NULL,
+    user_id text NOT NULL,
+    user_id text NOT NULL,
+    user_id text NOT NULL,
+    user_id text NOT NULL,
     user_prompt text NOT NULL,
     value text NOT NULL,
     vector double precision[] NOT NULL,
@@ -244,26 +244,26 @@ CREATE POLICY "Public locations are viewable by everyone" ON public.locations FO
 CREATE POLICY "Public photos are viewable by everyone" ON public.photos FOR SELECT USING ((is_public = true));
 CREATE POLICY "Service role full access on ai_magic_history" ON public.ai_magic_history USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON public.canvas_projects USING (true) WITH CHECK (true);
-CREATE POLICY "Users can create own documents" ON public.documents FOR INSERT WITH CHECK (((auth.uid())::text = (user_id)::text));
-CREATE POLICY "Users can create own locations" ON public.locations FOR INSERT WITH CHECK (((auth.uid())::text = (user_id)::text));
-CREATE POLICY "Users can create own photos" ON public.photos FOR INSERT WITH CHECK (((auth.uid())::text = (user_id)::text));
-CREATE POLICY "Users can delete own ai magic history" ON public.ai_magic_history FOR DELETE USING (((auth.uid())::text = (user_id)::text));
-CREATE POLICY "Users can delete own canvas projects" ON public.canvas_projects FOR DELETE USING (((auth.uid())::text = (user_id)::text));
-CREATE POLICY "Users can delete own documents" ON public.documents FOR DELETE USING (((auth.uid())::text = (user_id)::text));
-CREATE POLICY "Users can delete own locations" ON public.locations FOR DELETE USING (((auth.uid())::text = (user_id)::text));
-CREATE POLICY "Users can delete own photos" ON public.photos FOR DELETE USING (((auth.uid())::text = (user_id)::text));
-CREATE POLICY "Users can insert own ai magic history" ON public.ai_magic_history FOR INSERT WITH CHECK (((auth.uid())::text = (user_id)::text));
-CREATE POLICY "Users can insert own canvas projects" ON public.canvas_projects FOR INSERT WITH CHECK (((auth.uid())::text = (user_id)::text));
-CREATE POLICY "Users can update own canvas projects" ON public.canvas_projects FOR UPDATE USING (((auth.uid())::text = (user_id)::text));
-CREATE POLICY "Users can update own documents" ON public.documents FOR UPDATE USING (((auth.uid())::text = (user_id)::text));
-CREATE POLICY "Users can update own locations" ON public.locations FOR UPDATE USING (((auth.uid())::text = (user_id)::text));
-CREATE POLICY "Users can update own photos" ON public.photos FOR UPDATE USING (((auth.uid())::text = (user_id)::text));
+CREATE POLICY "Users can create own documents" ON public.documents FOR INSERT WITH CHECK (((auth.uid())::text = user_id));
+CREATE POLICY "Users can create own locations" ON public.locations FOR INSERT WITH CHECK (((auth.uid())::text = user_id));
+CREATE POLICY "Users can create own photos" ON public.photos FOR INSERT WITH CHECK (((auth.uid())::text = user_id));
+CREATE POLICY "Users can delete own ai magic history" ON public.ai_magic_history FOR DELETE USING (((auth.uid())::text = user_id));
+CREATE POLICY "Users can delete own canvas projects" ON public.canvas_projects FOR DELETE USING (((auth.uid())::text = user_id));
+CREATE POLICY "Users can delete own documents" ON public.documents FOR DELETE USING (((auth.uid())::text = user_id));
+CREATE POLICY "Users can delete own locations" ON public.locations FOR DELETE USING (((auth.uid())::text = user_id));
+CREATE POLICY "Users can delete own photos" ON public.photos FOR DELETE USING (((auth.uid())::text = user_id));
+CREATE POLICY "Users can insert own ai magic history" ON public.ai_magic_history FOR INSERT WITH CHECK (((auth.uid())::text = user_id));
+CREATE POLICY "Users can insert own canvas projects" ON public.canvas_projects FOR INSERT WITH CHECK (((auth.uid())::text = user_id));
+CREATE POLICY "Users can update own canvas projects" ON public.canvas_projects FOR UPDATE USING (((auth.uid())::text = user_id));
+CREATE POLICY "Users can update own documents" ON public.documents FOR UPDATE USING (((auth.uid())::text = user_id));
+CREATE POLICY "Users can update own locations" ON public.locations FOR UPDATE USING (((auth.uid())::text = user_id));
+CREATE POLICY "Users can update own photos" ON public.photos FOR UPDATE USING (((auth.uid())::text = user_id));
 CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (((auth.uid())::text = (id)::text));
-CREATE POLICY "Users can view own ai magic history" ON public.ai_magic_history FOR SELECT USING (((auth.uid())::text = (user_id)::text));
-CREATE POLICY "Users can view own canvas projects" ON public.canvas_projects FOR SELECT USING (((auth.uid())::text = (user_id)::text));
-CREATE POLICY "Users can view own documents" ON public.documents FOR SELECT USING (((auth.uid())::text = (user_id)::text));
-CREATE POLICY "Users can view own locations" ON public.locations FOR SELECT USING (((auth.uid())::text = (user_id)::text));
-CREATE POLICY "Users can view own photos" ON public.photos FOR SELECT USING (((auth.uid())::text = (user_id)::text));
+CREATE POLICY "Users can view own ai magic history" ON public.ai_magic_history FOR SELECT USING (((auth.uid())::text = user_id));
+CREATE POLICY "Users can view own canvas projects" ON public.canvas_projects FOR SELECT USING (((auth.uid())::text = user_id));
+CREATE POLICY "Users can view own documents" ON public.documents FOR SELECT USING (((auth.uid())::text = user_id));
+CREATE POLICY "Users can view own locations" ON public.locations FOR SELECT USING (((auth.uid())::text = user_id));
+CREATE POLICY "Users can view own photos" ON public.photos FOR SELECT USING (((auth.uid())::text = user_id));
 CREATE POLICY "Users can view own profile" ON public.users FOR SELECT USING (((auth.uid())::text = (id)::text));
 CREATE SCHEMA public;
 CREATE TABLE public."user" (
