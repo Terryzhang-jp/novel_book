@@ -15,7 +15,8 @@
     "db:status": "supabase status",
     "db:verify": "./scripts/verify-schema-rebuild.sh",
     "db:snapshot": "./scripts/verify-schema-rebuild.sh --update",
-    "db:types": "supabase gen types typescript --local > types/database.generated.ts"
+    "db:types": "supabase gen types typescript --local > types/database.generated.ts",
+    "check:arch": "node scripts/check-architecture.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.1.0",
