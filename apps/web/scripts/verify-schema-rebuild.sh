@@ -4,7 +4,7 @@
 #
 # 三层验收（缺一不可）：
 #   1. 对象数量正确    —— 表/索引/策略/约束/触发器计数
-#   2. 具体 DDL 一致   —— 与 supabase/schema.snapshot.sql 逐行 diff
+#   2. 具体定义一致   —— 与 supabase/schema.snapshot.txt 逐项 diff（系统目录）
 #   3. seed 能加载     —— 含自检断言
 #
 # 只有 #1 通过是不够的：两边都可能有 50 个索引，但其中一个索引列错了。
@@ -23,7 +23,7 @@ UPDATE_SNAPSHOT=false
 [[ "${1:-}" == "--update" ]] && UPDATE_SNAPSHOT=true
 
 DB="tc_schema_verify_$$"
-SNAPSHOT="supabase/schema.snapshot.sql"
+SNAPSHOT="supabase/schema.snapshot.txt"
 
 cleanup() { psql -q postgres -c "DROP DATABASE IF EXISTS ${DB};" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
@@ -72,38 +72,40 @@ TRIGGERS=$(count "select count(*) from information_schema.triggers where trigger
 
 echo "▸ 对象数量：${TABLES} 表 / ${INDEXES} 索引 / ${POLICIES} RLS策略 / ${CONSTRAINTS} 约束 / ${TRIGGERS} 触发器"
 
-# ── 4. DDL 快照 diff（关键：数量相同不等于定义相同）─────────────────────────
-# 规范化：剔除 pg_dump 的环境设置、注释、版本号等不稳定内容后排序，
-# 让 diff 只反映真实的 DDL 差异。
-normalize_dump() {
-  pg_dump --schema-only --no-owner --no-privileges --no-comments --schema=public "$1" \
-    | grep -vE "^(SET |SELECT pg_catalog\.set_config|--|\\\\restrict|\\\\unrestrict)" \
-    | grep -v "^$" \
-    | sort
-}
+# ── 4. Schema 快照 diff（关键：数量相同不等于定义相同）─────────────────────
+#
+# 用系统目录查询而不是 pg_dump —— 见 scripts/dump-schema-catalog.sql 顶部的
+# 说明。简言之：pg_dump 的输出格式随 PostgreSQL 大版本变化（函数体的
+# dollar-quoting、换行），会让门禁在 PG14 本地绿、PG15 CI 红。
+#
+# 一个会因为数据库小版本而误报的门禁，很快就会被团队学会忽略。
 
 CURRENT=$(mktemp)
-normalize_dump "${DB}" > "${CURRENT}"
+if ! psql -v ON_ERROR_STOP=1 -q "${DB}" -f scripts/dump-schema-catalog.sql > "${CURRENT}" 2>/dev/null; then
+  echo "✗ 导出 schema 目录失败"
+  rm -f "${CURRENT}"; exit 1
+fi
+sed -i.bak '/^$/d' "${CURRENT}" && rm -f "${CURRENT}.bak"
 
 if [ "${UPDATE_SNAPSHOT}" = true ]; then
   {
-    echo "-- 规范化 schema 快照 —— 由 scripts/verify-schema-rebuild.sh --update 生成"
-    echo "-- 不要手工编辑。schema 有意变更时重新生成并连同 migration 一起提交。"
-    echo "-- 内容已排序且剔除环境相关行，仅用于 DDL 一致性 diff，不可直接执行。"
-    echo
+    echo "# 规范化 schema 快照 —— 由 scripts/verify-schema-rebuild.sh --update 生成"
+    echo "# 数据来源：系统目录（information_schema + pg_catalog），不是 pg_dump。"
+    echo "# 理由见 scripts/dump-schema-catalog.sql：pg_dump 的格式随 PG 大版本变化。"
+    echo "# 格式：<类型> <TAB> <标识> <TAB> <定义>，全局排序。不要手工编辑。"
     cat "${CURRENT}"
   } > "${SNAPSHOT}"
-  echo "▸ ✅ 已更新快照 ${SNAPSHOT}（$(wc -l < "${CURRENT}" | tr -d ' ') 行 DDL）"
+  echo "▸ ✅ 已更新快照 ${SNAPSHOT}（$(wc -l < "${CURRENT}" | tr -d ' ') 个对象）"
 elif [ ! -f "${SNAPSHOT}" ]; then
   echo "✗ 找不到 ${SNAPSHOT}。首次使用请跑：$0 --update"
   rm -f "${CURRENT}"; exit 1
 else
   EXPECTED=$(mktemp)
-  grep -v "^--" "${SNAPSHOT}" | grep -v "^$" > "${EXPECTED}"
+  grep -v "^#" "${SNAPSHOT}" | grep -v "^$" > "${EXPECTED}"
   if diff -q "${EXPECTED}" "${CURRENT}" >/dev/null; then
-    echo "▸ ✅ DDL 与快照逐行一致（$(wc -l < "${CURRENT}" | tr -d ' ') 行）"
+    echo "▸ ✅ schema 与快照逐项一致（$(wc -l < "${CURRENT}" | tr -d ' ') 个对象）"
   else
-    echo "▸ ❌ DDL 与快照不一致："
+    echo "▸ ❌ schema 与快照不一致："
     diff "${EXPECTED}" "${CURRENT}" | head -40 | sed 's/^/     /'
     echo
     echo "  如果这是有意的 schema 变更，请跑：$0 --update  并把快照一起提交"

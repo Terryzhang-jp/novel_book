@@ -1,0 +1,54 @@
+{
+  "$comment": [
+    "已知的验证缺口清单。",
+    "",
+    "存在的理由：CI 里的绿色会被理解成「已经验证」。一条必然通过的",
+    "「未验证」测试会混进通过数里，久而久之被当成覆盖。所以缺口不放在",
+    "测试里，放在这份清单里 —— 它不参与门禁，只用于评审和交接。",
+    "",
+    "规则：新增缺口必须写 impact 和 closeWhen。closeWhen 不能是「以后」。"
+  ],
+  "generatedAt": "2026-08-02",
+  "gaps": [
+    {
+      "id": "legacy-photostorage-full-path",
+      "title": "旧 photoStorage 的完整 PostgREST 链路未被契约覆盖",
+      "severity": "medium",
+      "area": "apps/web/lib/storage/photo-storage.ts",
+      "impact": "PhotoRepository 契约跑的是 PostgresPhotoRepository。旧实现走 supabase-js → PostgREST，这条链路的 URL 构造、查询参数序列化、错误处理没有测试。",
+      "mitigation": "字段映射这一段已经提取成纯函数 mapSupabasePhotoRow 并有回归测试（test/unit/supabase-photo-mapper.test.ts）—— 那正是两个已知 Gallery bug 的发生位置。剩下未覆盖的是 PostgREST 传输层。",
+      "closeWhen": "完整 Supabase 本地栈可用（pnpm db:start，需 Docker）或有可用 staging 时，把 runPhotoRepositoryContract 接到 SupabasePhotoRepository 上。",
+      "owner": "engineering"
+    },
+    {
+      "id": "account-deletion-semantics",
+      "title": "账号生命周期语义未定义",
+      "severity": "high",
+      "area": "数据库外键 ON DELETE CASCADE",
+      "impact": "删除 \"user\" 行会物理删除该用户的全部业务数据。但系统无法区分「退出登录 / 禁用账号 / 申请删除 / 最终删除」四种操作 —— 目前只有「删 user 行」这一个动作。",
+      "mitigation": "级联行为本身有测试覆盖，但那只证明了数据库行为，不代表产品语义正确。",
+      "closeWhen": "ADR-007 账号生命周期通过，并实现 active → disabled → deletion_requested → deleted 状态机。",
+      "owner": "product"
+    },
+    {
+      "id": "rls-not-a-security-layer",
+      "title": "26 条 RLS 策略保留但不参与安全承诺",
+      "severity": "low",
+      "area": "supabase/migrations/20260802000000_legacy_baseline.sql",
+      "impact": "策略里的 auth.uid() 恒为 NULL（项目用 Better Auth 不是 Supabase Auth），且服务端一律用 service_role 绕过。看到「有 26 条 RLS」可能误以为数据库层已经安全。",
+      "mitigation": "当前安全边界是应用层 Actor 授权 + Repository 带 user_id 条件的 SQL，且有 6 个跨用户操作的集成测试证明。这一点写在 ADR-001、migration 注释和架构检查器输出里。",
+      "closeWhen": "新核心不复制这些策略；未来若启用 RLS，必须满足 ADR-001 列的三个前提（受限角色 / SET LOCAL 传身份 / 每条策略有集成测试）。",
+      "owner": "engineering"
+    },
+    {
+      "id": "static-gate-shape-only",
+      "title": "架构检查器只能保证形状，不能保证语义",
+      "severity": "low",
+      "area": "scripts/check-architecture.mjs",
+      "impact": "Repository 方法签名里有 actor 但方法体没用它，静态检查照样放行 —— 那仍是越权漏洞。",
+      "mitigation": "集成测试用已知存在的他人 ID 验证 6 个操作全部 404。这是唯一能证明隔离生效的手段。",
+      "closeWhen": "不打算关闭 —— 这是静态分析的固有边界，写在 ADR-001 正文里作为常识。",
+      "owner": "engineering"
+    }
+  ]
+}

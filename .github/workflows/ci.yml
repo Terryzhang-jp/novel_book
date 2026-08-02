@@ -27,12 +27,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: pnpm/action-setup@v4
         with: { version: '${{ env.PNPM_VERSION }}' }
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -43,6 +43,12 @@ jobs:
       - name: 架构边界（ADR-000/001/002）
         working-directory: apps/web
         run: pnpm check:arch
+
+      # apps/web 从 `novel` 包（packages/headless）导入类型，而那个包的入口指向
+      # dist/。本地因为有历史构建产物所以看不出问题，全新 runner 上会直接
+      # "Cannot find module 'novel'"。这正是「本地绿不等于 CI 绿」的典型例子。
+      - name: 构建 headless 包（apps/web 的类型依赖它）
+        run: pnpm --filter novel build
 
       - name: 类型检查
         working-directory: apps/web
@@ -77,10 +83,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
         with: { version: '${{ env.PNPM_VERSION }}' }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -123,10 +129,10 @@ jobs:
       EXPECTED_PG_MAJOR: '15'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
         with: { version: '${{ env.PNPM_VERSION }}' }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm

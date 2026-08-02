@@ -5,6 +5,7 @@ import type { JSONContent } from "novel";
 import type { Photo, PhotoIndex, PhotoCategory, PhotoStats } from "@/types/storage";
 import { NotFoundError, UnauthorizedError } from "./errors";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { mapSupabasePhotoRow } from "./photo-row-mapper";
 import { uploadFile, deleteFile as deleteStorageFile, getPublicUrl } from "@/lib/supabase/storage";
 
 // Thumbnail configuration
@@ -429,28 +430,9 @@ export class PhotoStorage {
       return [];
     }
 
-    return data.map(photo => ({
-      id: photo.id,
-      userId: photo.user_id,
-      fileName: photo.file_name,
-      originalName: photo.original_name,
-      fileUrl: photo.file_url,
-      thumbnailUrl: photo.thumbnail_url,
-      metadata: photo.metadata,
-      category: photo.category,
-      locationId: photo.location_id,
-      title: photo.title,
-      description: photo.description,
-      tags: photo.tags,
-      isPublic: photo.is_public,
-      trashed: photo.trashed,
-      trashedAt: photo.trashed_at,
-      originalFileUrl: photo.original_file_url,
-      edited: photo.edited,
-      editedAt: photo.edited_at,
-      createdAt: photo.created_at,
-      updatedAt: photo.updated_at,
-    }));
+    // 走统一的映射器：Gallery 关键列缺失时立刻抛错，不返回残缺对象。
+    // 见 lib/storage/photo-row-mapper.ts —— 两个已知 Gallery bug 就出在这。
+    return data.map(mapSupabasePhotoRow);
   }
 
   /**

@@ -9,8 +9,11 @@
  * PostgREST，需要完整的 Supabase 本地栈（Docker）。当前环境没有，
  * 所以它**没有被验证**。
  *
- * 见 photo-repository.supabase.test.ts —— 那个文件会明确报告
- * "not verified"，而不是 skip 后混进通过数里。
+ * 这个缺口记在 verification-gaps.json 的 legacy-photostorage-full-path。
+ * 不放一条「会通过的未验证测试」—— CI 里的绿色会被理解成已验证。
+ *
+ * 缺口中真正出过错的那一段（字段映射）已经用纯函数测试关闭了，
+ * 见 test/unit/supabase-photo-mapper.test.ts。
  */
 
 import { beforeAll } from 'vitest';
