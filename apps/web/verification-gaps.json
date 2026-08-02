@@ -33,11 +33,11 @@
     {
       "id": "account-deletion-semantics",
       "title": "账号生命周期语义未定义",
-      "severity": "high",
+      "severity": "medium",
       "area": "数据库外键 ON DELETE CASCADE",
       "impact": "删除 \"user\" 行会物理删除该用户的全部业务数据。但系统无法区分「退出登录 / 禁用账号 / 申请删除 / 最终删除」四种操作 —— 目前只有「删 user 行」这一个动作。",
-      "mitigation": "级联行为本身有测试覆盖，但那只证明了数据库行为，不代表产品语义正确。",
-      "closeWhen": "ADR-007 账号生命周期通过，并实现 active → disabled → deletion_requested → deleted 状态机。",
+      "mitigation": "ADR-007 已定义 active → disabled → deletion_requested → deleted 状态机，以及四种操作各自的语义。",
+      "closeWhen": "实现 user.status 字段与删除流程，并补齐 ADR-007 列的 4 条集成测试。",
       "owner": "product"
     },
     {
