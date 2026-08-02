@@ -12,6 +12,25 @@ const THUMBNAIL_SIZE = 300; // 300x300 max dimension
 const THUMBNAIL_QUALITY = 80; // JPEG quality
 
 /**
+ * 把数据库里的 metadata JSONB 归一化成 Photo["metadata"]。
+ *
+ * 数据库列可能是 null 或缺字段（历史数据、迁移中途写入的行），
+ * 而 Photo["metadata"] 的 fileSize / mimeType 是必填。
+ * 统一在这里兜底，避免每个调用点各写一遍可选链。
+ */
+export function normalizePhotoMetadata(raw: unknown): Photo["metadata"] {
+  const m = (raw ?? {}) as Partial<Photo["metadata"]>;
+  return {
+    dateTime: m.dateTime,
+    location: m.location,
+    camera: m.camera,
+    dimensions: m.dimensions,
+    fileSize: typeof m.fileSize === "number" ? m.fileSize : 0,
+    mimeType: typeof m.mimeType === "string" ? m.mimeType : "application/octet-stream",
+  };
+}
+
+/**
  * 照片存储类 - Supabase版本
  * 负责照片的 CRUD 操作和 EXIF 提取
  */
@@ -132,7 +151,11 @@ export class PhotoStorage {
    */
   private async generateThumbnail(buffer: Buffer): Promise<Buffer> {
     try {
-      return await sharp(buffer)
+      // limitInputPixels 防「图片炸弹」：压缩后只有几十 KB、但解压后
+      // 有数十亿像素的 PNG 会直接把 Serverless 函数的内存打爆。
+      // 1 亿像素 ≈ 10000×10000，远超任何真实照片。
+      // 见 PERFORMANCE-AUDIT.md 第七组 #8。
+      return await sharp(buffer, { limitInputPixels: 100_000_000 })
         .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, {
           fit: 'cover',
           position: 'centre',
@@ -303,8 +326,19 @@ export class PhotoStorage {
     // 确定排序方向
     const ascending = options?.sortOrder === 'oldest';
 
-    // Only select fields needed for gallery display (much faster)
-    const selectFields = 'id, file_url, file_name, original_name, category, thumbnail_url, created_at, metadata->dateTime';
+    // 只取 Gallery 展示需要的字段（比 SELECT * 快很多），但必须包含
+    // metadata 和 location_id —— 前端的时间聚类依赖 metadata.dateTime，
+    // 地点筛选依赖 locationId。此前这两个字段没被 select 也没被映射，
+    // 而返回值用 `as Photo` 强转掩盖了缺失，导致：
+    //   · Gallery「全部」视图下地点筛选永远返回 0 张
+    //   · Gallery「全部」视图下时间聚类完全失效（全部落进"无时间"桶）
+    // 见 PERFORMANCE-AUDIT.md Q9 Bug 1 & 2。
+    //
+    // 注意：这里取整个 metadata 而不是 metadata->dateTime，因为地图和聚类
+    // 还需要 metadata.location。EXIF 里的 camera/dimensions 体积很小，
+    // 不值得为省这几十字节再拆一次查询。
+    const selectFields =
+      'id, file_url, file_name, original_name, category, thumbnail_url, created_at, updated_at, location_id, metadata';
 
     let query = supabaseAdmin
       .from('photos')
@@ -334,16 +368,21 @@ export class PhotoStorage {
       return [];
     }
 
-    return data.map(photo => ({
+    // 不再用 `as Photo` 断言 —— 那是掩盖字段缺失的元凶。
+    // 现在显式构造，让 TypeScript 真正检查字段完整性。
+    return data.map((photo): Photo => ({
       id: photo.id,
-      userId: userId,
+      userId,
       fileName: photo.file_name,
       originalName: photo.original_name,
       fileUrl: photo.file_url,
-      thumbnailUrl: photo.thumbnail_url,
+      thumbnailUrl: photo.thumbnail_url ?? undefined,
+      locationId: photo.location_id ?? undefined,
+      metadata: normalizePhotoMetadata(photo.metadata),
       category: photo.category,
       createdAt: photo.created_at,
-    } as Photo));
+      updatedAt: photo.updated_at ?? photo.created_at,
+    }));
   }
 
   /**
