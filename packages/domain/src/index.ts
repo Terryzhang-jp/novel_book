@@ -6,8 +6,11 @@
  *   · 不 import react / next / node IO / pg / @supabase/*
  *   · 纯类型与纯函数
  *
- * Phase 2 会在这里加 Journey / Moment / Work / Publication。
- * 现在只有 Actor —— 它是 ADR-001 的直接产物，也是 Repository 契约的前提。
+ * 这里的东西对所有调用方（HTTP、CLI、迁移脚本、测试）语义一致。
+ * 需要 IO 的实现在 infrastructure-*，用例编排在 application。
  */
 export * from './actor';
 export * from './storage';
+export * from './journey';
+export * from './moment';
+export * from './work';

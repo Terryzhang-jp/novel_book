@@ -29,36 +29,41 @@ describe('测试数据库生命周期', () => {
     expect(templateDbName()).toBe(`tc_it_tpl_${fp}`);
   });
 
-  it('schema 完整：11 张表', async () => {
+  it('遗留表齐全', async () => {
     const rows = await sql<{ tablename: string }>(
       `SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1`
     );
-    expect(rows.map((r) => r.tablename)).toEqual([
-      'account',
-      'ai_magic_history',
-      'canvas_projects',
-      'documents',
-      'locations',
-      'photo_embeddings',
-      'photos',
-      'session',
-      'user',
-      'users',
-      'verification',
-    ]);
+    const names = new Set(rows.map((r) => r.tablename));
+    for (const t of [
+      'account', 'ai_magic_history', 'canvas_projects', 'documents',
+      'locations', 'photo_embeddings', 'photos', 'session', 'user',
+      'users', 'verification',
+    ]) {
+      expect(names.has(t), `缺少遗留表 ${t}`).toBe(true);
+    }
   });
 
-  it('索引、约束、触发器数量与 baseline 一致', async () => {
-    const [counts] = await sql<{ idx: string; con: string; trg: string }>(`
-      SELECT
-        (SELECT count(*) FROM pg_indexes WHERE schemaname='public')::text AS idx,
-        (SELECT count(*) FROM information_schema.table_constraints WHERE constraint_schema='public')::text AS con,
-        (SELECT count(*) FROM information_schema.triggers WHERE trigger_schema='public')::text AS trg
-    `);
-    expect(Number(counts.idx)).toBe(50);
-    expect(Number(counts.con)).toBe(81);
-    expect(Number(counts.trg)).toBe(9);
+  it('Phase 2A 核心表齐全', async () => {
+    const rows = await sql<{ tablename: string }>(
+      `SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1`
+    );
+    const names = new Set(rows.map((r) => r.tablename));
+    for (const t of [
+      'journeys', 'moments', 'observations', 'interpretation_revisions',
+      'works', 'work_blocks', 'work_presentations',
+      'work_versions', 'publications',
+    ]) {
+      expect(names.has(t), `缺少核心表 ${t}`).toBe(true);
+    }
   });
+
+  // 刻意**不再断言对象总数**。
+  //
+  // 原来这里写死了「50 个索引 / 81 个约束」，每次加表都要同时改测试和
+  // 快照两个地方 —— 那种摩擦最终会让人把测试关掉。
+  //
+  // 精确的定义级 diff 由 `pnpm db:verify` 负责（schema.snapshot.txt 逐项
+  // 比对，404 个对象）。这里只断言**语义**：该有的表在不在。
 
   it('seed 数据已加载：2 用户 / 10 照片', async () => {
     const [{ users }] = await sql<{ users: string }>('SELECT count(*)::text AS users FROM users');

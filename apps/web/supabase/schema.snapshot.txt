@@ -47,6 +47,23 @@ column	documents.tags	text[] DEFAULT ARRAY[]::text[]
 column	documents.title	text NOT NULL
 column	documents.updated_at	timestamp with time zone DEFAULT now()
 column	documents.user_id	text NOT NULL
+column	interpretation_revisions.based_on_observation_ids	uuid[] NOT NULL DEFAULT '{}'::uuid[]
+column	interpretation_revisions.content	text NOT NULL
+column	interpretation_revisions.created_at	timestamp with time zone NOT NULL DEFAULT now()
+column	interpretation_revisions.id	uuid NOT NULL DEFAULT gen_random_uuid()
+column	interpretation_revisions.moment_id	uuid NOT NULL
+column	interpretation_revisions.status	text NOT NULL
+column	interpretation_revisions.supersedes_id	uuid
+column	interpretation_revisions.user_id	text NOT NULL
+column	journeys.created_at	timestamp with time zone NOT NULL DEFAULT now()
+column	journeys.ended_at	timestamp with time zone
+column	journeys.id	uuid NOT NULL DEFAULT gen_random_uuid()
+column	journeys.intent	text
+column	journeys.started_at	timestamp with time zone NOT NULL
+column	journeys.title	text NOT NULL
+column	journeys.type	text NOT NULL
+column	journeys.updated_at	timestamp with time zone NOT NULL DEFAULT now()
+column	journeys.user_id	text NOT NULL
 column	locations.address	jsonb
 column	locations.category	text
 column	locations.coordinates	jsonb NOT NULL
@@ -60,6 +77,21 @@ column	locations.place_id	text
 column	locations.updated_at	timestamp with time zone DEFAULT now()
 column	locations.usage_count	integer DEFAULT 0
 column	locations.user_id	text NOT NULL
+column	moments.created_at	timestamp with time zone NOT NULL DEFAULT now()
+column	moments.id	uuid NOT NULL DEFAULT gen_random_uuid()
+column	moments.journey_id	uuid
+column	moments.occurred_at	timestamp with time zone
+column	moments.place_label	text
+column	moments.provenance	jsonb NOT NULL DEFAULT '{"_v": 1}'::jsonb
+column	moments.title	text
+column	moments.updated_at	timestamp with time zone NOT NULL DEFAULT now()
+column	moments.user_id	text NOT NULL
+column	observations.content	text NOT NULL
+column	observations.created_at	timestamp with time zone NOT NULL DEFAULT now()
+column	observations.id	uuid NOT NULL DEFAULT gen_random_uuid()
+column	observations.moment_id	uuid NOT NULL
+column	observations.recorded_at	timestamp with time zone NOT NULL DEFAULT now()
+column	observations.user_id	text NOT NULL
 column	photo_embeddings.created_at	timestamp with time zone DEFAULT now()
 column	photo_embeddings.dimension	integer NOT NULL DEFAULT 512
 column	photo_embeddings.id	uuid NOT NULL DEFAULT gen_random_uuid()
@@ -87,6 +119,13 @@ column	photos.trashed	boolean DEFAULT false
 column	photos.trashed_at	timestamp with time zone
 column	photos.updated_at	timestamp with time zone DEFAULT now()
 column	photos.user_id	text NOT NULL
+column	publications.id	uuid NOT NULL DEFAULT gen_random_uuid()
+column	publications.published_at	timestamp with time zone NOT NULL DEFAULT now()
+column	publications.slug	text NOT NULL
+column	publications.user_id	text NOT NULL
+column	publications.visibility	text NOT NULL
+column	publications.withdrawn_at	timestamp with time zone
+column	publications.work_version_id	uuid NOT NULL
 column	session.created_at	timestamp with time zone DEFAULT now()
 column	session.expires_at	timestamp with time zone NOT NULL
 column	session.id	text NOT NULL
@@ -121,6 +160,32 @@ column	verification.id	text NOT NULL
 column	verification.identifier	text NOT NULL
 column	verification.updated_at	timestamp with time zone DEFAULT now()
 column	verification.value	text NOT NULL
+column	work_blocks.created_at	timestamp with time zone NOT NULL DEFAULT now()
+column	work_blocks.id	uuid NOT NULL DEFAULT gen_random_uuid()
+column	work_blocks.moment_id	uuid
+column	work_blocks.position	integer NOT NULL
+column	work_blocks.text_content	text
+column	work_blocks.tombstone	jsonb
+column	work_blocks.type	text NOT NULL
+column	work_blocks.updated_at	timestamp with time zone NOT NULL DEFAULT now()
+column	work_blocks.work_id	uuid NOT NULL
+column	work_presentations.config	jsonb NOT NULL DEFAULT '{"_v": 1}'::jsonb
+column	work_presentations.created_at	timestamp with time zone NOT NULL DEFAULT now()
+column	work_presentations.id	uuid NOT NULL DEFAULT gen_random_uuid()
+column	work_presentations.renderer_type	text NOT NULL
+column	work_presentations.updated_at	timestamp with time zone NOT NULL DEFAULT now()
+column	work_presentations.work_id	uuid NOT NULL
+column	work_versions.created_at	timestamp with time zone NOT NULL DEFAULT now()
+column	work_versions.id	uuid NOT NULL DEFAULT gen_random_uuid()
+column	work_versions.snapshot	jsonb NOT NULL
+column	work_versions.user_id	text NOT NULL
+column	work_versions.version_number	integer NOT NULL
+column	work_versions.work_id	uuid
+column	works.created_at	timestamp with time zone NOT NULL DEFAULT now()
+column	works.id	uuid NOT NULL DEFAULT gen_random_uuid()
+column	works.title	text NOT NULL
+column	works.updated_at	timestamp with time zone NOT NULL DEFAULT now()
+column	works.user_id	text NOT NULL
 constraint	account.account_pkey	PRIMARY KEY (id)
 constraint	account.account_provider_id_account_id_key	UNIQUE (provider_id, account_id)
 constraint	account.account_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
@@ -130,8 +195,27 @@ constraint	canvas_projects.canvas_projects_pkey	PRIMARY KEY (id)
 constraint	canvas_projects.canvas_projects_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
 constraint	documents.documents_pkey	PRIMARY KEY (id)
 constraint	documents.documents_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
+constraint	interpretation_revisions.chk_no_self_supersede	CHECK ((supersedes_id IS DISTINCT FROM id))
+constraint	interpretation_revisions.interpretation_revisions_content_check	CHECK ((length(btrim(content)) > 0))
+constraint	interpretation_revisions.interpretation_revisions_moment_id_fke	FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE CASCADE
+constraint	interpretation_revisions.interpretation_revisions_pkey	PRIMARY KEY (id)
+constraint	interpretation_revisions.interpretation_revisions_status_check	CHECK ((status = ANY (ARRAY['current'::text, 'superseded'::text])))
+constraint	interpretation_revisions.interpretation_revisions_supersedes_id	FOREIGN KEY (supersedes_id) REFERENCES interpretation_revisions(id) ON DELETE RESTRICT
+constraint	interpretation_revisions.interpretation_revisions_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
+constraint	journeys.chk_journey_period	CHECK (((ended_at IS NULL) OR (ended_at >= started_at)))
+constraint	journeys.journeys_pkey	PRIMARY KEY (id)
+constraint	journeys.journeys_title_check	CHECK ((length(btrim(title)) > 0))
+constraint	journeys.journeys_type_check	CHECK ((type = ANY (ARRAY['trip'::text, 'outing'::text])))
+constraint	journeys.journeys_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
 constraint	locations.locations_pkey	PRIMARY KEY (id)
 constraint	locations.locations_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
+constraint	moments.moments_journey_id_fkey	FOREIGN KEY (journey_id) REFERENCES journeys(id) ON DELETE SET NULL
+constraint	moments.moments_pkey	PRIMARY KEY (id)
+constraint	moments.moments_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
+constraint	observations.observations_content_check	CHECK ((length(btrim(content)) > 0))
+constraint	observations.observations_moment_id_fkey	FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE CASCADE
+constraint	observations.observations_pkey	PRIMARY KEY (id)
+constraint	observations.observations_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
 constraint	photo_embeddings.photo_embeddings_photo_id_fkey	FOREIGN KEY (photo_id) REFERENCES photos(id) ON DELETE CASCADE
 constraint	photo_embeddings.photo_embeddings_photo_id_key	UNIQUE (photo_id)
 constraint	photo_embeddings.photo_embeddings_pkey	PRIMARY KEY (id)
@@ -140,6 +224,11 @@ constraint	photos.fk_photos_location	FOREIGN KEY (location_id) REFERENCES locati
 constraint	photos.photos_category_check	CHECK ((category = ANY (ARRAY['time-location'::text, 'time-only'::text, 'location-only'::text, 'neither'::text])))
 constraint	photos.photos_pkey	PRIMARY KEY (id)
 constraint	photos.photos_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
+constraint	publications.publications_pkey	PRIMARY KEY (id)
+constraint	publications.publications_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
+constraint	publications.publications_visibility_check	CHECK ((visibility = ANY (ARRAY['private'::text, 'unlisted'::text, 'public'::text])))
+constraint	publications.publications_work_version_id_fkey	FOREIGN KEY (work_version_id) REFERENCES work_versions(id) ON DELETE CASCADE
+constraint	publications.uq_publication_slug	UNIQUE (slug)
 constraint	session.session_pkey	PRIMARY KEY (id)
 constraint	session.session_token_key	UNIQUE (token)
 constraint	session.session_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
@@ -148,6 +237,27 @@ constraint	user.user_pkey	PRIMARY KEY (id)
 constraint	users.users_email_key	UNIQUE (email)
 constraint	users.users_pkey	PRIMARY KEY (id)
 constraint	verification.verification_pkey	PRIMARY KEY (id)
+constraint	work_blocks.chk_block_shape	CHECK ((((type = 'text'::text) AND (text_content IS NOT NULL) AND (length(btrim(text_content)) > 0)) OR ((type = 'moment_ref'::text) AND ((moment_id IS NOT NULL) OR (tombstone IS NOT NULL)))))
+constraint	work_blocks.uq_work_block_position	UNIQUE (work_id, "position") DEFERRABLE INITIALLY DEFERRED
+constraint	work_blocks.work_blocks_moment_id_fkey	FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE SET NULL
+constraint	work_blocks.work_blocks_pkey	PRIMARY KEY (id)
+constraint	work_blocks.work_blocks_position_check	CHECK (("position" >= 0))
+constraint	work_blocks.work_blocks_type_check	CHECK ((type = ANY (ARRAY['text'::text, 'moment_ref'::text])))
+constraint	work_blocks.work_blocks_work_id_fkey	FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
+constraint	work_presentations.uq_work_presentation	UNIQUE (work_id, renderer_type)
+constraint	work_presentations.work_presentations_pkey	PRIMARY KEY (id)
+constraint	work_presentations.work_presentations_renderer_type_check	CHECK ((renderer_type = ANY (ARRAY['web'::text, 'magazine'::text, 'poster'::text, 'map'::text])))
+constraint	work_presentations.work_presentations_work_id_fkey	FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
+constraint	work_versions.chk_snapshot_versioned	CHECK ((snapshot ? '_v'::text))
+constraint	work_versions.uq_work_version	UNIQUE (work_id, version_number)
+constraint	work_versions.work_versions_pkey	PRIMARY KEY (id)
+constraint	work_versions.work_versions_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
+constraint	work_versions.work_versions_version_number_check	CHECK ((version_number >= 1))
+constraint	work_versions.work_versions_work_id_fkey	FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE SET NULL
+constraint	works.works_pkey	PRIMARY KEY (id)
+constraint	works.works_title_check	CHECK ((length(btrim(title)) > 0))
+constraint	works.works_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
+function	check_interpretation_same_moment()	RETURNS trigger LANGUAGE plpgsql |  DECLARE target_moment uuid; BEGIN IF NEW.supersedes_id IS NULL THEN RETURN NEW; END IF; SELECT moment_id INTO target_moment FROM interpretation_revisions WHERE id = NEW.supersedes_id; IF target_moment IS NULL THEN RAISE EXCEPTION 'supersedes_id % 不存在', NEW.supersedes_id; END IF; IF target_moment <> NEW.moment_id THEN RAISE EXCEPTION '违反不变量 I-4：不能 supersede 另一个 Moment 的 revision（% vs %）', target_moment, NEW.moment_id; END IF; RETURN NEW; END 
 function	update_canvas_updated_at()	RETURNS trigger LANGUAGE plpgsql |  BEGIN NEW.updated_at = NOW(); RETURN NEW; END; 
 function	update_updated_at_column()	RETURNS trigger LANGUAGE plpgsql |  BEGIN NEW.updated_at = NOW(); RETURN NEW; END; 
 function	uuid_generate_v1()	RETURNS uuid LANGUAGE c | uuid_generate_v1
@@ -177,10 +287,21 @@ index	documents.idx_documents_created_at	CREATE INDEX idx_documents_created_at O
 index	documents.idx_documents_is_public	CREATE INDEX idx_documents_is_public ON public.documents USING btree (is_public)
 index	documents.idx_documents_updated_at	CREATE INDEX idx_documents_updated_at ON public.documents USING btree (updated_at DESC)
 index	documents.idx_documents_user_id	CREATE INDEX idx_documents_user_id ON public.documents USING btree (user_id)
+index	interpretation_revisions.idx_interpretation_moment	CREATE INDEX idx_interpretation_moment ON public.interpretation_revisions USING btree (moment_id, created_at)
+index	interpretation_revisions.interpretation_revisions_pkey	CREATE UNIQUE INDEX interpretation_revisions_pkey ON public.interpretation_revisions USING btree (id)
+index	interpretation_revisions.uq_interpretation_current	CREATE UNIQUE INDEX uq_interpretation_current ON public.interpretation_revisions USING btree (moment_id) WHERE (status = 'current'::text)
+index	interpretation_revisions.uq_interpretation_supersedes	CREATE UNIQUE INDEX uq_interpretation_supersedes ON public.interpretation_revisions USING btree (supersedes_id) WHERE (supersedes_id IS NOT NULL)
+index	journeys.idx_journeys_user_started	CREATE INDEX idx_journeys_user_started ON public.journeys USING btree (user_id, started_at DESC)
+index	journeys.journeys_pkey	CREATE UNIQUE INDEX journeys_pkey ON public.journeys USING btree (id)
 index	locations.idx_locations_is_public	CREATE INDEX idx_locations_is_public ON public.locations USING btree (is_public)
 index	locations.idx_locations_usage_count	CREATE INDEX idx_locations_usage_count ON public.locations USING btree (usage_count DESC)
 index	locations.idx_locations_user_id	CREATE INDEX idx_locations_user_id ON public.locations USING btree (user_id)
 index	locations.locations_pkey	CREATE UNIQUE INDEX locations_pkey ON public.locations USING btree (id)
+index	moments.idx_moments_journey	CREATE INDEX idx_moments_journey ON public.moments USING btree (journey_id) WHERE (journey_id IS NOT NULL)
+index	moments.idx_moments_user_occurred	CREATE INDEX idx_moments_user_occurred ON public.moments USING btree (user_id, occurred_at DESC NULLS LAST)
+index	moments.moments_pkey	CREATE UNIQUE INDEX moments_pkey ON public.moments USING btree (id)
+index	observations.idx_observations_moment	CREATE INDEX idx_observations_moment ON public.observations USING btree (moment_id, recorded_at)
+index	observations.observations_pkey	CREATE UNIQUE INDEX observations_pkey ON public.observations USING btree (id)
 index	photo_embeddings.idx_photo_embeddings_photo_id	CREATE INDEX idx_photo_embeddings_photo_id ON public.photo_embeddings USING btree (photo_id)
 index	photo_embeddings.idx_photo_embeddings_user_id	CREATE INDEX idx_photo_embeddings_user_id ON public.photo_embeddings USING btree (user_id)
 index	photo_embeddings.photo_embeddings_photo_id_key	CREATE UNIQUE INDEX photo_embeddings_photo_id_key ON public.photo_embeddings USING btree (photo_id)
@@ -195,6 +316,10 @@ index	photos.idx_photos_trashed	CREATE INDEX idx_photos_trashed ON public.photos
 index	photos.idx_photos_trashed_at	CREATE INDEX idx_photos_trashed_at ON public.photos USING btree (user_id, trashed_at) WHERE (trashed = true)
 index	photos.idx_photos_user_id	CREATE INDEX idx_photos_user_id ON public.photos USING btree (user_id)
 index	photos.photos_pkey	CREATE UNIQUE INDEX photos_pkey ON public.photos USING btree (id)
+index	publications.idx_publications_live	CREATE INDEX idx_publications_live ON public.publications USING btree (slug) WHERE (withdrawn_at IS NULL)
+index	publications.idx_publications_user	CREATE INDEX idx_publications_user ON public.publications USING btree (user_id, published_at DESC)
+index	publications.publications_pkey	CREATE UNIQUE INDEX publications_pkey ON public.publications USING btree (id)
+index	publications.uq_publication_slug	CREATE UNIQUE INDEX uq_publication_slug ON public.publications USING btree (slug)
 index	session.idx_session_expires_at	CREATE INDEX idx_session_expires_at ON public.session USING btree (expires_at)
 index	session.idx_session_token	CREATE INDEX idx_session_token ON public.session USING btree (token)
 index	session.idx_session_user_id	CREATE INDEX idx_session_user_id ON public.session USING btree (user_id)
@@ -210,6 +335,16 @@ index	users.users_pkey	CREATE UNIQUE INDEX users_pkey ON public.users USING btre
 index	verification.idx_verification_expires_at	CREATE INDEX idx_verification_expires_at ON public.verification USING btree (expires_at)
 index	verification.idx_verification_identifier	CREATE INDEX idx_verification_identifier ON public.verification USING btree (identifier)
 index	verification.verification_pkey	CREATE UNIQUE INDEX verification_pkey ON public.verification USING btree (id)
+index	work_blocks.idx_work_blocks_moment	CREATE INDEX idx_work_blocks_moment ON public.work_blocks USING btree (moment_id) WHERE (moment_id IS NOT NULL)
+index	work_blocks.uq_work_block_position	CREATE UNIQUE INDEX uq_work_block_position ON public.work_blocks USING btree (work_id, "position")
+index	work_blocks.work_blocks_pkey	CREATE UNIQUE INDEX work_blocks_pkey ON public.work_blocks USING btree (id)
+index	work_presentations.uq_work_presentation	CREATE UNIQUE INDEX uq_work_presentation ON public.work_presentations USING btree (work_id, renderer_type)
+index	work_presentations.work_presentations_pkey	CREATE UNIQUE INDEX work_presentations_pkey ON public.work_presentations USING btree (id)
+index	work_versions.idx_work_versions_work	CREATE INDEX idx_work_versions_work ON public.work_versions USING btree (work_id, version_number DESC)
+index	work_versions.uq_work_version	CREATE UNIQUE INDEX uq_work_version ON public.work_versions USING btree (work_id, version_number)
+index	work_versions.work_versions_pkey	CREATE UNIQUE INDEX work_versions_pkey ON public.work_versions USING btree (id)
+index	works.idx_works_user_updated	CREATE INDEX idx_works_user_updated ON public.works USING btree (user_id, updated_at DESC)
+index	works.works_pkey	CREATE UNIQUE INDEX works_pkey ON public.works USING btree (id)
 policy	ai_magic_history.Service role full access on ai_magic_history	PERMISSIVE FOR ALL TO public USING (true) WITH CHECK (true)
 policy	ai_magic_history.Users can delete own ai magic history	PERMISSIVE FOR DELETE TO public USING (((auth.uid())::text = user_id)) WITH CHECK (-)
 policy	ai_magic_history.Users can insert own ai magic history	PERMISSIVE FOR INSERT TO public USING (-) WITH CHECK (((auth.uid())::text = user_id))
@@ -240,19 +375,34 @@ table	account	rls=disabled
 table	ai_magic_history	rls=enabled
 table	canvas_projects	rls=enabled
 table	documents	rls=enabled
+table	interpretation_revisions	rls=disabled
+table	journeys	rls=disabled
 table	locations	rls=enabled
+table	moments	rls=disabled
+table	observations	rls=disabled
 table	photo_embeddings	rls=disabled
 table	photos	rls=enabled
+table	publications	rls=disabled
 table	session	rls=disabled
 table	user	rls=disabled
 table	users	rls=enabled
 table	verification	rls=disabled
+table	work_blocks	rls=disabled
+table	work_presentations	rls=disabled
+table	work_versions	rls=disabled
+table	works	rls=disabled
 trigger	account.update_account_updated_at	CREATE TRIGGER update_account_updated_at BEFORE UPDATE ON public.account FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	canvas_projects.canvas_projects_updated_at	CREATE TRIGGER canvas_projects_updated_at BEFORE UPDATE ON public.canvas_projects FOR EACH ROW EXECUTE FUNCTION update_canvas_updated_at()
 trigger	documents.update_documents_updated_at	CREATE TRIGGER update_documents_updated_at BEFORE UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+trigger	interpretation_revisions.trg_interpretation_same_moment	CREATE TRIGGER trg_interpretation_same_moment BEFORE INSERT OR UPDATE ON public.interpretation_revisions FOR EACH ROW EXECUTE FUNCTION check_interpretation_same_moment()
+trigger	journeys.trg_journeys_updated_at	CREATE TRIGGER trg_journeys_updated_at BEFORE UPDATE ON public.journeys FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	locations.update_locations_updated_at	CREATE TRIGGER update_locations_updated_at BEFORE UPDATE ON public.locations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+trigger	moments.trg_moments_updated_at	CREATE TRIGGER trg_moments_updated_at BEFORE UPDATE ON public.moments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	photos.update_photos_updated_at	CREATE TRIGGER update_photos_updated_at BEFORE UPDATE ON public.photos FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	session.update_session_updated_at	CREATE TRIGGER update_session_updated_at BEFORE UPDATE ON public.session FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	user.update_user_updated_at	CREATE TRIGGER update_user_updated_at BEFORE UPDATE ON public."user" FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	users.update_users_updated_at	CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	verification.update_verification_updated_at	CREATE TRIGGER update_verification_updated_at BEFORE UPDATE ON public.verification FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+trigger	work_blocks.trg_work_blocks_updated_at	CREATE TRIGGER trg_work_blocks_updated_at BEFORE UPDATE ON public.work_blocks FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+trigger	work_presentations.trg_work_presentations_updated_at	CREATE TRIGGER trg_work_presentations_updated_at BEFORE UPDATE ON public.work_presentations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+trigger	works.trg_works_updated_at	CREATE TRIGGER trg_works_updated_at BEFORE UPDATE ON public.works FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
