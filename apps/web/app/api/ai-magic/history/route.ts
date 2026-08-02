@@ -7,6 +7,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/session";
 import { aiMagicStorage } from "@/lib/storage/ai-magic-storage";
+import { isAuthRequiredError } from "@/lib/auth/helpers";
 
 /**
  * GET: 获取用户历史记录列表
@@ -28,6 +29,16 @@ export async function GET(req: Request) {
     const index = await aiMagicStorage.getHistoryIndex(userId);
     return NextResponse.json({ history: index });
   } catch (error) {
+    // 未认证要返回 401 而不是 500 —— 否则客户端无法区分「请先登录」和
+    // 「服务端炸了」，监控里也会把正常的未登录流量记成错误。
+    // 见 lib/auth/helpers.ts 的 AuthRequiredError。
+    if (isAuthRequiredError(error)) {
+      return NextResponse.json(
+        { error: "Authentication required", code: "UNAUTHORIZED" },
+        { status: 401 }
+      );
+    }
+
     console.error("Failed to get AI Magic history:", error);
     return NextResponse.json(
       {
@@ -74,6 +85,16 @@ export async function DELETE(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    // 未认证要返回 401 而不是 500 —— 否则客户端无法区分「请先登录」和
+    // 「服务端炸了」，监控里也会把正常的未登录流量记成错误。
+    // 见 lib/auth/helpers.ts 的 AuthRequiredError。
+    if (isAuthRequiredError(error)) {
+      return NextResponse.json(
+        { error: "Authentication required", code: "UNAUTHORIZED" },
+        { status: 401 }
+      );
+    }
+
     console.error("Failed to delete AI Magic history:", error);
     return NextResponse.json(
       {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/session";
 import { photoStorage } from "@/lib/storage/photo-storage";
+import { isAuthRequiredError } from "@/lib/auth/helpers";
 
 export const runtime = "nodejs";
 
@@ -19,7 +20,7 @@ export async function GET(req: Request) {
   } catch (error) {
     console.error("Get photo stats error:", error);
 
-    if (error instanceof Error && error.message === "Please login to continue") {
+    if (isAuthRequiredError(error)) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/session";
 import { photoStorage } from "@/lib/storage/photo-storage";
 import sharp from "sharp";
+import { isAuthRequiredError } from "@/lib/auth/helpers";
 
 export const runtime = "nodejs";
 
@@ -119,7 +120,7 @@ export async function GET(
   } catch (error) {
     console.error("[Optimized API] Error:", error);
 
-    if (error instanceof Error && error.message === "Please login to continue") {
+    if (isAuthRequiredError(error)) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }

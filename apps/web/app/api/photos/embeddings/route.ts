@@ -19,6 +19,7 @@ import {
     DEFAULT_EMBEDDING_DIMENSION,
 } from '@/lib/photo-embedding';
 import type { PhotoEmbedding, EmbeddingVisualization } from '@/lib/photo-embedding';
+import { isAuthRequiredError } from "@/lib/auth/helpers";
 
 // Database row type
 interface EmbeddingRow {
@@ -145,6 +146,16 @@ export async function GET(request: NextRequest) {
         });
 
     } catch (error) {
+    // 未认证要返回 401 而不是 500 —— 否则客户端无法区分「请先登录」和
+    // 「服务端炸了」，监控里也会把正常的未登录流量记成错误。
+    // 见 lib/auth/helpers.ts 的 AuthRequiredError。
+    if (isAuthRequiredError(error)) {
+      return NextResponse.json(
+        { error: "Authentication required", code: "UNAUTHORIZED" },
+        { status: 401 }
+      );
+    }
+
         if (error instanceof StorageError) {
             return NextResponse.json(
                 { error: error.message },
@@ -380,6 +391,16 @@ export async function POST(request: NextRequest) {
         });
 
     } catch (error) {
+    // 未认证要返回 401 而不是 500 —— 否则客户端无法区分「请先登录」和
+    // 「服务端炸了」，监控里也会把正常的未登录流量记成错误。
+    // 见 lib/auth/helpers.ts 的 AuthRequiredError。
+    if (isAuthRequiredError(error)) {
+      return NextResponse.json(
+        { error: "Authentication required", code: "UNAUTHORIZED" },
+        { status: 401 }
+      );
+    }
+
         if (error instanceof StorageError) {
             return NextResponse.json(
                 { error: error.message },

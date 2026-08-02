@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/session";
 import { photoStorage } from "@/lib/storage/photo-storage";
+import { isAuthRequiredError } from "@/lib/auth/helpers";
 
 export const runtime = "nodejs";
 
@@ -20,7 +21,7 @@ export async function GET(req: Request) {
   } catch (error) {
     console.error("Get trashed photos error:", error);
 
-    if (error instanceof Error && error.message === "Please login to continue") {
+    if (isAuthRequiredError(error)) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
@@ -64,7 +65,7 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("Trash photos error:", error);
 
-    if (error instanceof Error && error.message === "Please login to continue") {
+    if (isAuthRequiredError(error)) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }

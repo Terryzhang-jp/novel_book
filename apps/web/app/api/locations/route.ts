@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/session";
 import { locationStorage } from "@/lib/storage/location-storage";
+import { isAuthRequiredError } from "@/lib/auth/helpers";
 
 export const runtime = "nodejs";
 
@@ -61,7 +62,7 @@ export async function GET(req: Request) {
   } catch (error) {
     console.error("Get locations error:", error);
 
-    if (error instanceof Error && error.message === "Please login to continue") {
+    if (isAuthRequiredError(error)) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
@@ -163,7 +164,7 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("Create location error:", error);
 
-    if (error instanceof Error && error.message === "Please login to continue") {
+    if (isAuthRequiredError(error)) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }

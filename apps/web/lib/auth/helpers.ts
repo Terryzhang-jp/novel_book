@@ -8,6 +8,35 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 
+/**
+ * 未认证。
+ *
+ * 用类型化错误而不是靠比对 message 字符串 —— 后者在这个项目里已经出过事：
+ * 13 个 API 路由的 catch 块判断的是 "Please login to continue"，而
+ * requireAuth 实际抛的是 "Unauthorized"，于是**所有需要登录的接口在未登录
+ * 时都返回 500 而不是 401**。E2E 测试第一次跑就抓到了它。
+ *
+ * 字符串匹配的问题在于：改一处消息不会有任何编译错误或警告，
+ * 但会静默地让一整类错误处理失效。
+ */
+export class AuthRequiredError extends Error {
+  readonly code = "UNAUTHORIZED" as const;
+  constructor(message = "Unauthorized") {
+    super(message);
+    this.name = "AuthRequiredError";
+  }
+}
+
+/** 判断一个未知错误是否是「未认证」。API 路由的 catch 块用它。 */
+export function isAuthRequiredError(error: unknown): boolean {
+  if (error instanceof AuthRequiredError) return true;
+  // 兼容历史抛法：旧代码里散落着裸 Error("Unauthorized")
+  return (
+    error instanceof Error &&
+    (error.message === "Unauthorized" || error.message === "Please login to continue")
+  );
+}
+
 // 兼容旧代码的 session 类型
 export interface SessionPayload {
   userId: string;
@@ -32,7 +61,7 @@ export async function getServerSession() {
 export async function requireAuth(): Promise<SessionPayload> {
   const session = await getServerSession();
   if (!session) {
-    throw new Error("Unauthorized");
+    throw new AuthRequiredError();
   }
   return {
     userId: session.user.id,
@@ -58,7 +87,7 @@ export async function getSessionFromRequest(request: Request) {
 export async function requireAuthFromRequest(request: Request): Promise<SessionPayload> {
   const session = await getSessionFromRequest(request);
   if (!session) {
-    throw new Error("Unauthorized");
+    throw new AuthRequiredError();
   }
   return {
     userId: session.user.id,

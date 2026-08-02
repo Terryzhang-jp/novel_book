@@ -11,6 +11,7 @@ import { requireAuth } from "@/lib/auth/session";
 import { canvasStorage, DataValidationError } from "@/lib/storage/canvas-storage";
 import type { CanvasSaveRequest } from "@/types/storage";
 import { VersionConflictError } from "@/types/storage";
+import { isAuthRequiredError } from "@/lib/auth/helpers";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -45,6 +46,16 @@ export async function GET(req: Request, { params }: RouteParams) {
 
     return NextResponse.json({ project });
   } catch (error) {
+    // 未认证要返回 401 而不是 500 —— 否则客户端无法区分「请先登录」和
+    // 「服务端炸了」，监控里也会把正常的未登录流量记成错误。
+    // 见 lib/auth/helpers.ts 的 AuthRequiredError。
+    if (isAuthRequiredError(error)) {
+      return NextResponse.json(
+        { error: "Authentication required", code: "UNAUTHORIZED" },
+        { status: 401 }
+      );
+    }
+
     console.error("Canvas get error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to get project" },
@@ -99,6 +110,16 @@ async function handleUpdate(req: Request, params: RouteParams["params"]) {
 
     return NextResponse.json({ project });
   } catch (error) {
+    // 未认证要返回 401 而不是 500 —— 否则客户端无法区分「请先登录」和
+    // 「服务端炸了」，监控里也会把正常的未登录流量记成错误。
+    // 见 lib/auth/helpers.ts 的 AuthRequiredError。
+    if (isAuthRequiredError(error)) {
+      return NextResponse.json(
+        { error: "Authentication required", code: "UNAUTHORIZED" },
+        { status: 401 }
+      );
+    }
+
     console.error("[API Canvas Update] ERROR:", error);
     console.error("[API Canvas Update] Error stack:", error instanceof Error ? error.stack : "no stack");
 
@@ -158,6 +179,16 @@ export async function DELETE(req: Request, { params }: RouteParams) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    // 未认证要返回 401 而不是 500 —— 否则客户端无法区分「请先登录」和
+    // 「服务端炸了」，监控里也会把正常的未登录流量记成错误。
+    // 见 lib/auth/helpers.ts 的 AuthRequiredError。
+    if (isAuthRequiredError(error)) {
+      return NextResponse.json(
+        { error: "Authentication required", code: "UNAUTHORIZED" },
+        { status: 401 }
+      );
+    }
+
     console.error("Canvas delete error:", error);
 
     if (error instanceof Error) {

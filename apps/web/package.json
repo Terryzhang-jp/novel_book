@@ -23,7 +23,10 @@
     "test:integration:watch": "vitest --config vitest.integration.config.ts",
     "test": "pnpm test:unit && pnpm test:integration",
     "perf:routes": "node scripts/perf/measure-routes.mjs",
-    "perf:routes:json": "node scripts/perf/measure-routes.mjs --json perf-results/routes.json"
+    "perf:routes:json": "node scripts/perf/measure-routes.mjs --json perf-results/routes.json",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
+    "e2e:install": "playwright install chromium"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.1.0",
@@ -43,6 +46,9 @@
     "@react-three/fiber": "^9.4.2",
     "@supabase/supabase-js": "^2.78.0",
     "@tailwindcss/typography": "^0.5.10",
+    "@tc/domain": "workspace:*",
+    "@tc/infrastructure-storage": "workspace:*",
+    "@tc/legacy-adapters": "workspace:*",
     "@toast-ui/react-image-editor": "^3.15.2",
     "@types/three": "^0.182.0",
     "@upstash/ratelimit": "^1.0.1",
@@ -87,13 +93,11 @@
     "use-debounce": "^10.0.4",
     "use-image": "^1.1.4",
     "uuid": "^13.0.0",
-    "zustand": "^5.0.8",
-    "@tc/domain": "workspace:*",
-    "@tc/legacy-adapters": "workspace:*",
-    "@tc/infrastructure-storage": "workspace:*"
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
+    "@playwright/test": "^1.62.1",
     "@types/bcryptjs": "^3.0.0",
     "@types/leaflet": "^1.9.21",
     "@types/node": "20.11.24",

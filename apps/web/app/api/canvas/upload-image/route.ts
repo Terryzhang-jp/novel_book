@@ -14,6 +14,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/session";
 import { canvasStorage } from "@/lib/storage/canvas-storage";
+import { isAuthRequiredError } from "@/lib/auth/helpers";
 
 export async function POST(req: Request) {
   try {
@@ -78,6 +79,16 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ url });
   } catch (error) {
+    // 未认证要返回 401 而不是 500 —— 否则客户端无法区分「请先登录」和
+    // 「服务端炸了」，监控里也会把正常的未登录流量记成错误。
+    // 见 lib/auth/helpers.ts 的 AuthRequiredError。
+    if (isAuthRequiredError(error)) {
+      return NextResponse.json(
+        { error: "Authentication required", code: "UNAUTHORIZED" },
+        { status: 401 }
+      );
+    }
+
     console.error("[Canvas Upload Image] Error:", error);
 
     if (error instanceof Error) {

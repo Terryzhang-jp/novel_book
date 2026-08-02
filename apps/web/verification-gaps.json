@@ -21,6 +21,16 @@
       "owner": "engineering"
     },
     {
+      "id": "e2e-data-operations-need-supabase",
+      "title": "E2E 覆盖不到数据操作（照片/文档/地点/画布的增删改查）",
+      "severity": "medium",
+      "area": "e2e/auth-and-isolation.spec.ts",
+      "impact": "遗留应用的数据操作全部走 supabaseAdmin → PostgREST，需要完整 Supabase 本地栈（Docker）。E2E 环境里没有，因此浏览器层只覆盖了认证链路（Better Auth 直连 pg）：注册/登录/session 持久化/路由保护/未登录 401。",
+      "mitigation": "资源级跨用户隔离、默认私有、软删除、字段映射已由 44 条 Repository 契约在集成层证明（test/integration/photo-repository.contract.ts）。缺的是「同样的语义在真实 HTTP + 中间件 + 路由处理器上也成立」这一层。",
+      "closeWhen": "Docker 可用后跑 pnpm db:start，把 E2E 指向本地 Supabase；或新核心的数据路径改用 PostgresRepository 后直接覆盖。",
+      "owner": "engineering"
+    },
+    {
       "id": "account-deletion-semantics",
       "title": "账号生命周期语义未定义",
       "severity": "high",

@@ -21,6 +21,7 @@ import {
     createWritingPartnerAgent,
     analyzeMetrics,
 } from '@/lib/ai-writing-partner';
+import { isAuthRequiredError } from "@/lib/auth/helpers";
 
 export async function POST(request: NextRequest) {
     try {
@@ -70,6 +71,16 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(response);
 
     } catch (error) {
+    // 未认证要返回 401 而不是 500 —— 否则客户端无法区分「请先登录」和
+    // 「服务端炸了」，监控里也会把正常的未登录流量记成错误。
+    // 见 lib/auth/helpers.ts 的 AuthRequiredError。
+    if (isAuthRequiredError(error)) {
+      return NextResponse.json(
+        { error: "Authentication required", code: "UNAUTHORIZED" },
+        { status: 401 }
+      );
+    }
+
         if (error instanceof StorageError) {
             return NextResponse.json(
                 { error: error.message },

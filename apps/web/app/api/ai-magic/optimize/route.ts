@@ -12,6 +12,7 @@ import type {
   AiMagicOptimizeRequest,
   AiMagicOptimizeResponse,
 } from "@/types/storage";
+import { isAuthRequiredError } from "@/lib/auth/helpers";
 
 /**
  * 系统提示词：Prompt 优化专家
@@ -236,6 +237,16 @@ export async function POST(req: Request) {
 
     return NextResponse.json(result);
   } catch (error) {
+    // 未认证要返回 401 而不是 500 —— 否则客户端无法区分「请先登录」和
+    // 「服务端炸了」，监控里也会把正常的未登录流量记成错误。
+    // 见 lib/auth/helpers.ts 的 AuthRequiredError。
+    if (isAuthRequiredError(error)) {
+      return NextResponse.json(
+        { error: "Authentication required", code: "UNAUTHORIZED" },
+        { status: 401 }
+      );
+    }
+
     console.error("AI Magic optimize error:", error);
     return NextResponse.json(
       {

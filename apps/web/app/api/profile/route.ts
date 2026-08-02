@@ -4,6 +4,7 @@ import { userStorage } from "@/lib/storage/user-storage";
 import { photoStorage } from "@/lib/storage/photo-storage";
 import { locationStorage } from "@/lib/storage/location-storage";
 import { documentStorage } from "@/lib/storage/document-storage";
+import { isAuthRequiredError } from "@/lib/auth/helpers";
 
 export const runtime = "nodejs";
 
@@ -52,7 +53,7 @@ export async function GET(req: Request) {
     console.error("Profile fetch error:", error);
 
     // 处理认证错误
-    if (error instanceof Error && error.message === "Please login to continue") {
+    if (isAuthRequiredError(error)) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
