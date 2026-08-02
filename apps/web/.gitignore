@@ -42,11 +42,15 @@ data/
 public/images/*
 !public/images/.gitkeep
 
-# SQL scripts（包含本地开发脚本）
-scripts/
-
-# Supabase 本地配置和迁移
-supabase/
+# ⚠️ 这两条曾经把「数据库 schema」整个挡在版本控制之外，导致仓库无法从零
+#    重建数据库（PERFORMANCE-AUDIT.md Q14）。已扫描确认其中无硬编码凭据，
+#    现纳入版本管理。
+#
+# 另注：原来的 `supabase/` 没有前导斜杠，会匹配任意层级的同名目录 ——
+# 包括存放生产代码的 lib/supabase/。已改为锚定到 apps/web 根。
+#
+# scripts/     ← 已纳管
+# supabase/    ← 已纳管
 
 # 部署脚本（包含敏感信息）
 deploy-to-vercel.sh
