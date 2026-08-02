@@ -1,12 +1,33 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
+import { requireAuthWithRateLimit } from "@/lib/api/guard";
+
+/**
+ * ⚠️ 此前无鉴权：任何人都能调用按张计费的 Gemini 生图。
+ * 见 PERFORMANCE-AUDIT.md 第七组 #2。
+ */
+const MAX_PROMPT_CHARS = 5_000;
 
 export async function POST(req: Request) {
     try {
+        // 生图很贵，限得比文本严：每分钟 10 张
+        const guard = await requireAuthWithRateLimit(req, "gen-image", {
+            limit: 10,
+            windowMs: 60_000,
+        });
+        if (guard.response) return guard.response;
+
         const { prompt } = await req.json();
 
-        if (!prompt) {
+        if (!prompt || typeof prompt !== "string") {
             return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
+        }
+
+        if (prompt.length > MAX_PROMPT_CHARS) {
+            return NextResponse.json(
+                { error: `Prompt too long (max ${MAX_PROMPT_CHARS} chars)`, code: "PROMPT_TOO_LONG" },
+                { status: 413 }
+            );
         }
 
         const apiKey = process.env.GOOGLE_GENAI_API_KEY;
