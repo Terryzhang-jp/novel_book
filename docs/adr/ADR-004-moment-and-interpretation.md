@@ -51,10 +51,39 @@ InterpretationRevision
   momentId
   content
   createdAt
-  supersedesId              指向被它取代的那一版
+  supersedesId              指向被它取代的那一版（首版为 NULL）
   basedOnObservationIds     这次理解基于哪些观察
   status                    current | superseded
 ```
+
+#### 基数：每个 Moment 最多一个 current，revision 是**单一线性链**
+
+```
+一个 Moment
+  · 可以没有 Interpretation
+  · 最多只有一个 status = 'current' 的 revision
+  · revision 形成单一线性链，不分叉
+```
+
+数据库层强制三条：
+
+```sql
+-- ① 一个 Moment 只能有一条当前理解
+CREATE UNIQUE INDEX uq_interpretation_current
+  ON interpretation_revisions (moment_id) WHERE status = 'current';
+
+-- ② supersedes 必须指向同一个 Moment 的 revision（触发器，见 schema contract）
+-- ③ 首版 supersedes_id 为 NULL；非首版必须指向当时的 current
+```
+
+不加这三条，很快会出现：
+- 两个 current，UI 不知道该显示哪个
+- revision 跨 Moment 连接，历史链断裂
+- 分叉之后无法判断「我现在的理解」是哪一条
+
+**暂不支持分叉理解。** 将来确实需要「同一 Moment 产生多个独立理解主题」时
+再引入 `InterpretationThread` —— 不在第一版预先建复杂图结构。
+过早的通用性会让最简单的场景（看自己想法怎么变）也变得难写。
 
 比给整个 Moment 做版本化更准确：变化的是**解释**，不是事实和观察。
 

@@ -16,12 +16,32 @@
 
 ```
 Work
-├── content: Block[]              ← 语义
+├── Block[]                       ← 语义（唯一内容真相）
 │     TextBlock / AssetBlock / MomentRefBlock
 │     MapBlock / QuoteBlock / ComparisonBlock
-└── presentation: Presentation    ← 样式
-      theme / layout / typography / output
+└── WorkPresentation[]  0..n      ← 样式（可以有多套）
+      rendererType: web | magazine | poster | map
+      theme / layout / typography
 ```
+
+#### Presentation 必须是独立实体，不能是 Work 上的单一字段
+
+原方案写成 `presentation: Presentation` 与本 ADR 自己的另一条结论冲突 ——
+「一个 Work 可以有多个输出、多个 Publication」。
+
+单一字段意味着同一份内容的网页版式、杂志版式、海报版式**会互相覆盖**：
+用户调完杂志排版，网页版就没了。
+
+正确基数：
+
+```
+内容唯一（Block[]）· 表现可多套（WorkPresentation[]）
+```
+
+`(work_id, renderer_type)` 唯一 —— 一个 Work 对每种输出各有一套配置。
+
+第一条纵向链路只实现 `web` 一种，但**数据结构从第一天就必须允许一对多**。
+把一对一改成一对多是个破坏性迁移，不该留给以后。
 
 旧系统的 `CanvasElement` 把 `text`（内容）和 `x/y/rotation/fontSize/fill`
 （表现）平铺在同一个对象上。后果是「同一份内容换个版式」做不到，

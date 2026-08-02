@@ -54,6 +54,67 @@ Work（一直在改） ──发布──▶ WorkVersion v3（冻结） ◀─�
 正确形态：**一条 Journey 产出的 Work 的一个 Publication**，
 URL 是 `/p/chichibu-2025-09`。
 
+## WorkVersion 到底冻结什么（snapshot contract）
+
+这是发布语义的核心。**只存外键是不够的**：
+
+```
+❌ work_versions 只存 moment_id / asset_id / presentation_id
+   → Moment、Interpretation 或 Presentation 后来一改，
+     旧 Publication 跟着变。那就等于没有快照。
+```
+
+WorkVersion 必须保存一份**可独立渲染**的完整快照，至少冻结：
+
+1. Block 顺序与自由文字
+2. `MomentRefBlock` 当时解析出的展示内容（观察正文、时间、地点）
+3. 当时选中的 Observation 与 Interpretation revision 的**内容本身**
+4. Presentation 配置（主题、版式、字体）
+5. 发布素材副本的 objectKey
+
+**判定标准**：渲染一个 Publication 时，**不允许查询 moments /
+observations / interpretation_revisions / work_blocks 任何一张实时表**。
+只读 snapshot 就能渲染出完整页面。
+
+第一版直接用：
+
+```
+work_versions.snapshot JSONB   （带 _v schema version）
+```
+
+这不是把 Work 又做回一个 JSON 大对象 —— 边界很清楚：
+
+```
+可编辑状态   规范化存储（表 + 外键 + 约束）
+不可变版本   完整快照（JSONB）
+```
+
+规范化存储服务于「改」，快照服务于「不再改」。两者要求不同，
+用不同形态是对的，而且能显著降低第一版版本表的复杂度。
+
+## 撤回不删除记录
+
+```
+❌ DELETE FROM publications
+✅ UPDATE publications SET withdrawn_at = now()
+```
+
+删掉行就无法区分「作者已下架」和「从来不存在」，
+URL 会变成 404 —— 而 P4 已经决定要显示「作者已下架」。
+
+## 第一版实现范围
+
+ADR 的语义全部保留，但第一条纵向链路只实现：
+
+| 项 | 第一版 |
+|---|---|
+| 可见性 | `private` / `unlisted` / `public`（**`shared` 暂不实现**） |
+| slug | 自动生成，**自定义 slug 与 301 历史暂不做 UI** |
+| 发布素材副本 | 暂不实现（第一条链路没有 Asset） |
+| 撤回 | 实现，用 `withdrawn_at` |
+
+---
+
 ## 与 ADR-005 的衔接
 
 ```
