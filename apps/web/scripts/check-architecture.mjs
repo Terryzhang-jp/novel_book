@@ -73,6 +73,23 @@ const IMPORT_RULES = [
 /** SQL / 平台特有标识符：在新核心里出现即违规 */
 const FORBIDDEN_IDENTIFIERS = [
   {
+    id: 'no-legacy-users-table',
+    adr: 'ADR-001',
+    reason:
+      '身份的唯一来源是 Better Auth 的 "user" 表。users 已废弃（migration ' +
+      '20260802010000），不得在新代码里新增对它的查询或外键。',
+    roots: [
+      'packages/domain/src',
+      'packages/application/src',
+      'packages/infrastructure-postgres/src',
+      'packages/legacy-adapters/src',
+      'apps/studio',
+    ],
+    // 匹配 SQL 里对 users 表的引用：FROM users / JOIN users / REFERENCES users
+    // 不匹配 "user"（带引号的才是 Better Auth 那张表）
+    pattern: /\b(from|join|into|update|references)\s+users\b/i,
+  },
+  {
     id: 'domain-no-vendor-sql',
     adr: 'ADR-000',
     reason: '新核心不得依赖 Supabase 特有的 SQL 语义（auth.uid / service_role）',
@@ -86,11 +103,17 @@ const FORBIDDEN_IDENTIFIERS = [
   },
 ];
 
-/** Repository 方法必须以 actor 作为第一个参数 */
+/**
+ * Repository 方法必须以 actor 作为第一个参数。
+ *
+ * 这里列的是**目录**，规则只对其中名字以 Repository 结尾的 class/interface
+ * 生效。写全一点 —— 少列一个目录，规则就在那里静默失效。
+ */
 const REPOSITORY_ROOTS = [
-  'packages/infrastructure-postgres/src/repositories',
-  'packages/legacy-adapters/src/repositories',
-  'packages/db/src/repositories',
+  'packages/legacy-adapters/src',
+  'packages/infrastructure-postgres/src',
+  'packages/application/src',
+  'packages/db/src',
 ];
 
 // ════════════════════════════════════════════════════════════════════════════
