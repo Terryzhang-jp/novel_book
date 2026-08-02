@@ -55,37 +55,14 @@ const config = {
           'Georgia',
           'serif',
         ],
-        // 手写/草书字体 - Liu Jian Mao Cao
-        cursive: [
-          'Liu Jian Mao Cao',
-          'cursive',
-        ],
-        // 快乐字体 - ZCOOL KuaiLe (可爱风格)
-        kuaile: [
-          'ZCOOL KuaiLe',
-          'sans-serif',
-        ],
-        // 小薇字体 - ZCOOL XiaoWei
-        xiaowei: [
-          'ZCOOL XiaoWei',
-          'serif',
-        ],
-        // 毛草字体 - Liu Jian Mao Cao
-        maocao: [
-          'Liu Jian Mao Cao',
-          'cursive',
-        ],
-        // 中文字体
-        'noto-sans-sc': ['Noto Sans SC', 'sans-serif'],
+        // ── 创作字体：与 types/storage.ts 的 JOURNAL_FONTS 保持一致 ──
+        // 这些 class 只应出现在画布/海报的创作内容里，不用于产品 UI。
+        // 使用前必须先 loadFontFamily()，否则会回退到系统字体。
         'noto-serif-sc': ['Noto Serif SC', 'serif'],
-        'ma-shan-zheng': ['Ma Shan Zheng', 'cursive'],
-        // 日语字体
-        'noto-sans-jp': ['Noto Sans JP', 'sans-serif'],
         'noto-serif-jp': ['Noto Serif JP', 'serif'],
-        'zen-maru': ['Zen Maru Gothic', 'sans-serif'],
-        // 英文字体
         'playfair': ['Playfair Display', 'serif'],
-        'dancing': ['Dancing Script', 'cursive'],
+        // xiaowei 是 brand 的别名，保留以兼容既有写法
+        xiaowei: ['ZCOOL XiaoWei', 'serif'],
         mono: [
           'JetBrainsMono',
           'Fira Code',

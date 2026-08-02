@@ -241,7 +241,11 @@ export class PhotoStorage {
         thumbnail_url: thumbnailUrl,
         metadata,
         category,
-        is_public: true,
+        // 素材默认私有。此前这里硬编码 true —— 用户上传的每张照片都会
+        // 立刻出现在 /chichibu 公开地图上，而 documents / locations 的
+        // 默认值都是 false，这个不一致是隐私事故的直接来源。
+        // 公开状态今后由「发布」动作管理，见 migration 009。
+        is_public: false,
         created_at: now,
         updated_at: now,
       })

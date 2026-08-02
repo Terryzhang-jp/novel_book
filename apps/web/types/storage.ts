@@ -135,7 +135,7 @@ export interface Photo {
   tags?: string[]; // 标签
 
   // 公开设置
-  isPublic?: boolean; // 是否公开（默认 true）- 用于公共地图展示
+  isPublic?: boolean; // 是否公开（默认 false，2026-08 起）- 只有明确发布后才为 true
 
   // 回收站状态
   trashed?: boolean; // 是否在回收站（默认 false）
@@ -435,21 +435,30 @@ export type MagazineViewMode = "preview" | "edit";
 /**
  * Canvas 字体列表 (使用 Fontsource 本地字体)
  */
+/**
+ * 创作字体清单
+ *
+ * 2026-08 从 11 套收敛到 4 套。收敛标准不是「这个字体好不好看」，而是
+ * 「它是否对应一种明确、用户能理解的创作用途」—— 两套用途高度重合的
+ * 字体不需要同时存在。
+ *
+ * 全站 UI 正文不在这个清单里：它用系统字体栈（见 tailwind.config.ts 的
+ * `sans`），零网络请求。这里的 4 套只在画布 / 海报的字体选择器里出现，
+ * 并且是按需加载的（lib/fonts/registry.ts）。
+ *
+ * 被移除的 7 套：ZCOOL KuaiLe（与 Ma Shan Zheng 用途重合）、
+ * Liu Jian Mao Cao（草书可读性太差，与 Ma Shan Zheng 重合）、
+ * Noto Sans SC / Noto Sans JP（无衬线用途已由系统字体覆盖）、
+ * Zen Maru Gothic（圆体与 Noto Serif JP 场景重合）、
+ * Dancing Script（英文手写用途不明确）。
+ *
+ * 它们只是从产品里移除，不是永久删除可能性 —— 未来可做成独立字体包。
+ */
 export const JOURNAL_FONTS = [
-  // 中文字体
-  "ZCOOL XiaoWei",      // 文艺衬线
-  "ZCOOL KuaiLe",       // 可爱活泼
-  "Liu Jian Mao Cao",   // 毛笔草书
-  "Noto Sans SC",       // 思源黑体
-  "Noto Serif SC",      // 思源宋体
-  "Ma Shan Zheng",      // 楷书
-  // 日语字体
-  "Noto Sans JP",       // 思源黑体日文
-  "Noto Serif JP",      // 思源明朝
-  "Zen Maru Gothic",    // 圆体
-  // 英文字体
-  "Playfair Display",   // 优雅衬线
-  "Dancing Script",     // 手写体
+  "Noto Serif SC",      // 正文衬线（中文）—— 长段落、观察笔记
+  "Noto Serif JP",      // 正文衬线（日文）—— 日语内容
+  "ZCOOL XiaoWei",      // 展示体 —— 杂志标题、封面、手账感
+  "Playfair Display",   // 展示体（拉丁）—— 英文标题、刊头
 ] as const;
 
 export type JournalFont = (typeof JOURNAL_FONTS)[number];

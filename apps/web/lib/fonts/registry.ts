@@ -18,9 +18,11 @@
  *
  * ## 方案
  *
- * 只有正文字体（ZCOOL XiaoWei）留在根 layout 全局加载。
- * 其余 10 个改成用 `import()` 动态加载 —— webpack 会把每个字体的 CSS
- * 切成独立 chunk，只有真正调用 loadFontFamily() 时才通过 <link> 注入。
+ * 全站 UI 正文用系统字体栈（tailwind.config.ts 的 `sans`），零网络请求。
+ * 创作字体收敛到 4 套（见 types/storage.ts 的 JOURNAL_FONTS），其中
+ * ZCOOL XiaoWei 作为品牌展示体在根 layout 静态加载，其余 3 套用 import()
+ * 动态加载 —— webpack 会切成独立 chunk，只有调用 loadFontFamily() 时才
+ * 通过 <link> 注入。
  *
  * 使用场景：Canvas / 海报 的字体选择器，用户选中某字体时才加载它。
  */
@@ -37,19 +39,10 @@ export const GLOBAL_FONT: JournalFont = "ZCOOL XiaoWei";
  * 静态分析出模块路径才能切 chunk。
  */
 const LOADERS: Record<string, () => Promise<unknown>> = {
-  // 中文
-  "ZCOOL KuaiLe": () => import("@fontsource/zcool-kuaile"),
-  "Liu Jian Mao Cao": () => import("@fontsource/liu-jian-mao-cao"),
-  "Noto Sans SC": () => import("@fontsource/noto-sans-sc"),
   "Noto Serif SC": () => import("@fontsource/noto-serif-sc"),
-  "Ma Shan Zheng": () => import("@fontsource/ma-shan-zheng"),
-  // 日文
-  "Noto Sans JP": () => import("@fontsource/noto-sans-jp"),
   "Noto Serif JP": () => import("@fontsource/noto-serif-jp"),
-  "Zen Maru Gothic": () => import("@fontsource/zen-maru-gothic"),
-  // 英文
   "Playfair Display": () => import("@fontsource/playfair-display"),
-  "Dancing Script": () => import("@fontsource/dancing-script"),
+  // ZCOOL XiaoWei 不在这里 —— 它是 GLOBAL_FONT，由 app/layout.tsx 静态加载
 };
 
 /** 已发起加载的字体 → 其 Promise。保证同一字体只加载一次。 */

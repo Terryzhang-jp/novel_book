@@ -30,21 +30,6 @@ importers:
       '@ai-sdk/openai':
         specifier: ^1.1.0
         version: 1.1.0(zod@4.2.1)
-      '@fontsource/dancing-script':
-        specifier: ^5.2.8
-        version: 5.2.8
-      '@fontsource/liu-jian-mao-cao':
-        specifier: ^5.2.8
-        version: 5.2.8
-      '@fontsource/ma-shan-zheng':
-        specifier: ^5.2.8
-        version: 5.2.8
-      '@fontsource/noto-sans-jp':
-        specifier: ^5.2.8
-        version: 5.2.8
-      '@fontsource/noto-sans-sc':
-        specifier: ^5.2.8
-        version: 5.2.8
       '@fontsource/noto-serif-jp':
         specifier: ^5.2.7
         version: 5.2.7
@@ -54,13 +39,7 @@ importers:
       '@fontsource/playfair-display':
         specifier: ^5.2.8
         version: 5.2.8
-      '@fontsource/zcool-kuaile':
-        specifier: ^5.2.7
-        version: 5.2.7
       '@fontsource/zcool-xiaowei':
-        specifier: ^5.2.8
-        version: 5.2.8
-      '@fontsource/zen-maru-gothic':
         specifier: ^5.2.8
         version: 5.2.8
       '@google/genai':
@@ -769,21 +748,6 @@ packages:
   '@floating-ui/utils@0.2.9':
     resolution: {integrity: sha512-MDWhGtE+eHw5JW7lq4qhc5yRLS11ERl1c7Z6Xd0a58DozHES6EnNNwUWbMiG4J9Cgj053Bhk8zvlhFYKVhULwg==}
 
-  '@fontsource/dancing-script@5.2.8':
-    resolution: {integrity: sha512-zHVVgIQ5/rAIM0VVp1QMsqvJm9INHO5/C82E9rHT6NlabjaPTFYn8wl9lT4vPWizfB0TublGQM1999kfdA+XFA==}
-
-  '@fontsource/liu-jian-mao-cao@5.2.8':
-    resolution: {integrity: sha512-5K7Lx+g0JVrr0I8aHB2BBh2fD9m2BXwIQJLzZX+SnLrFSZV1tKT2rCRf0OEuTJDRuUEJa3UiFb58GoM4PvUUUg==}
-
-  '@fontsource/ma-shan-zheng@5.2.8':
-    resolution: {integrity: sha512-/2sTIqp6RAwzx8kXP5uJo8f6Efmt4F4Cydzoqhoj+5HqglNhSiy0vkkjLzovUA3m8i0dbuWe7ZXY564d24+Lhw==}
-
-  '@fontsource/noto-sans-jp@5.2.8':
-    resolution: {integrity: sha512-ngWXPtSV3XH8ZmNX9hnfeQ+x/3mCoaAOA3BVDcyS5jQdh4FYqKjf/S9tEUEYDPwGa2pULJVXTO2+oFg42gWvSw==}
-
-  '@fontsource/noto-sans-sc@5.2.8':
-    resolution: {integrity: sha512-8T8HxIS3uAMCfaQawKRH/6yYZ1oRnJZB/CrGwfxGgJa+zAOBgx2lqZMiTY/WbQpLGlPRqX4zHXJYI09CI2q6tA==}
-
   '@fontsource/noto-serif-jp@5.2.7':
     resolution: {integrity: sha512-uC8j75EoZe/s1LR+qzKCi7pXxQgY3Jbb0vpX9UOuzTOewMyPZd6zgQD64uxPo52qPPWkA+U1t4d/27KwKJoOCw==}
 
@@ -793,14 +757,8 @@ packages:
   '@fontsource/playfair-display@5.2.8':
     resolution: {integrity: sha512-fUEhib70SszNhQVsGbUMSsWJhr7Je0rdeuZdtGpDNu0GKF1xJM8QhpI/y0pckU25GcChXm9TLOmeZupkvvZo2g==}
 
-  '@fontsource/zcool-kuaile@5.2.7':
-    resolution: {integrity: sha512-EjC1RtoN/4sVcvmJ8HEDQjPyfNflZrUrVx4zPANz7yOcHpgr5xGnwFe2bIl2EB/X9hElQ02KwnI0aYFAxljIew==}
-
   '@fontsource/zcool-xiaowei@5.2.8':
     resolution: {integrity: sha512-HppFdc8Y0djYbSpK6FbMFhEaZJwfGE5yIKLN3d5q5V239NQxm3sULJjfbMYyAMKswhG6hNTtXQkt8lOl4OmoLA==}
-
-  '@fontsource/zen-maru-gothic@5.2.8':
-    resolution: {integrity: sha512-6RkH33+rgEJy1hkUdDAf+3PyQ7oUjX3vj7cekmfx/bT/9BEPd07FqrjcGBQDe4uWmUebEKuIZep3phDjsnJ6vA==}
 
   '@google/genai@1.30.0':
     resolution: {integrity: sha512-3MRcgczBFbUat1wIlZoLJ0vCCfXgm7Qxjh59cZi2X08RgWLtm9hKOspzp7TOg1TV2e26/MLxR2GR5yD5GmBV2w==}
@@ -4888,27 +4846,13 @@ snapshots:
 
   '@floating-ui/utils@0.2.9': {}
 
-  '@fontsource/dancing-script@5.2.8': {}
-
-  '@fontsource/liu-jian-mao-cao@5.2.8': {}
-
-  '@fontsource/ma-shan-zheng@5.2.8': {}
-
-  '@fontsource/noto-sans-jp@5.2.8': {}
-
-  '@fontsource/noto-sans-sc@5.2.8': {}
-
   '@fontsource/noto-serif-jp@5.2.7': {}
 
   '@fontsource/noto-serif-sc@5.2.8': {}
 
   '@fontsource/playfair-display@5.2.8': {}
 
-  '@fontsource/zcool-kuaile@5.2.7': {}
-
   '@fontsource/zcool-xiaowei@5.2.8': {}
-
-  '@fontsource/zen-maru-gothic@5.2.8': {}
 
   '@google/genai@1.30.0':
     dependencies:
@@ -6014,7 +5958,7 @@ snapshots:
 
   '@types/node-fetch@2.6.12':
     dependencies:
-      '@types/node': 22.10.6
+      '@types/node': 20.11.24
       form-data: 4.0.1
     optional: true
 
