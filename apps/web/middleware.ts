@@ -21,7 +21,10 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Public routes (不需要认证)
-  const publicRoutes = ["/login", "/register", "/chichibu", "/forgot-password"];
+  // /p/* 是发布页 —— 必须允许匿名访问，否则「分享给别人看」根本不成立。
+  // 可见性（public / unlisted / private）和撤回状态由用例层判断，
+  // 不在 middleware 里做 —— middleware 只看 cookie，看不到 Publication。
+  const publicRoutes = ["/login", "/register", "/chichibu", "/forgot-password", "/p/"];
   const isPublicRoute = publicRoutes.some((route) =>
     pathname.startsWith(route)
   );
