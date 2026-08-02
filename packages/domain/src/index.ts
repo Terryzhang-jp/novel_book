@@ -10,3 +10,4 @@
  * 现在只有 Actor —— 它是 ADR-001 的直接产物，也是 Repository 契约的前提。
  */
 export * from './actor';
+export * from './storage';

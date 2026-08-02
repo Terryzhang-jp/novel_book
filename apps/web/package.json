@@ -89,7 +89,8 @@
     "uuid": "^13.0.0",
     "zustand": "^5.0.8",
     "@tc/domain": "workspace:*",
-    "@tc/legacy-adapters": "workspace:*"
+    "@tc/legacy-adapters": "workspace:*",
+    "@tc/infrastructure-storage": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

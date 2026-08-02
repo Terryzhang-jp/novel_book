@@ -81,6 +81,9 @@ importers:
       '@tc/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@tc/infrastructure-storage':
+        specifier: workspace:*
+        version: link:../../packages/infrastructure-storage
       '@tc/legacy-adapters':
         specifier: workspace:*
         version: link:../../packages/legacy-adapters
@@ -389,6 +392,22 @@ importers:
       tsup:
         specifier: ^8.3.5
         version: 8.3.5(jiti@2.4.2)(postcss@8.5.25)(typescript@5.7.3)(yaml@2.7.0)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.7.3
+
+  packages/infrastructure-storage:
+    dependencies:
+      '@tc/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      '@types/node':
+        specifier: 20.11.24
+        version: 20.11.24
+      tsconfig:
+        specifier: workspace:*
+        version: link:../tsconfig
       typescript:
         specifier: ^5.7.3
         version: 5.7.3
