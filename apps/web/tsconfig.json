@@ -12,5 +12,8 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  // 测试与脚本不参与 Next 构建 —— 它们由 tsconfig.test.json 单独检查。
+  // 混在一起会让 `next build` 去类型检查 vitest 配置和 fixture，
+  // 既拖慢构建，也让测试代码的类型错误伪装成「构建失败」。
+  "exclude": ["node_modules", "test", "e2e", "scripts", "vitest.*.ts", "playwright.config.ts"]
 }

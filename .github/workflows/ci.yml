@@ -1,0 +1,182 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'refactor/**']
+  pull_request:
+    branches: [main]
+
+# 同一分支的新提交取消旧的运行
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 与 supabase/config.toml 的 db.major_version 保持一致。
+  # 不一致时 test/db/global-setup.ts 会在 CI 上直接失败。
+  PG_MAJOR: '15'
+  NODE_VERSION: '22'
+  PNPM_VERSION: '10.20.0'
+
+jobs:
+  # ══════════════════════════════════════════════════════════════════════════
+  # 静态检查 —— 不需要数据库，最快失败
+  # ══════════════════════════════════════════════════════════════════════════
+  static:
+    name: 静态检查（架构 / 类型 / 构建）
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with: { version: '${{ env.PNPM_VERSION }}' }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # ADR-000/001/002 的边界。放最前面 —— 架构违规比类型错误更值得优先阻断。
+      - name: 架构边界（ADR-000/001/002）
+        working-directory: apps/web
+        run: pnpm check:arch
+
+      - name: 类型检查
+        working-directory: apps/web
+        run: pnpm typecheck
+
+      - name: 生产构建
+        working-directory: apps/web
+        run: pnpm build
+        env:
+          # 构建期需要这些变量存在（lib/supabase/client.ts 在模块顶层会校验）。
+          # 值是本地 Supabase 的公开 demo key，不是机密。
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+          SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          BETTER_AUTH_SECRET: ci-only-secret-not-used-for-anything-real-32
+          BETTER_AUTH_URL: http://127.0.0.1:3000
+
+      - name: 上报构建产物体积（观察指标，不设门槛）
+        working-directory: apps/web
+        run: |
+          echo "### 构建产物" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          du -sh .next/static .next/static/chunks .next/static/css .next/static/media 2>/dev/null >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 单元测试 —— 允许 mock，不碰数据库
+  # ══════════════════════════════════════════════════════════════════════════
+  unit:
+    name: 单元测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: '${{ env.PNPM_VERSION }}' }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: 单元测试
+        working-directory: apps/web
+        run: pnpm test:unit
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 数据库：schema 可重建 + 集成测试
+  #
+  # ⚠️ 这个 job 不允许因为「没有数据库」而跳过。
+  #    service container 起不来就是失败。
+  # ══════════════════════════════════════════════════════════════════════════
+  database:
+    name: 数据库（schema 门禁 + 集成测试）
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      TEST_PG_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      EXPECTED_PG_MAJOR: '15'
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: '${{ env.PNPM_VERSION }}' }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: 安装 psql 客户端
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      # 三层 schema 验收：对象数量 + DDL 逐行 diff + seed 断言
+      - name: Schema 可重建 + DDL 快照一致 + seed 断言
+        working-directory: apps/web
+        run: pnpm db:verify
+
+      - name: 集成测试（真实 PostgreSQL，禁止 mock）
+        working-directory: apps/web
+        run: pnpm test:integration
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 门禁汇总 —— 分支保护规则只需要盯这一个 job
+  # ══════════════════════════════════════════════════════════════════════════
+  gate:
+    name: 门禁
+    runs-on: ubuntu-latest
+    needs: [static, unit, database]
+    if: always()
+    steps:
+      - name: 汇总
+        run: |
+          echo "static:   ${{ needs.static.result }}"
+          echo "unit:     ${{ needs.unit.result }}"
+          echo "database: ${{ needs.database.result }}"
+          if [ "${{ needs.static.result }}" != "success" ] || \
+             [ "${{ needs.unit.result }}" != "success" ] || \
+             [ "${{ needs.database.result }}" != "success" ]; then
+            echo "::error::有门禁未通过"
+            exit 1
+          fi
+          echo "全部通过"
+
+# ────────────────────────────────────────────────────────────────────────────
+# 尚未加入 CI 的门禁（有意为之，不伪装成已覆盖）
+#
+#   E2E (Playwright)   骨架已建，但还没有真实流程测试。
+#                      放一个永远通过的空测试比没有测试更有害。
+#                      Commit 10 补上登录链路后再接进来。
+#
+#   性能门槛           脚本已建（pnpm perf:*），但需要一个跑得起来的应用
+#                      才能测量。当前会输出 not-measured，不设阈值 ——
+#                      对着没测过的数字设门槛只会制造虚假达标。
+#
+#   覆盖率阈值         等有足够测试之后再定。提前设一个能通过的低阈值
+#                      是自欺。
+# ────────────────────────────────────────────────────────────────────────────

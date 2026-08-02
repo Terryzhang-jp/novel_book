@@ -3,7 +3,34 @@
 - **状态**：已接受
 - **日期**：2026-08-02
 - **决策人**：产品负责人
-- **影响范围**：Phase 2 起的全部新代码；不追溯修改 `apps/web` 遗留代码
+- **影响范围**：见下方「适用范围」—— 首先约束新核心，不要求立即重写遗留代码
+
+---
+
+## 适用范围（2026-08-02 修订）
+
+供应商无关是**新核心的建造纪律**，不是对遗留代码的追溯改造令。
+
+| 立即适用 | 暂不要求 |
+|---|---|
+| `packages/domain` | `apps/web` 的 6 个 storage 类 |
+| `packages/application`（用例层） | 旧 Storage 路径 |
+| `packages/infrastructure-*` | 旧公开照片 API |
+| `apps/studio` | 旧 Canvas / Document 上传 |
+| 全部新领域模型与新功能 | 26 条已失效的 RLS 策略 |
+
+**准确的目标表述**：
+
+> 新核心可以仅凭标准 PostgreSQL + Better Auth + LocalFileStorage 运行；
+> 遗留系统暂时通过 adapter 存在，**不能反向决定新核心的设计**。
+
+遗留 `apps/web` 保留 Supabase adapter 是允许的，条件是两条：
+1. 新核心不依赖它
+2. 按价值逐步淘汰，不是一次清空
+
+**要避免的失败模式**：为了让旧 Gallery / Canvas / Document 全部脱离 Supabase
+而提前重写整个旧存储层 —— 那会偏离主线。我们要保证新楼不接旧水管，
+不是现在就把旧楼每根管道都换掉。
 
 ---
 

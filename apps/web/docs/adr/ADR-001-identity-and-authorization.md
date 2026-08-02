@@ -56,12 +56,35 @@ user.id   ← 系统中唯一的用户标识
 每个请求进入应用后解析出 `ActorContext`，然后**显式向下传递**：
 
 ```ts
-interface ActorContext {
-  readonly userId: string;
-  readonly sessionId: string;
-  readonly permissions: ReadonlySet<Permission>;
+/**
+ * 调用者身份。定义为联合类型而不是单一的 { userId } ——
+ * 否则「公开 Publication 的匿名访问」和「后台清理任务」这两类合法场景
+ * 只能靠绕过 Repository 约束来实现，等于给越权开了一道后门。
+ */
+export type Actor =
+  | { readonly type: 'user';      readonly userId: string; readonly sessionId: string }
+  | { readonly type: 'anonymous' }
+  | { readonly type: 'system';    readonly reason: string };
+
+/** 收窄到已登录用户。Repository 里需要 userId 的方法用它。 */
+export function requireUser(actor: Actor): Extract<Actor, { type: 'user' }> {
+  if (actor.type !== 'user') {
+    throw new ForbiddenError(`此操作需要登录，当前 actor 是 ${actor.type}`);
+  }
+  return actor;
 }
 ```
+
+三种 actor 的授权语义：
+
+| type | 能看到什么 | 典型场景 |
+|---|---|---|
+| `user` | 自己的全部数据 + 已发布的公开内容 | 正常应用请求 |
+| `anonymous` | **只有** Publication 的公开快照 | `/p/[slug]` 公开页 |
+| `system` | 按 `reason` 明确授权的范围 | 孤儿文件对账、定时清理 |
+
+`system` 必须带 `reason` —— 它是审计线索，也是一道心理门槛：
+写下「为什么这个操作需要越过用户边界」比默默传一个 admin flag 更难糊弄过去。
 
 ```
 HTTP Request
@@ -76,11 +99,31 @@ HTTP Request
 
 ```ts
 // 正确
-findById(actor: ActorContext, id: WorkId): Promise<Work | null>
+findById(actor: Actor, id: WorkId): Promise<Work | null>
 
 // 禁止 —— 没有 actor 就没有隔离
 findById(id: WorkId): Promise<Work | null>
 ```
+
+### ⚠️ 静态检查的边界
+
+`scripts/check-architecture.mjs` 只能保证**签名里有 actor**，无法保证
+**方法体真的用了它**。下面这段代码能通过静态门禁，但仍然是越权漏洞：
+
+```ts
+async findById(actor: Actor, id: string) {
+  return db.query('SELECT * FROM photos WHERE id = $1', [id]);  // actor 没用上
+}
+```
+
+因此两层职责必须分清：
+
+```
+静态门禁    保证架构形状正确  —— 不可能忘记加 actor 参数
+集成测试    保证安全语义成立  —— 用已知的他人 ID 去访问，断言被拒
+```
+
+**只有集成测试能证明隔离真的生效。** 静态门禁是脚手架，不是安全保证。
 
 ### 3. RLS 是纵深防御，不是正确性来源
 

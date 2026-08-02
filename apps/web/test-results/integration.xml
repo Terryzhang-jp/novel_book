@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="13" failures="1" errors="0" time="0.009751709">
+    <testsuite name="test/integration/_infrastructure.test.ts" timestamp="2026-08-02T12:56:11.069Z" hostname="YICHUANs-MacBook-Pro.local" tests="13" failures="1" errors="0" skipped="12" time="0.009751709">
+        <testcase classname="test/integration/_infrastructure.test.ts" name="测试数据库生命周期 &gt; 每个 worker 拿到自己的独立数据库" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="test/integration/_infrastructure.test.ts" name="测试数据库生命周期 &gt; template 指纹随 migration/seed 内容变化" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="test/integration/_infrastructure.test.ts" name="测试数据库生命周期 &gt; schema 完整：11 张表" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="test/integration/_infrastructure.test.ts" name="测试数据库生命周期 &gt; 索引、约束、触发器数量与 baseline 一致" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="test/integration/_infrastructure.test.ts" name="测试数据库生命周期 &gt; seed 数据已加载：2 用户 / 10 照片" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="test/integration/_infrastructure.test.ts" name="测试数据库生命周期 &gt; seed 里没有任何公开素材（migration 009 的默认值生效）" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="test/integration/_infrastructure.test.ts" name="测试数据库生命周期 &gt; photos.is_public 的数据库默认值是 false" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="test/integration/_infrastructure.test.ts" name="测试隔离机制 &gt; 写入在本 worker 的库里可见" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="test/integration/_infrastructure.test.ts" name="测试隔离机制 &gt; inRollback 里的写入不会留下痕迹" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="test/integration/_infrastructure.test.ts" name="测试隔离机制 &gt; 连接池上限受控（避免打爆 max_connections）" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="test/integration/_infrastructure.test.ts" name="外键约束真的生效 &gt; 插入指向不存在用户的照片 → 被拒绝" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="test/integration/_infrastructure.test.ts" name="外键约束真的生效 &gt; category 的 CHECK 约束生效" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="test/integration/_infrastructure.test.ts" name="test/integration/_infrastructure.test.ts" time="0.009751709">
+            <failure message="CI 环境缺少 PostgreSQL —— 集成测试不能被跳过。
+  集成测试需要一个可用的 PostgreSQL。
+
+  连接串: postgresql://localhost:59999/postgres
+  错误:   
+
+  本地启动方式（任选其一）：
+    brew services start postgresql@17
+    pnpm db:start                        # 完整 Supabase 本地栈（需 Docker）
+
+  只想跑单元测试： pnpm test:unit
+" type="Error">
+Error: CI 环境缺少 PostgreSQL —— 集成测试不能被跳过。
+  集成测试需要一个可用的 PostgreSQL。
+
+  连接串: postgresql://localhost:59999/postgres
+  错误:   
+
+  本地启动方式（任选其一）：
+    brew services start postgresql@17
+    pnpm db:start                        # 完整 Supabase 本地栈（需 Docker）
+
+  只想跑单元测试： pnpm test:unit
+
+ ❯ test/db/setup.ts:94:13
+            </failure>
+        </testcase>
+    </testsuite>
+</testsuites>

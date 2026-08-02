@@ -1,0 +1,23 @@
+{
+  // 测试与工具脚本的类型检查。与 Next 构建分离：
+  //   pnpm typecheck        = 应用代码（tsconfig.json）+ 测试代码（本文件）
+  //   pnpm build            = 只检查应用代码
+  // 这样测试代码仍然被严格检查，但不会拖慢或污染生产构建。
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node", "vitest/globals"],
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "test/**/*.ts",
+    "e2e/**/*.ts",
+    "scripts/**/*.ts",
+    "vitest.config.ts",
+    "vitest.integration.config.ts",
+    "playwright.config.ts",
+    "next-env.d.ts",
+    "global.d.ts"
+  ],
+  "exclude": ["node_modules"]
+}
