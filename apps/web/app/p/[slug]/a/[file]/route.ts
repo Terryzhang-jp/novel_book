@@ -43,7 +43,7 @@
 
 import { NextResponse } from 'next/server';
 import { viewPublication } from '@tc/application';
-import type { SnapshotAsset } from '@tc/domain';
+import type { SnapshotAsset, Visibility } from '@tc/domain';
 import { getActor, getCore } from '@/lib/core/context';
 import { getObjectStorage } from '@/lib/core/storage';
 
@@ -58,10 +58,23 @@ const notFound = () => new NextResponse('Not found', { status: 404 });
  * 不是「不要缓存」（那是 `no-store`）。这正是我们要的：
  * 省下重复传输，同时让撤回在下一次访问就生效。
  */
-function revalidatableHeaders(etag: string): Record<string, string> {
+function revalidatableHeaders(etag: string, visibility: Visibility): Record<string, string> {
+  // ⚠️ 缓存的可共享性必须跟着**可见性**走。
+  //
+  // private 的发布页只有作者本人能看。如果响应头写 `public`，任何共享缓存
+  // （CDN、公司代理、浏览器扩展）都可以把它存下来发给别人 ——
+  // 应用层的授权做得再对也拦不住。
+  //
+  // 第一版只有 private / unlisted / public 三种；将来加 `shared` 时
+  // 它必须归到 private 这一档。
+  const shareable = visibility === 'public' || visibility === 'unlisted';
   return {
-    'Cache-Control': 'public, no-cache, must-revalidate',
+    'Cache-Control': shareable
+      ? 'public, no-cache, must-revalidate'
+      : 'private, no-cache, must-revalidate',
     ETag: etag,
+    // 响应内容取决于调用者是不是作者本人，缓存必须按凭据区分
+    ...(shareable ? {} : { Vary: 'Cookie, Authorization' }),
   };
 }
 
@@ -96,18 +109,22 @@ export async function GET(
 
     // 内容寻址 ⇒ hash 就是最强的 ETag：字节变了 hash 必然变。
     const etag = `"${found.derivedHash}"`;
+    const visibility = view.page.publication.visibility;
 
     // 走到这里说明 Publication **此刻**可访问。客户端手上的副本仍然有效，
     // 不用重传字节 —— 但它必须每次都来问一次，这正是撤回能立刻生效的原因。
     if (request.headers.get('if-none-match') === etag) {
-      return new NextResponse(null, { status: 304, headers: revalidatableHeaders(etag) });
+      return new NextResponse(null, {
+        status: 304,
+        headers: revalidatableHeaders(etag, visibility),
+      });
     }
 
     const bytes = await getObjectStorage().get(found.objectKey);
 
     return new NextResponse(Buffer.from(bytes), {
       headers: {
-        ...revalidatableHeaders(etag),
+        ...revalidatableHeaders(etag, visibility),
         'Content-Type': found.mimeType,
         'X-Content-Type-Options': 'nosniff',
       },

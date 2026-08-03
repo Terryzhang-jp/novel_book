@@ -105,7 +105,11 @@ test.describe('Phase 2A 纵向链路', () => {
     // 原图能被作者本人读到
     const thumbSrc = await page.locator('[data-testid="evidence-thumb"]').getAttribute('src');
     expect(thumbSrc).toMatch(/^\/api\/studio\/assets\/[0-9a-f-]{36}\/raw$/);
-    expect((await page.request.get(thumbSrc!)).status()).toBe(200);
+    const rawResp = await page.request.get(thumbSrc!);
+    expect(rawResp.status()).toBe(200);
+    // 原图带着 GPS 和相机序列号，所以比派生副本更严一档：连存都不许。
+    // 只写 no-cache 的话，字节仍然会落在磁盘上。
+    expect(rawResp.headers()['cache-control']).toBe('private, no-store');
 
     // ⭐ 匿名读不到原图
     const anonProbe = await browser.newContext();
@@ -183,6 +187,9 @@ test.describe('Phase 2A 纵向链路', () => {
     expect(cc).not.toMatch(/max-age=[1-9]/);
     expect(cc).toContain('no-cache');
     expect(cc).toContain('must-revalidate');
+    // unlisted 是可共享的，所以 public 正确。private 那一档必须是
+    // private + Vary —— 否则共享缓存可能把受限内容发给别人。
+    expect(cc).toContain('public');
     // ETag 就是派生内容的 hash —— 字节变了它必然变
     expect(etag).toBe(`"${pubImgSrc.match(/([0-9a-f]{64})/)![1]}"`);
 

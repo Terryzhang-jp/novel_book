@@ -17,7 +17,13 @@
  * 修 bug 让它符合原本的意图不算。
  */
 
-import type { GalleryConfig, NarrativeConfig, SnapshotBlock, WorkSnapshot } from '@tc/domain';
+import type {
+  GalleryConfig,
+  NarrativeConfig,
+  PresentationConfig,
+  SnapshotBlock,
+  WorkSnapshot,
+} from '@tc/domain';
 import { assertRendererAvailable } from '@tc/domain';
 import { MOMENT_ASSET_ROLE_LABELS } from '@tc/application';
 import { fmtDate } from './chrome';
@@ -248,24 +254,62 @@ export function GalleryV1({
   );
 }
 
-// ── 选渲染器 ─────────────────────────────────────────────────────────────────
+// ── Renderer 注册表 ──────────────────────────────────────────────────────────
+
+export interface RendererProps {
+  readonly snapshot: WorkSnapshot;
+  readonly slug: string;
+  readonly config: PresentationConfig;
+}
+
+/**
+ * `type@version` → 实现。
+ *
+ * ## 保留契约（ADR-010 R1 的执行形式）
+ *
+ * 1. **一个版本一旦被任何 Publication 引用过，就不能删。**
+ *    删了那些页面就打不开了 —— 而它们本来是不可变的。
+ * 2. 改动某个版本的排版**让同一份 config 的视觉结果变了**，
+ *    要新增一个版本号，旧函数原地不动。
+ * 3. 两个渲染器**不共享布局组件**。共享的只有内容提取
+ *    （TextBlock / Tombstone），因为那部分必须完全一致 —— 那正是
+ *    「同一份内容」的含义。改共享部分等于同时改两个渲染器，
+ *    golden 测试会一起变红，那时候就必须两个都升版本。
+ *
+ * test/unit/renderer-contract.test.ts 和 test/integration 里的一条
+ * 一起守着：前者比对 golden 输出，后者扫数据库里所有被引用过的版本，
+ * 确认注册表里都有实现。
+ */
+export const RENDERER_REGISTRY: Readonly<
+  Record<string, (props: RendererProps) => JSX.Element>
+> = {
+  'narrative@1': ({ snapshot, slug, config }) => (
+    <NarrativeV1 snapshot={snapshot} slug={slug} config={config as NarrativeConfig} />
+  ),
+  'gallery@1': ({ snapshot, slug, config }) => (
+    <GalleryV1 snapshot={snapshot} slug={slug} config={config as GalleryConfig} />
+  ),
+};
+
+export function rendererKey(type: string, version: number): string {
+  return `${type}@${version}`;
+}
 
 /**
  * 按 `rendererType@rendererVersion` 选。
  *
  * **绝不回退到最新版**（ADR-010 R1）—— 那等于说「我们保存了你当时的配置，
  * 但用今天的代码渲染」，而视觉结果可能完全不同。
- * `assertRendererAvailable` 负责在版本对不上时明确报错。
  */
 export function SnapshotView({ snapshot, slug }: { snapshot: WorkSnapshot; slug: string }) {
   const p = snapshot.presentation;
   assertRendererAvailable(p);
 
-  if (p.rendererType === 'gallery' && p.rendererVersion === 1) {
-    return <GalleryV1 snapshot={snapshot} slug={slug} config={p.config as GalleryConfig} />;
+  const key = rendererKey(p.rendererType, p.rendererVersion);
+  const Renderer = RENDERER_REGISTRY[key];
+  if (!Renderer) {
+    // 明确失败。回退到别的版本会让这篇文章悄悄变成另一个样子。
+    throw new Error(`没有 ${key} 的渲染器实现 —— 它可能被误删了（ADR-010 保留契约）`);
   }
-  if (p.rendererType === 'narrative' && p.rendererVersion === 1) {
-    return <NarrativeV1 snapshot={snapshot} slug={slug} config={p.config as NarrativeConfig} />;
-  }
-  throw new Error(`没有 ${p.rendererType}@${p.rendererVersion} 的渲染器`);
+  return <Renderer snapshot={snapshot} slug={slug} config={p.config} />;
 }

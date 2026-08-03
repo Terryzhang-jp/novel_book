@@ -13,6 +13,10 @@ import { defineConfig } from 'vitest/config';
 import { resolve } from 'node:path';
 
 export default defineConfig({
+  // Renderer 的 golden 测试要渲染 .tsx。esbuild 默认用 classic JSX 运行时
+  // （需要 `import React`），而这个项目全用 automatic —— 不指定的话
+  // 报的是 "React is not defined"，很难联想到是转译配置。
+  esbuild: { jsx: 'automatic' },
   resolve: {
     alias: { '@': resolve(__dirname, '.') },
   },

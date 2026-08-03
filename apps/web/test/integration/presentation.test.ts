@@ -354,3 +354,30 @@ describe('灵魂 3：表现也有用户边界与版本', () => {
     expect(rows).toHaveLength(0);
   });
 });
+
+describe('灵魂 4：Renderer 保留契约', () => {
+  it('数据库里被任何 Publication 引用过的 renderer 版本，都必须还有实现', async () => {
+    // 这条测试的价值在于它**扫真实数据**，不是扫代码。
+    // 有人删掉 narrative@1 时，单元测试只知道「声明的版本没实现」，
+    // 而这条能直接说出「已经有 N 篇发布的页面会打不开」。
+    const { RENDERER_REGISTRY, rendererKey } = await import('@/components/studio/renderers');
+
+    const rows = await sql<{ renderer_type: string; renderer_version: number; n: string }>(
+      `SELECT snapshot -> 'presentation' ->> 'rendererType' AS renderer_type,
+              (snapshot -> 'presentation' ->> 'rendererVersion')::int AS renderer_version,
+              count(*)::text AS n
+         FROM work_versions
+        WHERE snapshot -> 'presentation' ->> 'rendererVersion' IS NOT NULL
+        GROUP BY 1, 2`
+    );
+
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      const key = rendererKey(row.renderer_type, row.renderer_version);
+      expect(
+        RENDERER_REGISTRY[key],
+        `${key} 没有实现，但有 ${row.n} 个已发布版本引用它 —— 那些页面会打不开`
+      ).toBeTypeOf('function');
+    }
+  });
+});

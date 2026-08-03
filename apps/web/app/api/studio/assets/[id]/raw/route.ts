@@ -24,33 +24,31 @@ import { getStorageKit } from '@/lib/core/storage';
 
 export const dynamic = 'force-dynamic';
 
-/** private：原图绝不能进任何共享缓存或 CDN。no-cache：每次都要重新鉴权。 */
-function privateHeaders(etag: string): Record<string, string> {
-  return {
-    'Cache-Control': 'private, no-cache, must-revalidate',
-    ETag: etag,
-  };
-}
+/**
+ * 原图：`private, no-store`。
+ *
+ * 比派生副本更严一档，因为原图**带着 GPS 和相机序列号** ——
+ * GPS 精确到用户家门口。
+ *
+ * `no-cache` 允许客户端把字节存在磁盘上（只是每次用前来问一次）；
+ * `no-store` 连存都不许。对这类内容，少一次落盘比省一次传输重要。
+ *
+ * 代价：作者每次打开 Moment 页面都会重新下载缩略图。
+ * 这在当前规模下可以接受，真成为问题时的解法是**服务端生成受控尺寸的
+ * 预览副本**（和发布派生同一套机制），而不是放松这里的缓存策略。
+ */
+const PRIVATE_NO_STORE = {
+  'Cache-Control': 'private, no-store',
+  Vary: 'Cookie, Authorization',
+} as const;
 
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   try {
     const actor = await getActor();
-    const asset = await getCore().assets.findById(actor, id);
-    if (!asset) return new NextResponse('Not found', { status: 404 });
-
-    // 和发布资源同一个道理：Asset 的**字节**不可变，但它的**可访问性**会变
-    // （软删除、账号状态）。所以是 no-cache + ETag，不是 max-age。
-    // 之前写的 `private, max-age=3600` 意味着删掉一份素材之后，
-    // 作者自己的浏览器还能再看它一小时。
-    const etag = `"${asset.sha256}"`;
-    if (request.headers.get('if-none-match') === etag) {
-      return new NextResponse(null, { status: 304, headers: privateHeaders(etag) });
-    }
-
     const { bytes, mimeType } = await readAssetBytes(
       { core: getCore(), storage: getStorageKit() },
       actor,
@@ -59,7 +57,7 @@ export async function GET(
 
     return new NextResponse(Buffer.from(bytes), {
       headers: {
-        ...privateHeaders(etag),
+        ...PRIVATE_NO_STORE,
         'Content-Type': mimeType,
         // 即使 MIME 判断出错也不让浏览器去猜
         'X-Content-Type-Options': 'nosniff',
