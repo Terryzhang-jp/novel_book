@@ -27,10 +27,11 @@
       "prosemirror-transform": "1.10.2"
     },
     "onlyBuiltDependencies": [
-      "supabase",
-      "sharp",
       "@biomejs/biome",
-      "esbuild"
+      "esbuild",
+      "ffmpeg-static",
+      "sharp",
+      "supabase"
     ]
   }
 }

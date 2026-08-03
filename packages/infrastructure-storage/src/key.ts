@@ -21,6 +21,9 @@ const MIME_TO_EXT: Readonly<Record<string, string>> = {
   'audio/mpeg': 'mp3',
   'audio/mp4': 'm4a',
   'audio/wav': 'wav',
+  // 发布派生用的统一音频格式（15C）。Ogg 容器 + Opus 编码，
+  // 扩展名用 opus 而不是 ogg —— 后者不区分里面是 Vorbis 还是 Opus。
+  'audio/ogg': 'opus',
   'video/mp4': 'mp4',
   'application/pdf': 'pdf',
 };

@@ -40,7 +40,7 @@ import {
   type WorkSnapshot,
 } from '@tc/domain';
 import { getPool, sql } from '../db/setup';
-import { getImageDeriver, getStorageKit } from '@/lib/core/storage';
+import { getAudioDeriver, getImageDeriver, getStorageKit } from '@/lib/core/storage';
 
 const ALICE = userActor('11111111-1111-1111-1111-111111111111', 'sess-alice');
 const BOB = userActor('22222222-2222-2222-2222-222222222222', 'sess-bob');
@@ -54,7 +54,7 @@ const uniq = (p: string) => `${p}-${Date.now().toString(36)}-${++seq}`;
 
 beforeAll(() => {
   core = new PostgresUnitOfWork(getPool() as unknown as Pool);
-  publishDeps = { core, storage: getStorageKit(), deriver: getImageDeriver() };
+  publishDeps = { core, storage: getStorageKit(), deriver: getImageDeriver(), audioDeriver: getAudioDeriver() };
 });
 
 /**

@@ -526,7 +526,7 @@ export function mapCorrection(row: CorrectionRow): AssetMetadataCorrection {
 
 export const PUBLISHED_ASSET_COLUMNS =
   'id, work_version_id, source_asset_id, user_id, object_key, sha256, mime_type, ' +
-  'width, height, byte_size, preset, created_at';
+  'width, height, duration_ms, byte_size, preset, created_at';
 
 export interface PublishedAssetRow {
   id: string;
@@ -536,8 +536,9 @@ export interface PublishedAssetRow {
   object_key: string;
   sha256: string;
   mime_type: string;
-  width: number;
-  height: number;
+  width: number | null;
+  height: number | null;
+  duration_ms: number | null;
   byte_size: string | number;
   preset: string;
   created_at: Date | string;
@@ -553,10 +554,13 @@ export function mapPublishedAsset(row: PublishedAssetRow): PublishedAsset {
     objectKey: required(t, 'object_key', row.object_key),
     sha256: required(t, 'sha256', row.sha256),
     mimeType: required(t, 'mime_type', row.mime_type),
-    width: required(t, 'width', row.width),
-    height: required(t, 'height', row.height),
+    // 按 preset 分别可空：图片有宽高，音频有时长
+    // （chk_published_asset_shape 保证两者不会同时缺）
+    ...optionalField('width', opt(present(t, 'width', row.width))),
+    ...optionalField('height', opt(present(t, 'height', row.height))),
+    ...optionalField('durationMs', opt(present(t, 'duration_ms', row.duration_ms))),
     byteSize: Number(required(t, 'byte_size', row.byte_size)),
-    preset: required(t, 'preset', row.preset) as 'web1600',
+    preset: required(t, 'preset', row.preset) as 'web1600' | 'audio_opus64',
     createdAt: toIso(required(t, 'created_at', row.created_at)),
   };
 }

@@ -157,14 +157,46 @@ export interface SnapshotMomentBlock {
  * 刻意**没有 URL 字段**（S-1）：签名 URL 会过期，存进不可变快照
  * 就等于给这篇文章设了一个到期日，过期后整页变裂图。
  */
-export interface SnapshotAsset {
+/**
+ * 冻结在快照里的一份发布派生副本。
+ *
+ * `kind` 决定哪几个字段有意义 —— 图片有宽高，音频有时长。
+ * 不用一组「可选字段随便填」是因为渲染端否则只能靠 mimeType 猜自己该读什么，
+ * 而那正是 timezone 那一列的教训（一处装两种语义，读取方靠猜）。
+ */
+export type SnapshotAsset = {
   readonly role: MomentAssetRole;
   readonly derivedHash: string;
   readonly objectKey: string;
   readonly mimeType: string;
-  readonly width: number;
-  readonly height: number;
   readonly note?: string;
+} & (
+  | { readonly kind: 'image'; readonly width: number; readonly height: number }
+  | { readonly kind: 'audio'; readonly durationMs: number }
+);
+
+/**
+ * 派生副本在公开 URL 里的文件名。
+ *
+ * 只出现内容 hash 和扩展名 —— objectKey 里有 userId，放进公开 URL
+ * 等于泄露作者的内部 id（ADR-008 A8）。
+ *
+ * 扩展名由 mimeType 决定而不是从 objectKey 抄：objectKey 是内部布局，
+ * 公开 URL 是对外契约，两者不该被绑在一起。
+ */
+const PUBLIC_EXT: Readonly<Record<string, string>> = {
+  'image/webp': 'webp',
+  'audio/ogg': 'opus',
+};
+
+export function publicAssetFile(asset: Pick<SnapshotAsset, 'derivedHash' | 'mimeType'>): string {
+  const ext = PUBLIC_EXT[asset.mimeType];
+  if (!ext) {
+    // 明确失败。给一个兜底扩展名意味着某天新增一种派生格式时，
+    // 它会以错误的文件名悄悄发出去。
+    throw new InvariantViolation('P-asset', `没有为 ${asset.mimeType} 定义公开扩展名`);
+  }
+  return `${asset.derivedHash}.${ext}`;
 }
 
 /** 发布那一刻冻结的 Moment 展示内容 */
@@ -348,8 +380,13 @@ export function assertSnapshotIsSelfContained(snapshot: WorkSnapshot): void {
           `第 ${i} 个 block 的第 ${j} 份素材缺少派生副本信息 —— 渲染时会需要查实时表`
         );
       }
-      if (!a.width || !a.height) {
+      // 按 kind 各查各的必填项。图片缺尺寸会让页面在图片加载前跳动；
+      // 音频缺时长会让播放器显示成损坏文件。
+      if (a.kind === 'image' && (!a.width || !a.height)) {
         throw new InvariantViolation('P-3', `第 ${i} 个 block 的第 ${j} 份素材缺少尺寸`);
+      }
+      if (a.kind === 'audio' && !a.durationMs) {
+        throw new InvariantViolation('P-3', `第 ${i} 个 block 的第 ${j} 份音频缺少时长`);
       }
     });
   });
@@ -376,6 +413,28 @@ interface SnapshotV1 {
  * `chk_snapshot_versioned` 那个 `_v` 从建库第一天就在。这是它第一次派上用场：
  * v1 的 `rendererType: 'web'` 在 v2 里对应 `narrative@1`。
  */
+/**
+ * 给 `kind` 出现之前写下的 asset 补上 `kind: 'image'`。
+ *
+ * **这不是猜。** 音频派生是 Commit 15C 才有的能力，在那之前
+ * publishWork 会跳过所有非图片素材（并把跳过数报给用户）——
+ * 所以历史快照里的每一份派生副本必然是图片。
+ *
+ * 只在读取时补，不回写数据库：快照是不可变的。
+ */
+function withAssetKind(block: SnapshotBlock): SnapshotBlock {
+  if (block.type !== 'moment_ref' || !block.moment?.assets) return block;
+  return {
+    ...block,
+    moment: {
+      ...block.moment,
+      assets: block.moment.assets.map((a) =>
+        'kind' in a ? a : ({ ...(a as object), kind: 'image' } as SnapshotAsset)
+      ),
+    },
+  };
+}
+
 export function normalizeSnapshot(raw: unknown): WorkSnapshot {
   if (!raw || typeof raw !== 'object') {
     throw new InvariantViolation('P-1', 'snapshot 不是对象');
@@ -392,6 +451,7 @@ export function normalizeSnapshot(raw: unknown): WorkSnapshot {
         ...snap.presentation,
         config: parsePresentationConfig(snap.presentation.rendererType, snap.presentation.config),
       },
+      blocks: snap.blocks.map(withAssetKind),
     };
   }
 

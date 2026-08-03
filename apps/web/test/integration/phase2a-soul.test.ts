@@ -43,7 +43,7 @@ import { PostgresUnitOfWork } from '@tc/infrastructure-postgres';
 import type { PublishDeps } from '@tc/application';
 import { ANONYMOUS, InvariantViolation, NotFoundError, userActor } from '@tc/domain';
 import { getPool, sql } from '../db/setup';
-import { getImageDeriver, getStorageKit } from '@/lib/core/storage';
+import { getAudioDeriver, getImageDeriver, getStorageKit } from '@/lib/core/storage';
 
 /** seed 里的固定身份 */
 const ALICE = userActor('11111111-1111-1111-1111-111111111111', 'sess-alice');
@@ -67,7 +67,7 @@ beforeAll(() => {
   core = new PostgresUnitOfWork(getPool() as unknown as Pool);
   // 真实的存储和派生器 —— 不用假的。
   // 用假的就测不到「派生副本里没有 EXIF」这类断言，而那正是要证明的事。
-  publishDeps = { core, storage: getStorageKit(), deriver: getImageDeriver() };
+  publishDeps = { core, storage: getStorageKit(), deriver: getImageDeriver(), audioDeriver: getAudioDeriver() };
 });
 
 // ════════════════════════════════════════════════════════════════════════════

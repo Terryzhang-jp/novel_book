@@ -40,7 +40,7 @@ import type {
   MomentAssetView,
   PublishedPage,
 } from '../ports/repositories';
-import type { ImageDeriver, StorageKit } from '../ports/media';
+import type { AudioDeriver, ImageDeriver, StorageKit } from '../ports/media';
 import type { CoreRepositories, UnitOfWork } from '../ports/unit-of-work';
 import { buildWorkSnapshot } from '../snapshot';
 import { loadWorkDetail } from './work';
@@ -56,10 +56,17 @@ export interface PublishDeps {
   readonly core: UnitOfWork;
   readonly storage: StorageKit;
   readonly deriver: ImageDeriver;
+  readonly audioDeriver: AudioDeriver;
 }
 
 /** 第一版唯一的派生预设。长边 1600，够网页看，也不至于把原图挂上公网。 */
 const WEB_PRESET = { name: 'web1600' as const, maxEdge: 1600 };
+
+/**
+ * 音频的发布预设。名字里带参数 —— 将来改码率就是一个**新预设**，
+ * 旧的发布副本不会被追溯解释成新参数。
+ */
+const AUDIO_PRESET = { name: 'audio_opus64' as const };
 
 export interface PublishCommand {
   readonly workId: WorkId;
@@ -83,10 +90,10 @@ export interface PublishResult extends PublishedPage {
   /**
    * 没有进入发布页的证据数量。
    *
-   * 目前只有音频会被跳过：安全派生（剥离元数据）对音频还没实现，
-   * 而把原字节直接公开会连带公开录制设备信息。
-   *
-   * **显式返回而不是静默跳过** —— 用户必须知道他的发布页少了什么。
+   * 15C 之后图片和音频都有安全派生，所以正常情况下**恒为 0**。
+   * 保留这个字段是因为「上传放行的类型」和「发布支持的类型」是两个集合，
+   * 将来加视频时它们又会分开一段时间 —— 那时候用户必须知道少了什么，
+   * 而不是对着一个缺了东西的页面猜。
    */
   readonly skippedAssets: number;
 }
@@ -225,9 +232,58 @@ async function deriveEvidence(
   let skipped = 0;
 
   for (const { link, asset } of evidence) {
+    if (asset.type === 'audio') {
+      let derivedAudio = seen.get(asset.id);
+      if (!derivedAudio) {
+        const original = await deps.storage.storage.get(asset.objectKey);
+        // 完整重新编码。这是剥离元数据唯一可靠的方式 ——
+        // 只删已知标签字段挡不住私有扩展段。
+        const out = await deps.audioDeriver.derive(original);
+        const objectKey = deps.storage.buildObjectKey(userId, out.bytes, out.mimeType);
+        const { hash } = parseObjectKey(objectKey);
+
+        await deps.storage.storage.put({
+          key: objectKey,
+          body: out.bytes,
+          contentType: out.mimeType,
+          overwrite: true,
+        });
+
+        derivedAudio = {
+          kind: 'audio',
+          role: link.role,
+          derivedHash: hash,
+          objectKey,
+          mimeType: out.mimeType,
+          durationMs: out.durationMs,
+        };
+        seen.set(asset.id, derivedAudio);
+        ledger.push({
+          sourceAssetId: asset.id,
+          objectKey,
+          sha256: hash,
+          mimeType: out.mimeType,
+          durationMs: out.durationMs,
+          byteSize: out.bytes.byteLength,
+          preset: AUDIO_PRESET.name,
+        });
+      }
+
+      const item: SnapshotAsset = {
+        ...derivedAudio,
+        role: link.role,
+        ...(link.note ? { note: link.note } : {}),
+      };
+      const audioBucket = byMoment.get(link.momentId);
+      if (audioBucket) audioBucket.push(item);
+      else byMoment.set(link.momentId, [item]);
+      continue;
+    }
+
     if (asset.type !== 'image') {
-      // 音频的安全派生（剥离元数据）还没实现。跳过并计数 ——
-      // 静默漏掉会让用户以为发布页就该长这样。
+      // 走到这里说明出现了既不是图片也不是音频的类型。
+      // 上传那一关（A-5）本来就只放行这两种，所以这是一个「不该发生」的分支 ——
+      // 计数并让用户看见，比假装它不存在好。
       skipped += 1;
       continue;
     }
@@ -247,6 +303,7 @@ async function deriveEvidence(
       });
 
       derived = {
+        kind: 'image',
         role: link.role,
         derivedHash: hash,
         objectKey,

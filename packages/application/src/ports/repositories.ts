@@ -352,10 +352,19 @@ export interface CreatePublishedAssetInput {
   readonly objectKey: string;
   readonly sha256: string;
   readonly mimeType: string;
-  readonly width: number;
-  readonly height: number;
   readonly byteSize: number;
-  readonly preset: 'web1600';
+  /** 图片必填 */
+  readonly width?: number;
+  /** 图片必填 */
+  readonly height?: number;
+  /** 音频必填 */
+  readonly durationMs?: number;
+  /**
+   * 预设名里带着参数（尺寸 / 编码 / 码率）。
+   * 改参数 = 新预设名，这样旧副本不会被追溯解释成新参数。
+   * 数据库的 chk_published_asset_shape 保证每种预设的必填项都在。
+   */
+  readonly preset: 'web1600' | 'audio_opus64';
 }
 
 export interface PublishedAsset extends CreatePublishedAssetInput {

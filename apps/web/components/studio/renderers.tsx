@@ -19,19 +19,55 @@
 
 import type {
   GalleryConfig,
+  SnapshotAsset,
   NarrativeConfig,
   PresentationConfig,
   SnapshotBlock,
   WorkSnapshot,
 } from '@tc/domain';
-import { assertRendererAvailable } from '@tc/domain';
+import { assertRendererAvailable, publicAssetFile } from '@tc/domain';
 import { MOMENT_ASSET_ROLE_LABELS } from '@tc/application';
 import { fmtDate } from './chrome';
 
 // ── 内容提取：两个渲染器共用，保证语义内容完全一致 ──────────────────────────
 
-function assetUrl(slug: string, hash: string): string {
-  return `/p/${encodeURIComponent(slug)}/a/${hash}.webp`;
+/**
+ * 派生副本的公开地址。
+ *
+ * 扩展名由 mimeType 决定 —— 原来这里写死 `.webp`，音频接进来之后
+ * 那会让每一段录音都以 .webp 结尾。文件名对外是契约的一部分，
+ * 不该跟着「当时只有一种格式」的假设走。
+ */
+function assetUrl(slug: string, asset: SnapshotAsset): string {
+  return `/p/${encodeURIComponent(slug)}/a/${publicAssetFile(asset)}`;
+}
+
+function formatDuration(ms: number): string {
+  const total = Math.round(ms / 1000);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/**
+ * 一段录音。
+ *
+ * `preload="none"` —— 一篇文章里可能有好几段，全部预加载会让「打开页面」
+ * 就产生几 MB 流量。读者点了才下载。
+ *
+ * 两个渲染器共用它，和 TextBlock / Tombstone 同一个理由：
+ * 这是**内容提取**，必须完全一致。差异只允许出现在布局上。
+ */
+function AudioEvidence({ src, asset }: { src: string; asset: SnapshotAsset }) {
+  if (asset.kind !== 'audio') return null;
+  return (
+    <figure data-testid="pub-asset" className="my-5">
+      {/* biome-ignore lint/a11y/useMediaCaption: 用户录音没有字幕轨，挂一个空的更糟 */}
+      <audio controls preload="none" src={src} data-testid="pub-audio" className="w-full" />
+      <figcaption className="mt-1 text-xs text-neutral-500">
+        {MOMENT_ASSET_ROLE_LABELS[asset.role]} · {formatDuration(asset.durationMs)}
+        {asset.note ? ` · ${asset.note}` : ''}
+      </figcaption>
+    </figure>
+  );
 }
 
 function TextBlock({ text, className }: { text: string; className: string }) {
@@ -126,27 +162,31 @@ export function NarrativeV1({
               </blockquote>
             ) : null}
 
-            {(m.assets ?? []).map((a) => (
-              <figure
-                key={a.derivedHash}
-                data-testid="pub-asset"
-                className={fullWidth ? 'my-6 -mx-4' : 'my-5'}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={assetUrl(slug, a.derivedHash)}
-                  alt={a.note ?? ''}
-                  width={a.width}
-                  height={a.height}
-                  className="w-full rounded"
-                  loading="lazy"
-                />
-                <figcaption className="mt-1 px-4 text-xs text-neutral-500">
-                  {MOMENT_ASSET_ROLE_LABELS[a.role]}
-                  {a.note ? ` · ${a.note}` : ''}
-                </figcaption>
-              </figure>
-            ))}
+            {(m.assets ?? []).map((a) =>
+              a.kind === 'audio' ? (
+                <AudioEvidence key={a.derivedHash} src={assetUrl(slug, a)} asset={a} />
+              ) : (
+                <figure
+                  key={a.derivedHash}
+                  data-testid="pub-asset"
+                  className={fullWidth ? 'my-6 -mx-4' : 'my-5'}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={assetUrl(slug, a)}
+                    alt={a.note ?? ''}
+                    width={a.width}
+                    height={a.height}
+                    className="w-full rounded"
+                    loading="lazy"
+                  />
+                  <figcaption className="mt-1 px-4 text-xs text-neutral-500">
+                    {MOMENT_ASSET_ROLE_LABELS[a.role]}
+                    {a.note ? ` · ${a.note}` : ''}
+                  </figcaption>
+                </figure>
+              )
+            )}
           </section>
         );
       })}
@@ -201,25 +241,29 @@ export function GalleryV1({
             {/* 图片在前 —— gallery 让读者先看到视觉对比 */}
             {(m.assets ?? []).length > 0 ? (
               <div className={`grid grid-cols-1 gap-3 ${cols}`}>
-                {(m.assets ?? []).map((a) => (
-                  <figure key={a.derivedHash} data-testid="pub-asset">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={assetUrl(slug, a.derivedHash)}
-                      alt={a.note ?? ''}
-                      width={a.width}
-                      height={a.height}
-                      className={`aspect-[4/3] w-full rounded ${fit}`}
-                      loading="lazy"
-                    />
-                    {minimalCaption ? null : (
-                      <figcaption className="mt-1 text-xs text-neutral-500">
-                        {MOMENT_ASSET_ROLE_LABELS[a.role]}
-                        {a.note ? ` · ${a.note}` : ''}
-                      </figcaption>
-                    )}
-                  </figure>
-                ))}
+                {(m.assets ?? []).map((a) =>
+                  a.kind === 'audio' ? (
+                    <AudioEvidence key={a.derivedHash} src={assetUrl(slug, a)} asset={a} />
+                  ) : (
+                    <figure key={a.derivedHash} data-testid="pub-asset">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={assetUrl(slug, a)}
+                        alt={a.note ?? ''}
+                        width={a.width}
+                        height={a.height}
+                        className={`aspect-[4/3] w-full rounded ${fit}`}
+                        loading="lazy"
+                      />
+                      {minimalCaption ? null : (
+                        <figcaption className="mt-1 text-xs text-neutral-500">
+                          {MOMENT_ASSET_ROLE_LABELS[a.role]}
+                          {a.note ? ` · ${a.note}` : ''}
+                        </figcaption>
+                      )}
+                    </figure>
+                  )
+                )}
               </div>
             ) : null}
 

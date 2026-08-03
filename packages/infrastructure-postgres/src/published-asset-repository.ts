@@ -31,8 +31,8 @@ export class PostgresPublishedAssetRepository implements PublishedAssetRepositor
       const { rows } = await this.db.query<PublishedAssetRow>(
         `INSERT INTO published_assets
            (work_version_id, source_asset_id, user_id, object_key, sha256,
-            mime_type, width, height, byte_size, preset)
-         SELECT v.id, $3, v.user_id, $4, $5, $6, $7, $8, $9, $10
+            mime_type, width, height, duration_ms, byte_size, preset)
+         SELECT v.id, $3, v.user_id, $4, $5, $6, $7, $8, $9, $10, $11
            FROM work_versions v WHERE v.id = $1 AND v.user_id = $2
          RETURNING ${PUBLISHED_ASSET_COLUMNS}`,
         [
@@ -42,8 +42,9 @@ export class PostgresPublishedAssetRepository implements PublishedAssetRepositor
           input.objectKey,
           input.sha256,
           input.mimeType,
-          input.width,
-          input.height,
+          input.width ?? null,
+          input.height ?? null,
+          input.durationMs ?? null,
           input.byteSize,
           input.preset,
         ]

@@ -81,7 +81,10 @@
       "impact": "图片在发布时会被缩放并剥离 EXIF/GPS，音频没有对应实现。把原音频字节直接公开会连带公开录制设备信息，所以目前**跳过**——挂了音频证据的 Moment，发布页上看不到它。",
       "mitigation": "不是静默跳过：publishWork 返回 skippedAssets，发布后的提示里明说「有 N 份音频证据没有进入发布页」。集成测试断言了这个计数。",
       "closeWhen": "接入音频转码（重编码即可剥离元数据）后打开，并补一条与图片同款的「派生副本不含元数据」测试。",
-      "owner": "engineering"
+      "owner": "engineering",
+      "status": "closed",
+      "closedAt": "2026-08-03",
+      "closedBy": "Commit 15C：AudioDeriver 端口 + ffmpeg 完整重新编码（Opus/Ogg，单声道 48kHz 64kbps，-map_metadata -1 / -map_chapters -1 / -vn）。published_assets 按 preset 分别要求宽高或时长（chk_published_asset_shape），不再为音频编一个假的 1×1。5 条集成测试用真的 m4a 验证：先断言输入确实带着标题/作者/备注/GPS，再断言派生副本一个都不剩，且参数受控（opus / 48000 Hz / mono）。skippedAssets 现在恒为 0。"
     },
     {
       "id": "gps-timezone-inference-absent",
@@ -101,7 +104,9 @@
       "impact": "两种字节会留在存储里：① 作者撤回 Publication 后，那一版的派生副本；② 上传时对象已落盘但数据库写失败留下的孤儿。两者都没有清理任务。（账号永久删除**不在此列** —— finalizeAccountDeletion 会逐个删 assets 和 published_assets 的 key，并扫一遍 users/{userId}/ 前缀兜底孤儿。）",
       "mitigation": "撤回后资源路由立即 404，孤儿对象在任何表里都查不到 —— 所以这是**存储成本问题，不是泄露问题**。published_assets 这张表存在的理由就是让清理任务能一次查到该删什么。",
       "closeWhen": "实现 storage:audit 命令（ADR-002 第 5 节）：对比 ObjectStorage 里的 key 与 assets/published_assets 的引用，清理无引用的那些。",
-      "owner": "engineering"
+      "owner": "engineering",
+      "status": "partial",
+      "note": "15A 已把账号删除那一路接上 storage_cleanup_jobs 队列（可重试、并发安全、超过 8 次标记 abandoned）。剩下三种 reason —— publication_withdrawn / asset_deleted / orphan —— 表结构已就位但还没有生产者。"
     },
     {
       "id": "derived-assets-not-on-cdn",
@@ -154,6 +159,26 @@
       "impact": "删除会清空新核心的对象存储（users/{userId}/ 前缀下的原图与发布派生副本，逐个删 + 扫前缀兜底）。但遗留的 photos / 文档图片走的是 Supabase Storage 和 public/images/，那些字节不在清理范围里 —— 数据库行被 CASCADE 删了，文件还在。",
       "mitigation": "数据库行没了之后，遗留应用的所有读取路径都查不到这些文件（URL 是从 photos 行里取的）。所以这是**残留问题，不是公开泄露**。清理失败会写 storage_cleanup_incomplete 审计。",
       "closeWhen": "遗留页面按 Strangler 计划迁到新核心后自然消失；在那之前若要提前关闭，需要在 finalizeAccountDeletion 里加一个遗留存储的清理器（先收集 photos.file_url，再删 Supabase 对象）。",
+      "owner": "engineering"
+    },
+    {
+      "id": "audio-single-channel-loses-space",
+      "title": "发布的录音是单声道，环境录音的空间感会丢失",
+      "severity": "low",
+      "area": "apps/web/lib/core/audio-deriver.ts · preset audio_opus64",
+      "impact": "第一版音频发布预设是单声道 48kHz 64kbps。语音速记完全够用，但立体声的环境录音（雨声、街道、现场）会被压成单声道，空间信息不可恢复地丢失在派生副本里。原始录音不受影响，仍然是完整的立体声。",
+      "mitigation": "原文件永远保留且不可变，作者本人随时能听到完整版本；重新发布时会用当时的预设重新派生，所以未来加立体声预设后重新发布即可获得新副本。",
+      "closeWhen": "有真实的环境录音需求时增加一个**新预设名**（例如 audio_opus96_stereo），而不是改 audio_opus64 的参数 —— 改参数会让已发布的旧副本被追溯解释成新参数。",
+      "owner": "product"
+    },
+    {
+      "id": "ffmpeg-binary-in-deploy",
+      "title": "发布音频依赖 ffmpeg 二进制",
+      "severity": "low",
+      "area": "apps/web/lib/core/audio-deriver.ts · ffmpeg-static",
+      "impact": "音频派生需要 ffmpeg。默认用 ffmpeg-static 打包的静态二进制（约 80MB），会进入部署产物；某些 serverless 平台对包体积有限制。",
+      "mitigation": "优先读 FFMPEG_PATH 环境变量，所以部署镜像里已有 ffmpeg 时可以指向系统的那个并把 ffmpeg-static 排除出打包。找不到时**明确失败**而不是退回「跳过音频」—— 后者会让 15C 关掉的缺口悄悄回来。",
+      "closeWhen": "确定生产运行环境后，二选一：镜像内置 ffmpeg 并设 FFMPEG_PATH，或确认平台能容纳静态二进制。",
       "owner": "engineering"
     }
   ]

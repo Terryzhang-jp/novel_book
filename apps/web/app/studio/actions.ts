@@ -52,7 +52,12 @@ import {
   type RendererType,
 } from '@tc/domain';
 import { getCore, requireActor } from '@/lib/core/context';
-import { getImageDeriver, getMediaProbe, getStorageKit } from '@/lib/core/storage';
+import {
+  getAudioDeriver,
+  getImageDeriver,
+  getMediaProbe,
+  getStorageKit,
+} from '@/lib/core/storage';
 import { toUserMessage } from '@/lib/core/errors';
 
 /**
@@ -233,7 +238,9 @@ export async function publishWorkAction(form: FormData) {
   return run(`/studio/works/${workId}`, async () => {
     const actor = await requireActor();
     const result = await publishWork(
-      { core: getCore(), storage: getStorageKit(), deriver: getImageDeriver() },
+      { core: getCore(), storage: getStorageKit(), deriver: getImageDeriver(),
+        audioDeriver: getAudioDeriver(),
+      },
       actor,
       {
         workId,
@@ -244,10 +251,14 @@ export async function publishWorkAction(form: FormData) {
     );
     const what = result.firstPublish ? '已发布' : `已更新到第 ${result.version.versionNumber} 版`;
     const extra = [
-      result.derivedAssets > 0 ? `已生成 ${result.derivedAssets} 份安全副本（去掉了 GPS 和相机信息）` : '',
-      // 静默跳过等于骗人：用户必须知道发布页里少了什么
+      result.derivedAssets > 0
+        ? `已生成 ${result.derivedAssets} 份安全副本（图片去掉了 GPS 和相机信息，录音重新编码去掉了设备与位置标签）`
+        : '',
+      // 静默跳过等于骗人：用户必须知道发布页里少了什么。
+      // 15C 之后图片和音频都有安全派生，所以这句正常不会出现 ——
+      // 留着是因为「上传放行的类型」和「发布支持的类型」将来还会分开一段时间。
       result.skippedAssets > 0
-        ? `有 ${result.skippedAssets} 份音频证据没有进入发布页 —— 音频的安全派生还没实现`
+        ? `有 ${result.skippedAssets} 份证据没有进入发布页 —— 它的类型还没有安全的公开格式`
         : '',
     ].filter(Boolean).join('；');
     const notice = `${what}：/p/${result.publication.slug}${extra ? ` · ${extra}` : ''}`;

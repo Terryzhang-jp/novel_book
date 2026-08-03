@@ -48,7 +48,7 @@ import {
   userActor,
 } from '@tc/domain';
 import { getPool, sql } from '../db/setup';
-import { getImageDeriver, getMediaProbe, getStorageKit } from '@/lib/core/storage';
+import { getAudioDeriver, getImageDeriver, getMediaProbe, getStorageKit } from '@/lib/core/storage';
 
 const ALICE = userActor('11111111-1111-1111-1111-111111111111', 'sess-alice');
 const BOB = userActor('22222222-2222-2222-2222-222222222222', 'sess-bob');
@@ -102,7 +102,7 @@ async function makeJpeg(options: {
 beforeAll(() => {
   core = new PostgresUnitOfWork(getPool() as unknown as Pool);
   deps = { core, storage: getStorageKit(), probe: getMediaProbe() };
-  publishDeps = { core, storage: getStorageKit(), deriver: getImageDeriver() };
+  publishDeps = { core, storage: getStorageKit(), deriver: getImageDeriver(), audioDeriver: getAudioDeriver() };
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -351,8 +351,9 @@ describe('灵魂 5：发布只公开安全副本', () => {
     // S-2：快照里绝不能出现原图的 key
     expect(snapAsset!.objectKey).not.toBe(asset.objectKey);
     expect(snapAsset!.mimeType).toBe('image/webp');
+    expect(snapAsset!.kind).toBe('image');
     // 2400 → 1600
-    expect(snapAsset!.width).toBe(1600);
+    expect(snapAsset!.kind === 'image' && snapAsset!.width).toBe(1600);
 
     // ⭐ 派生出来的字节里没有元数据
     const derivedBytes = await getStorageKit().storage.get(snapAsset!.objectKey);

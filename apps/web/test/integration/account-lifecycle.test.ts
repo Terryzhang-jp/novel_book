@@ -61,7 +61,7 @@ import {
   type Actor,
 } from '@tc/domain';
 import { getPool, sql } from '../db/setup';
-import { getImageDeriver, getMediaProbe, getObjectStorage, getStorageKit } from '@/lib/core/storage';
+import { getAudioDeriver, getImageDeriver, getMediaProbe, getObjectStorage, getStorageKit } from '@/lib/core/storage';
 import { tokenIssuer } from '@/lib/core/tokens';
 
 const NOW = '2026-08-03T00:00:00.000Z';
@@ -162,7 +162,7 @@ async function contentCounts(userId: string) {
 beforeAll(() => {
   core = new PostgresUnitOfWork(getPool() as unknown as Pool);
   assetDeps = { core, storage: getStorageKit(), probe: getMediaProbe() };
-  publishDeps = { core, storage: getStorageKit(), deriver: getImageDeriver() };
+  publishDeps = { core, storage: getStorageKit(), deriver: getImageDeriver(), audioDeriver: getAudioDeriver() };
 });
 
 // ════════════════════════════════════════════════════════════════════════════

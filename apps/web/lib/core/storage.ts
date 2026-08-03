@@ -21,12 +21,14 @@ import {
   LocalFileObjectStorage,
 } from '@tc/infrastructure-storage';
 import type { StorageKit } from '@tc/application';
+import { FfmpegAudioDeriver } from './audio-deriver';
 import { SharpImageDeriver, SharpMediaProbe } from './media-probe';
 
 const globalForStorage = globalThis as unknown as {
   __tcStorage?: LocalFileObjectStorage;
   __tcProbe?: SharpMediaProbe;
   __tcDeriver?: SharpImageDeriver;
+  __tcAudioDeriver?: FfmpegAudioDeriver;
 };
 
 /** 默认落在 apps/web/.storage（已 gitignore）。生产用 TC_STORAGE_ROOT 指到别处。 */
@@ -61,4 +63,9 @@ export function getMediaProbe(): SharpMediaProbe {
 export function getImageDeriver(): SharpImageDeriver {
   globalForStorage.__tcDeriver ??= new SharpImageDeriver();
   return globalForStorage.__tcDeriver;
+}
+
+export function getAudioDeriver(): FfmpegAudioDeriver {
+  globalForStorage.__tcAudioDeriver ??= new FfmpegAudioDeriver();
+  return globalForStorage.__tcAudioDeriver;
 }

@@ -174,7 +174,8 @@ column	publications.withdrawn_at	timestamp with time zone
 column	publications.work_version_id	uuid NOT NULL
 column	published_assets.byte_size	bigint NOT NULL
 column	published_assets.created_at	timestamp with time zone NOT NULL DEFAULT now()
-column	published_assets.height	integer NOT NULL
+column	published_assets.duration_ms	integer
+column	published_assets.height	integer
 column	published_assets.id	uuid NOT NULL DEFAULT gen_random_uuid()
 column	published_assets.mime_type	text NOT NULL
 column	published_assets.object_key	text NOT NULL
@@ -182,7 +183,7 @@ column	published_assets.preset	text NOT NULL
 column	published_assets.sha256	text NOT NULL
 column	published_assets.source_asset_id	uuid
 column	published_assets.user_id	text NOT NULL
-column	published_assets.width	integer NOT NULL
+column	published_assets.width	integer
 column	published_assets.work_version_id	uuid NOT NULL
 column	session.created_at	timestamp with time zone DEFAULT now()
 column	session.expires_at	timestamp with time zone NOT NULL
@@ -340,10 +341,12 @@ constraint	publications.publications_user_id_fkey	FOREIGN KEY (user_id) REFERENC
 constraint	publications.publications_visibility_check	CHECK ((visibility = ANY (ARRAY['private'::text, 'unlisted'::text, 'public'::text])))
 constraint	publications.publications_work_version_id_fkey	FOREIGN KEY (work_version_id) REFERENCES work_versions(id) ON DELETE CASCADE
 constraint	publications.uq_publication_slug	UNIQUE (slug)
+constraint	published_assets.chk_published_asset_shape	CHECK ((((preset = 'web1600'::text) AND (width IS NOT NULL) AND (height IS NOT NULL) AND (width > 0) AND (height > 0) AND (duration_ms IS NULL)) OR ((preset = 'audio_opus64'::text) AND (width IS NULL) AND (height IS NULL) AND (duration_ms IS NOT NULL))))
 constraint	published_assets.published_assets_byte_size_check	CHECK ((byte_size > 0))
+constraint	published_assets.published_assets_duration_ms_check	CHECK ((duration_ms > 0))
 constraint	published_assets.published_assets_height_check	CHECK ((height > 0))
 constraint	published_assets.published_assets_pkey	PRIMARY KEY (id)
-constraint	published_assets.published_assets_preset_check	CHECK ((preset = 'web1600'::text))
+constraint	published_assets.published_assets_preset_check	CHECK ((preset = ANY (ARRAY['web1600'::text, 'audio_opus64'::text])))
 constraint	published_assets.published_assets_sha256_check	CHECK ((sha256 ~ '^[a-f0-9]{64}$'::text))
 constraint	published_assets.published_assets_source_asset_id_fkey	FOREIGN KEY (source_asset_id) REFERENCES assets(id) ON DELETE SET NULL
 constraint	published_assets.published_assets_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
