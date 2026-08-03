@@ -25,6 +25,34 @@ column	ai_magic_history.result_image	text NOT NULL
 column	ai_magic_history.style_image_count	integer NOT NULL DEFAULT 0
 column	ai_magic_history.user_id	text NOT NULL
 column	ai_magic_history.user_prompt	text NOT NULL
+column	asset_metadata_corrections.asset_id	uuid NOT NULL
+column	asset_metadata_corrections.confidence	real
+column	asset_metadata_corrections.created_at	timestamp with time zone NOT NULL DEFAULT now()
+column	asset_metadata_corrections.field	text NOT NULL
+column	asset_metadata_corrections.id	uuid NOT NULL DEFAULT gen_random_uuid()
+column	asset_metadata_corrections.source	text NOT NULL
+column	asset_metadata_corrections.supersedes_id	uuid
+column	asset_metadata_corrections.user_id	text NOT NULL
+column	asset_metadata_corrections.value	jsonb NOT NULL
+column	assets.byte_size	bigint NOT NULL
+column	assets.captured_at	timestamp with time zone
+column	assets.captured_local_at	timestamp without time zone
+column	assets.created_at	timestamp with time zone NOT NULL DEFAULT now()
+column	assets.deleted_at	timestamp with time zone
+column	assets.derived_from_asset_id	uuid
+column	assets.duration_ms	integer
+column	assets.height	integer
+column	assets.id	uuid NOT NULL DEFAULT gen_random_uuid()
+column	assets.mime_type	text NOT NULL
+column	assets.object_key	text NOT NULL
+column	assets.original_metadata	jsonb NOT NULL DEFAULT '{"_v": 1}'::jsonb
+column	assets.sha256	text NOT NULL
+column	assets.timezone	text
+column	assets.timezone_confidence	real
+column	assets.timezone_source	text NOT NULL DEFAULT 'unknown'::text
+column	assets.type	text NOT NULL
+column	assets.user_id	text NOT NULL
+column	assets.width	integer
 column	canvas_projects.created_at	timestamp with time zone NOT NULL DEFAULT now()
 column	canvas_projects.current_page	integer NOT NULL DEFAULT 1
 column	canvas_projects.current_page_index	integer DEFAULT 0
@@ -77,6 +105,13 @@ column	locations.place_id	text
 column	locations.updated_at	timestamp with time zone DEFAULT now()
 column	locations.usage_count	integer DEFAULT 0
 column	locations.user_id	text NOT NULL
+column	moment_assets.asset_id	uuid NOT NULL
+column	moment_assets.created_at	timestamp with time zone NOT NULL DEFAULT now()
+column	moment_assets.id	uuid NOT NULL DEFAULT gen_random_uuid()
+column	moment_assets.moment_id	uuid NOT NULL
+column	moment_assets.note	text
+column	moment_assets.role	text NOT NULL DEFAULT 'supporting'::text
+column	moment_assets.sort_order	integer NOT NULL
 column	moments.created_at	timestamp with time zone NOT NULL DEFAULT now()
 column	moments.id	uuid NOT NULL DEFAULT gen_random_uuid()
 column	moments.journey_id	uuid
@@ -126,6 +161,18 @@ column	publications.user_id	text NOT NULL
 column	publications.visibility	text NOT NULL
 column	publications.withdrawn_at	timestamp with time zone
 column	publications.work_version_id	uuid NOT NULL
+column	published_assets.byte_size	bigint NOT NULL
+column	published_assets.created_at	timestamp with time zone NOT NULL DEFAULT now()
+column	published_assets.height	integer NOT NULL
+column	published_assets.id	uuid NOT NULL DEFAULT gen_random_uuid()
+column	published_assets.mime_type	text NOT NULL
+column	published_assets.object_key	text NOT NULL
+column	published_assets.preset	text NOT NULL
+column	published_assets.sha256	text NOT NULL
+column	published_assets.source_asset_id	uuid
+column	published_assets.user_id	text NOT NULL
+column	published_assets.width	integer NOT NULL
+column	published_assets.work_version_id	uuid NOT NULL
 column	session.created_at	timestamp with time zone DEFAULT now()
 column	session.expires_at	timestamp with time zone NOT NULL
 column	session.id	text NOT NULL
@@ -191,6 +238,31 @@ constraint	account.account_provider_id_account_id_key	UNIQUE (provider_id, accou
 constraint	account.account_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
 constraint	ai_magic_history.ai_magic_history_pkey	PRIMARY KEY (id)
 constraint	ai_magic_history.ai_magic_history_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
+constraint	asset_metadata_corrections.asset_metadata_corrections_asset_id_	FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
+constraint	asset_metadata_corrections.asset_metadata_corrections_confidenc	CHECK (((confidence >= (0)::double precision) AND (confidence <= (1)::double precision)))
+constraint	asset_metadata_corrections.asset_metadata_corrections_field_che	CHECK ((field = ANY (ARRAY['captured_local_at'::text, 'timezone'::text, 'gps'::text, 'orientation'::text])))
+constraint	asset_metadata_corrections.asset_metadata_corrections_pkey	PRIMARY KEY (id)
+constraint	asset_metadata_corrections.asset_metadata_corrections_source_ch	CHECK ((source = ANY (ARRAY['user'::text, 'ai'::text, 'gps_inferred'::text])))
+constraint	asset_metadata_corrections.asset_metadata_corrections_supersede	FOREIGN KEY (supersedes_id) REFERENCES asset_metadata_corrections(id) ON DELETE RESTRICT
+constraint	asset_metadata_corrections.asset_metadata_corrections_user_id_f	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
+constraint	asset_metadata_corrections.chk_correction_confidence	CHECK (((source = 'user'::text) OR (confidence IS NOT NULL)))
+constraint	asset_metadata_corrections.chk_correction_no_self_supersede	CHECK ((supersedes_id IS DISTINCT FROM id))
+constraint	assets.assets_byte_size_check	CHECK ((byte_size > 0))
+constraint	assets.assets_derived_from_asset_id_fkey	FOREIGN KEY (derived_from_asset_id) REFERENCES assets(id) ON DELETE SET NULL
+constraint	assets.assets_duration_ms_check	CHECK ((duration_ms > 0))
+constraint	assets.assets_height_check	CHECK ((height > 0))
+constraint	assets.assets_pkey	PRIMARY KEY (id)
+constraint	assets.assets_sha256_check	CHECK ((sha256 ~ '^[a-f0-9]{64}$'::text))
+constraint	assets.assets_timezone_confidence_check	CHECK (((timezone_confidence >= (0)::double precision) AND (timezone_confidence <= (1)::double precision)))
+constraint	assets.assets_timezone_source_check	CHECK ((timezone_source = ANY (ARRAY['exif'::text, 'gps_inferred'::text, 'user'::text, 'unknown'::text])))
+constraint	assets.assets_type_check	CHECK ((type = ANY (ARRAY['image'::text, 'audio'::text, 'video'::text])))
+constraint	assets.assets_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
+constraint	assets.assets_width_check	CHECK ((width > 0))
+constraint	assets.chk_asset_dimensions	CHECK ((((type <> 'image'::text) OR ((width IS NOT NULL) AND (height IS NOT NULL))) AND ((type <> 'audio'::text) OR (duration_ms IS NOT NULL))))
+constraint	assets.chk_asset_no_self_derive	CHECK ((derived_from_asset_id IS DISTINCT FROM id))
+constraint	assets.chk_captured_at_requires_tz	CHECK ((((captured_at IS NULL) AND (timezone IS NULL)) OR ((captured_at IS NOT NULL) AND (timezone IS NOT NULL))))
+constraint	assets.chk_inferred_tz_has_confidence	CHECK (((timezone_source <> 'gps_inferred'::text) OR (timezone_confidence IS NOT NULL)))
+constraint	assets.chk_timezone_has_source	CHECK (((timezone IS NULL) OR (timezone_source <> 'unknown'::text)))
 constraint	canvas_projects.canvas_projects_pkey	PRIMARY KEY (id)
 constraint	canvas_projects.canvas_projects_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
 constraint	documents.documents_pkey	PRIMARY KEY (id)
@@ -209,6 +281,13 @@ constraint	journeys.journeys_type_check	CHECK ((type = ANY (ARRAY['trip'::text, 
 constraint	journeys.journeys_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
 constraint	locations.locations_pkey	PRIMARY KEY (id)
 constraint	locations.locations_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
+constraint	moment_assets.moment_assets_asset_id_fkey	FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE RESTRICT
+constraint	moment_assets.moment_assets_moment_id_fkey	FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE CASCADE
+constraint	moment_assets.moment_assets_pkey	PRIMARY KEY (id)
+constraint	moment_assets.moment_assets_role_check	CHECK ((role = ANY (ARRAY['supporting'::text, 'contradicting'::text, 'context'::text])))
+constraint	moment_assets.moment_assets_sort_order_check	CHECK ((sort_order >= 0))
+constraint	moment_assets.uq_moment_asset	UNIQUE (moment_id, asset_id)
+constraint	moment_assets.uq_moment_asset_order	UNIQUE (moment_id, sort_order) DEFERRABLE INITIALLY DEFERRED
 constraint	moments.moments_journey_id_fkey	FOREIGN KEY (journey_id) REFERENCES journeys(id) ON DELETE SET NULL
 constraint	moments.moments_pkey	PRIMARY KEY (id)
 constraint	moments.moments_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
@@ -229,6 +308,16 @@ constraint	publications.publications_user_id_fkey	FOREIGN KEY (user_id) REFERENC
 constraint	publications.publications_visibility_check	CHECK ((visibility = ANY (ARRAY['private'::text, 'unlisted'::text, 'public'::text])))
 constraint	publications.publications_work_version_id_fkey	FOREIGN KEY (work_version_id) REFERENCES work_versions(id) ON DELETE CASCADE
 constraint	publications.uq_publication_slug	UNIQUE (slug)
+constraint	published_assets.published_assets_byte_size_check	CHECK ((byte_size > 0))
+constraint	published_assets.published_assets_height_check	CHECK ((height > 0))
+constraint	published_assets.published_assets_pkey	PRIMARY KEY (id)
+constraint	published_assets.published_assets_preset_check	CHECK ((preset = 'web1600'::text))
+constraint	published_assets.published_assets_sha256_check	CHECK ((sha256 ~ '^[a-f0-9]{64}$'::text))
+constraint	published_assets.published_assets_source_asset_id_fkey	FOREIGN KEY (source_asset_id) REFERENCES assets(id) ON DELETE SET NULL
+constraint	published_assets.published_assets_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
+constraint	published_assets.published_assets_width_check	CHECK ((width > 0))
+constraint	published_assets.published_assets_work_version_id_fkey	FOREIGN KEY (work_version_id) REFERENCES work_versions(id) ON DELETE CASCADE
+constraint	published_assets.uq_published_asset	UNIQUE (work_version_id, sha256)
 constraint	session.session_pkey	PRIMARY KEY (id)
 constraint	session.session_token_key	UNIQUE (token)
 constraint	session.session_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
@@ -257,7 +346,11 @@ constraint	work_versions.work_versions_work_id_fkey	FOREIGN KEY (work_id) REFERE
 constraint	works.works_pkey	PRIMARY KEY (id)
 constraint	works.works_title_check	CHECK ((length(btrim(title)) > 0))
 constraint	works.works_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
+function	assert_asset_immutable()	RETURNS trigger LANGUAGE plpgsql |  BEGIN IF NEW.object_key IS DISTINCT FROM OLD.object_key OR NEW.sha256 IS DISTINCT FROM OLD.sha256 OR NEW.byte_size IS DISTINCT FROM OLD.byte_size OR NEW.mime_type IS DISTINCT FROM OLD.mime_type OR NEW.original_metadata IS DISTINCT FROM OLD.original_metadata THEN RAISE EXCEPTION '违反不变量 T-4：Asset 的字节与原始元数据不可变。' '编辑请创建新的 Asset 并用 derived_from_asset_id 指回来源。'; END IF; RETURN NEW; END; 
+function	assert_correction_same_target()	RETURNS trigger LANGUAGE plpgsql |  DECLARE target_asset uuid; target_field text; BEGIN IF NEW.supersedes_id IS NULL THEN RETURN NEW; END IF; SELECT asset_id, field INTO target_asset, target_field FROM asset_metadata_corrections WHERE id = NEW.supersedes_id; IF target_asset IS NULL THEN RAISE EXCEPTION 'supersedes_id % 不存在', NEW.supersedes_id; END IF; IF target_asset <> NEW.asset_id OR target_field <> NEW.field THEN RAISE EXCEPTION '违反不变量 C-2：只能取代同一个 Asset 的同一个字段（% / % vs % / %）', target_asset, target_field, NEW.asset_id, NEW.field; END IF; RETURN NEW; END; 
+function	assert_moment_asset_same_owner()	RETURNS trigger LANGUAGE plpgsql |  DECLARE moment_owner text; asset_owner text; BEGIN SELECT user_id INTO moment_owner FROM moments WHERE id = NEW.moment_id; SELECT user_id INTO asset_owner FROM assets WHERE id = NEW.asset_id; IF moment_owner IS DISTINCT FROM asset_owner THEN RAISE EXCEPTION '违反不变量 MA-3：Moment 与 Asset 不属于同一个用户（% vs %）', moment_owner, asset_owner; END IF; RETURN NEW; END; 
 function	assert_moment_journey_same_owner()	RETURNS trigger LANGUAGE plpgsql |  DECLARE journey_owner text; BEGIN IF NEW.journey_id IS NULL THEN RETURN NEW; END IF; SELECT user_id INTO journey_owner FROM journeys WHERE id = NEW.journey_id; IF journey_owner IS DISTINCT FROM NEW.user_id THEN RAISE EXCEPTION '违反不变量 J-3：Moment 与 Journey 不属于同一个用户（% vs %）', NEW.user_id, journey_owner; END IF; RETURN NEW; END; 
+function	assert_object_key_namespace()	RETURNS trigger LANGUAGE plpgsql |  DECLARE expected text; BEGIN expected := 'users/' || NEW.user_id || '/sha256/'; IF position(expected in NEW.object_key) <> 1 THEN RAISE EXCEPTION '违反不变量 A-2：object_key 不在该用户的命名空间内（期望前缀 %，实际 %）', expected, NEW.object_key; END IF; RETURN NEW; END; 
 function	assert_work_block_same_owner()	RETURNS trigger LANGUAGE plpgsql |  DECLARE work_owner text; moment_owner text; BEGIN IF NEW.moment_id IS NULL THEN RETURN NEW; END IF; SELECT user_id INTO work_owner FROM works WHERE id = NEW.work_id; SELECT user_id INTO moment_owner FROM moments WHERE id = NEW.moment_id; IF work_owner IS DISTINCT FROM moment_owner THEN RAISE EXCEPTION '违反不变量 W-2：Work 与被引用的 Moment 不属于同一个用户（% vs %）', work_owner, moment_owner; END IF; RETURN NEW; END; 
 function	check_interpretation_same_moment()	RETURNS trigger LANGUAGE plpgsql |  DECLARE target_moment uuid; BEGIN IF NEW.supersedes_id IS NULL THEN RETURN NEW; END IF; SELECT moment_id INTO target_moment FROM interpretation_revisions WHERE id = NEW.supersedes_id; IF target_moment IS NULL THEN RAISE EXCEPTION 'supersedes_id % 不存在', NEW.supersedes_id; END IF; IF target_moment <> NEW.moment_id THEN RAISE EXCEPTION '违反不变量 I-4：不能 supersede 另一个 Moment 的 revision（% vs %）', target_moment, NEW.moment_id; END IF; RETURN NEW; END 
 function	update_canvas_updated_at()	RETURNS trigger LANGUAGE plpgsql |  BEGIN NEW.updated_at = NOW(); RETURN NEW; END; 
@@ -279,6 +372,13 @@ index	account.idx_account_user_id	CREATE INDEX idx_account_user_id ON public.acc
 index	ai_magic_history.ai_magic_history_pkey	CREATE UNIQUE INDEX ai_magic_history_pkey ON public.ai_magic_history USING btree (id)
 index	ai_magic_history.idx_ai_magic_history_created_at	CREATE INDEX idx_ai_magic_history_created_at ON public.ai_magic_history USING btree (created_at DESC)
 index	ai_magic_history.idx_ai_magic_history_user_id	CREATE INDEX idx_ai_magic_history_user_id ON public.ai_magic_history USING btree (user_id)
+index	asset_metadata_corrections.asset_metadata_corrections_pkey	CREATE UNIQUE INDEX asset_metadata_corrections_pkey ON public.asset_metadata_corrections USING btree (id)
+index	asset_metadata_corrections.idx_corrections_asset_field	CREATE INDEX idx_corrections_asset_field ON public.asset_metadata_corrections USING btree (asset_id, field, created_at)
+index	asset_metadata_corrections.uq_correction_supersedes	CREATE UNIQUE INDEX uq_correction_supersedes ON public.asset_metadata_corrections USING btree (supersedes_id) WHERE (supersedes_id IS NOT NULL)
+index	assets.assets_pkey	CREATE UNIQUE INDEX assets_pkey ON public.assets USING btree (id)
+index	assets.idx_assets_derived_from	CREATE INDEX idx_assets_derived_from ON public.assets USING btree (derived_from_asset_id) WHERE (derived_from_asset_id IS NOT NULL)
+index	assets.idx_assets_user_created	CREATE INDEX idx_assets_user_created ON public.assets USING btree (user_id, created_at DESC) WHERE (deleted_at IS NULL)
+index	assets.uq_assets_user_sha256	CREATE UNIQUE INDEX uq_assets_user_sha256 ON public.assets USING btree (user_id, sha256)
 index	canvas_projects.canvas_projects_pkey	CREATE UNIQUE INDEX canvas_projects_pkey ON public.canvas_projects USING btree (id)
 index	canvas_projects.idx_canvas_projects_updated_at	CREATE INDEX idx_canvas_projects_updated_at ON public.canvas_projects USING btree (updated_at DESC)
 index	canvas_projects.idx_canvas_projects_user_id	CREATE INDEX idx_canvas_projects_user_id ON public.canvas_projects USING btree (user_id)
@@ -299,6 +399,10 @@ index	locations.idx_locations_is_public	CREATE INDEX idx_locations_is_public ON 
 index	locations.idx_locations_usage_count	CREATE INDEX idx_locations_usage_count ON public.locations USING btree (usage_count DESC)
 index	locations.idx_locations_user_id	CREATE INDEX idx_locations_user_id ON public.locations USING btree (user_id)
 index	locations.locations_pkey	CREATE UNIQUE INDEX locations_pkey ON public.locations USING btree (id)
+index	moment_assets.idx_moment_assets_asset	CREATE INDEX idx_moment_assets_asset ON public.moment_assets USING btree (asset_id)
+index	moment_assets.moment_assets_pkey	CREATE UNIQUE INDEX moment_assets_pkey ON public.moment_assets USING btree (id)
+index	moment_assets.uq_moment_asset	CREATE UNIQUE INDEX uq_moment_asset ON public.moment_assets USING btree (moment_id, asset_id)
+index	moment_assets.uq_moment_asset_order	CREATE UNIQUE INDEX uq_moment_asset_order ON public.moment_assets USING btree (moment_id, sort_order)
 index	moments.idx_moments_journey	CREATE INDEX idx_moments_journey ON public.moments USING btree (journey_id) WHERE (journey_id IS NOT NULL)
 index	moments.idx_moments_user_occurred	CREATE INDEX idx_moments_user_occurred ON public.moments USING btree (user_id, occurred_at DESC NULLS LAST)
 index	moments.moments_pkey	CREATE UNIQUE INDEX moments_pkey ON public.moments USING btree (id)
@@ -322,6 +426,10 @@ index	publications.idx_publications_live	CREATE INDEX idx_publications_live ON p
 index	publications.idx_publications_user	CREATE INDEX idx_publications_user ON public.publications USING btree (user_id, published_at DESC)
 index	publications.publications_pkey	CREATE UNIQUE INDEX publications_pkey ON public.publications USING btree (id)
 index	publications.uq_publication_slug	CREATE UNIQUE INDEX uq_publication_slug ON public.publications USING btree (slug)
+index	published_assets.idx_published_assets_source	CREATE INDEX idx_published_assets_source ON public.published_assets USING btree (source_asset_id) WHERE (source_asset_id IS NOT NULL)
+index	published_assets.idx_published_assets_user	CREATE INDEX idx_published_assets_user ON public.published_assets USING btree (user_id)
+index	published_assets.published_assets_pkey	CREATE UNIQUE INDEX published_assets_pkey ON public.published_assets USING btree (id)
+index	published_assets.uq_published_asset	CREATE UNIQUE INDEX uq_published_asset ON public.published_assets USING btree (work_version_id, sha256)
 index	session.idx_session_expires_at	CREATE INDEX idx_session_expires_at ON public.session USING btree (expires_at)
 index	session.idx_session_token	CREATE INDEX idx_session_token ON public.session USING btree (token)
 index	session.idx_session_user_id	CREATE INDEX idx_session_user_id ON public.session USING btree (user_id)
@@ -375,16 +483,20 @@ policy	users.Users can update own profile	PERMISSIVE FOR UPDATE TO public USING 
 policy	users.Users can view own profile	PERMISSIVE FOR SELECT TO public USING (((auth.uid())::text = (id)::text)) WITH CHECK (-)
 table	account	rls=disabled
 table	ai_magic_history	rls=enabled
+table	asset_metadata_corrections	rls=disabled
+table	assets	rls=disabled
 table	canvas_projects	rls=enabled
 table	documents	rls=enabled
 table	interpretation_revisions	rls=disabled
 table	journeys	rls=disabled
 table	locations	rls=enabled
+table	moment_assets	rls=disabled
 table	moments	rls=disabled
 table	observations	rls=disabled
 table	photo_embeddings	rls=disabled
 table	photos	rls=enabled
 table	publications	rls=disabled
+table	published_assets	rls=disabled
 table	session	rls=disabled
 table	user	rls=disabled
 table	users	rls=enabled
@@ -394,14 +506,19 @@ table	work_presentations	rls=disabled
 table	work_versions	rls=disabled
 table	works	rls=disabled
 trigger	account.update_account_updated_at	CREATE TRIGGER update_account_updated_at BEFORE UPDATE ON public.account FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+trigger	asset_metadata_corrections.trg_correction_same_target	CREATE TRIGGER trg_correction_same_target BEFORE INSERT OR UPDATE ON public.asset_metadata_corrections FOR EACH ROW EXECUTE FUNCTION assert_correction_same_target()
+trigger	assets.trg_assets_immutable	CREATE TRIGGER trg_assets_immutable BEFORE UPDATE ON public.assets FOR EACH ROW EXECUTE FUNCTION assert_asset_immutable()
+trigger	assets.trg_assets_object_key_namespace	CREATE TRIGGER trg_assets_object_key_namespace BEFORE INSERT OR UPDATE OF object_key, user_id ON public.assets FOR EACH ROW EXECUTE FUNCTION assert_object_key_namespace()
 trigger	canvas_projects.canvas_projects_updated_at	CREATE TRIGGER canvas_projects_updated_at BEFORE UPDATE ON public.canvas_projects FOR EACH ROW EXECUTE FUNCTION update_canvas_updated_at()
 trigger	documents.update_documents_updated_at	CREATE TRIGGER update_documents_updated_at BEFORE UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	interpretation_revisions.trg_interpretation_same_moment	CREATE TRIGGER trg_interpretation_same_moment BEFORE INSERT OR UPDATE ON public.interpretation_revisions FOR EACH ROW EXECUTE FUNCTION check_interpretation_same_moment()
 trigger	journeys.trg_journeys_updated_at	CREATE TRIGGER trg_journeys_updated_at BEFORE UPDATE ON public.journeys FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	locations.update_locations_updated_at	CREATE TRIGGER update_locations_updated_at BEFORE UPDATE ON public.locations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+trigger	moment_assets.trg_moment_asset_same_owner	CREATE TRIGGER trg_moment_asset_same_owner BEFORE INSERT OR UPDATE OF moment_id, asset_id ON public.moment_assets FOR EACH ROW EXECUTE FUNCTION assert_moment_asset_same_owner()
 trigger	moments.trg_moment_journey_same_owner	CREATE TRIGGER trg_moment_journey_same_owner BEFORE INSERT OR UPDATE OF journey_id, user_id ON public.moments FOR EACH ROW EXECUTE FUNCTION assert_moment_journey_same_owner()
 trigger	moments.trg_moments_updated_at	CREATE TRIGGER trg_moments_updated_at BEFORE UPDATE ON public.moments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	photos.update_photos_updated_at	CREATE TRIGGER update_photos_updated_at BEFORE UPDATE ON public.photos FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+trigger	published_assets.trg_published_assets_object_key_namespace	CREATE TRIGGER trg_published_assets_object_key_namespace BEFORE INSERT OR UPDATE OF object_key, user_id ON public.published_assets FOR EACH ROW EXECUTE FUNCTION assert_object_key_namespace()
 trigger	session.update_session_updated_at	CREATE TRIGGER update_session_updated_at BEFORE UPDATE ON public.session FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	user.update_user_updated_at	CREATE TRIGGER update_user_updated_at BEFORE UPDATE ON public."user" FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	users.update_users_updated_at	CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()

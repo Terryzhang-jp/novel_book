@@ -42,7 +42,7 @@ DateTimeOriginal: 2026:08:03 14:35:00
 ```
 capturedLocalAt      timestamp WITHOUT time zone   相机记下的墙上时间
 capturedAt           timestamptz                   NULL until 时区已知
-timezone             text                          'Asia/Tokyo'，可空
+timezone             text                          'Asia/Tokyo' 或 '+09:00'，可空
 timezoneSource       exif | gps_inferred | user | unknown
 timezoneConfidence   real                          可空，仅推断时有意义
 ```
@@ -51,7 +51,7 @@ timezoneConfidence   real                          可空，仅推断时有意�
 
 | 已知条件 | capturedLocalAt | timezone | capturedAt |
 |---|---|---|---|
-| EXIF 带 OffsetTimeOriginal | 14:35 | 由 offset 得 | ✅ 可算 |
+| EXIF 带 OffsetTimeOriginal | 14:35 | **就是那个偏移量** `+09:00` | ✅ 可算 |
 | EXIF 只有本地时间 | 14:35 | `NULL` | **`NULL`** |
 | 有 GPS，可反查时区 | 14:35 | 推断，记 confidence | ✅ 可算 |
 | 用户手动指定时区 | 14:35 | `source='user'` | ✅ 可算 |
@@ -80,6 +80,16 @@ CONSTRAINT chk_captured_at_requires_tz CHECK (
 这个顺序是对的），时区已知的再作为精确锚点。
 
 不做的是：给未知的填一个假值让 `ORDER BY` 好写。
+
+#### 补充：EXIF 给的是偏移量，不是时区名
+
+实现时确认的一点：`OffsetTimeOriginal` 只有 `+09:00`，**没有** `Asia/Tokyo`。
+`+09:00` 可能是东京、首尔、雅库茨克 —— 从偏移量推出时区名是又一次伪造。
+
+所以 `timezone` 列存的是「IANA 名**或**固定偏移」，两者都是我们真正知道的东西：
+
+- 有偏移量 ⇒ 绝对时间可算（这是 `capturedAt` 唯一需要的）
+- 时区名只有用户明说或 GPS 反查时才有
 
 ### T3 · 显示规则
 

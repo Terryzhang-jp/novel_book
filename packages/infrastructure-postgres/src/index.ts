@@ -16,4 +16,6 @@ export * from './observation-repository';
 export * from './interpretation-repository';
 export * from './work-repository';
 export * from './publication-repository';
+export * from './asset-repository';
+export * from './published-asset-repository';
 export * from './unit-of-work';

@@ -16,18 +16,27 @@
  * 不可能再发生：要么都有，要么都没有。
  */
 
+import type { PublishedAsset } from '@tc/application';
 import type {
+  Asset,
+  AssetMetadataCorrection,
+  AssetType,
+  CorrectionField,
+  CorrectionSource,
   InterpretationRevision,
   InterpretationStatus,
   Journey,
   JourneyType,
   Moment,
+  MomentAsset,
+  MomentAssetRole,
   MomentProvenance,
   MomentTombstone,
   Observation,
   PresentationConfig,
   Publication,
   RendererType,
+  TimezoneSource,
   Visibility,
   Work,
   WorkBlock,
@@ -367,5 +376,177 @@ export function mapPublication(row: PublicationRow): Publication {
     visibility: required(t, 'visibility', row.visibility) as Visibility,
     publishedAt: toIso(required(t, 'published_at', row.published_at)),
     ...optionalField('withdrawnAt', optIso(present(t, 'withdrawn_at', row.withdrawn_at))),
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Asset / 证据 / 修正 / 派生副本（Phase 2B）
+// ════════════════════════════════════════════════════════════════════════════
+
+export const ASSET_COLUMNS =
+  'id, user_id, type, object_key, sha256, mime_type, byte_size, width, height, ' +
+  'duration_ms, captured_local_at, captured_at, timezone, timezone_source, ' +
+  'timezone_confidence, original_metadata, derived_from_asset_id, created_at, deleted_at';
+
+export interface AssetRow {
+  id: string;
+  user_id: string;
+  type: string;
+  object_key: string;
+  sha256: string;
+  mime_type: string;
+  byte_size: string | number;
+  width: number | null;
+  height: number | null;
+  duration_ms: number | null;
+  captured_local_at: Date | string | null;
+  captured_at: Date | string | null;
+  timezone: string | null;
+  timezone_source: string;
+  timezone_confidence: number | null;
+  original_metadata: Record<string, unknown>;
+  derived_from_asset_id: string | null;
+  created_at: Date | string;
+  deleted_at: Date | string | null;
+}
+
+/**
+ * `captured_local_at` 是 `timestamp WITHOUT time zone`。
+ *
+ * pg 把它解析成一个 **Date 对象，并按本地时区解释** —— 直接 `toISOString()`
+ * 会平移几个小时，正好是 ADR-009 要防的那件事。
+ * 所以这里手工拼字符串，不经过 UTC 换算。
+ */
+function toLocalStamp(value: Date | string): string {
+  if (typeof value === 'string') return value.replace(' ', 'T').slice(0, 19);
+  const p = (n: number, w = 2) => String(n).padStart(w, '0');
+  return (
+    `${value.getFullYear()}-${p(value.getMonth() + 1)}-${p(value.getDate())}` +
+    `T${p(value.getHours())}:${p(value.getMinutes())}:${p(value.getSeconds())}`
+  );
+}
+
+export function mapAsset(row: AssetRow): Asset {
+  const t = 'assets';
+  const localAt = present(t, 'captured_local_at', row.captured_local_at);
+  return {
+    id: required(t, 'id', row.id),
+    userId: required(t, 'user_id', row.user_id),
+    type: required(t, 'type', row.type) as AssetType,
+    objectKey: required(t, 'object_key', row.object_key),
+    sha256: required(t, 'sha256', row.sha256),
+    mimeType: required(t, 'mime_type', row.mime_type),
+    byteSize: Number(required(t, 'byte_size', row.byte_size)),
+    ...optionalField('width', opt(present(t, 'width', row.width))),
+    ...optionalField('height', opt(present(t, 'height', row.height))),
+    ...optionalField('durationMs', opt(present(t, 'duration_ms', row.duration_ms))),
+    ...optionalField('capturedLocalAt', localAt === null ? undefined : toLocalStamp(localAt)),
+    ...optionalField('capturedAt', optIso(present(t, 'captured_at', row.captured_at))),
+    ...optionalField('timezone', opt(present(t, 'timezone', row.timezone))),
+    timezoneSource: required(t, 'timezone_source', row.timezone_source) as TimezoneSource,
+    ...optionalField(
+      'timezoneConfidence',
+      opt(present(t, 'timezone_confidence', row.timezone_confidence))
+    ),
+    originalMetadata: required(t, 'original_metadata', row.original_metadata),
+    ...optionalField(
+      'derivedFromAssetId',
+      opt(present(t, 'derived_from_asset_id', row.derived_from_asset_id))
+    ),
+    createdAt: toIso(required(t, 'created_at', row.created_at)),
+    ...optionalField('deletedAt', optIso(present(t, 'deleted_at', row.deleted_at))),
+  };
+}
+
+export const MOMENT_ASSET_COLUMNS =
+  'id, moment_id, asset_id, role, sort_order, note, created_at';
+
+export interface MomentAssetRow {
+  id: string;
+  moment_id: string;
+  asset_id: string;
+  role: string;
+  sort_order: number;
+  note: string | null;
+  created_at: Date | string;
+}
+
+export function mapMomentAsset(row: MomentAssetRow): MomentAsset {
+  const t = 'moment_assets';
+  return {
+    id: required(t, 'id', row.id),
+    momentId: required(t, 'moment_id', row.moment_id),
+    assetId: required(t, 'asset_id', row.asset_id),
+    role: required(t, 'role', row.role) as MomentAssetRole,
+    sortOrder: required(t, 'sort_order', row.sort_order),
+    ...optionalField('note', opt(present(t, 'note', row.note))),
+    createdAt: toIso(required(t, 'created_at', row.created_at)),
+  };
+}
+
+export const CORRECTION_COLUMNS =
+  'id, asset_id, user_id, field, value, source, confidence, supersedes_id, created_at';
+
+export interface CorrectionRow {
+  id: string;
+  asset_id: string;
+  user_id: string;
+  field: string;
+  value: unknown;
+  source: string;
+  confidence: number | null;
+  supersedes_id: string | null;
+  created_at: Date | string;
+}
+
+export function mapCorrection(row: CorrectionRow): AssetMetadataCorrection {
+  const t = 'asset_metadata_corrections';
+  return {
+    id: required(t, 'id', row.id),
+    assetId: required(t, 'asset_id', row.asset_id),
+    userId: required(t, 'user_id', row.user_id),
+    field: required(t, 'field', row.field) as CorrectionField,
+    value: present(t, 'value', row.value),
+    source: required(t, 'source', row.source) as CorrectionSource,
+    ...optionalField('confidence', opt(present(t, 'confidence', row.confidence))),
+    ...optionalField('supersedesId', opt(present(t, 'supersedes_id', row.supersedes_id))),
+    createdAt: toIso(required(t, 'created_at', row.created_at)),
+  };
+}
+
+export const PUBLISHED_ASSET_COLUMNS =
+  'id, work_version_id, source_asset_id, user_id, object_key, sha256, mime_type, ' +
+  'width, height, byte_size, preset, created_at';
+
+export interface PublishedAssetRow {
+  id: string;
+  work_version_id: string;
+  source_asset_id: string | null;
+  user_id: string;
+  object_key: string;
+  sha256: string;
+  mime_type: string;
+  width: number;
+  height: number;
+  byte_size: string | number;
+  preset: string;
+  created_at: Date | string;
+}
+
+export function mapPublishedAsset(row: PublishedAssetRow): PublishedAsset {
+  const t = 'published_assets';
+  return {
+    id: required(t, 'id', row.id),
+    workVersionId: required(t, 'work_version_id', row.work_version_id),
+    ...optionalField('sourceAssetId', opt(present(t, 'source_asset_id', row.source_asset_id))),
+    userId: required(t, 'user_id', row.user_id),
+    objectKey: required(t, 'object_key', row.object_key),
+    sha256: required(t, 'sha256', row.sha256),
+    mimeType: required(t, 'mime_type', row.mime_type),
+    width: required(t, 'width', row.width),
+    height: required(t, 'height', row.height),
+    byteSize: Number(required(t, 'byte_size', row.byte_size)),
+    preset: required(t, 'preset', row.preset) as 'web1600',
+    createdAt: toIso(required(t, 'created_at', row.created_at)),
   };
 }

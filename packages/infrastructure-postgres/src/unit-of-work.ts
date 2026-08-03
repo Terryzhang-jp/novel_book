@@ -7,11 +7,13 @@
 
 import type { Pool, PoolClient } from 'pg';
 import type { CoreRepositories, UnitOfWork } from '@tc/application';
+import { PostgresAssetRepository } from './asset-repository';
 import { PostgresInterpretationRepository } from './interpretation-repository';
 import { PostgresJourneyRepository } from './journey-repository';
 import { PostgresMomentRepository } from './moment-repository';
 import { PostgresObservationRepository } from './observation-repository';
 import { PostgresPublicationRepository } from './publication-repository';
+import { PostgresPublishedAssetRepository } from './published-asset-repository';
 import { PostgresWorkRepository } from './work-repository';
 import type { Queryable } from './queryable';
 
@@ -23,6 +25,8 @@ export function createRepositories(db: Queryable): CoreRepositories {
     interpretations: new PostgresInterpretationRepository(db),
     works: new PostgresWorkRepository(db),
     publications: new PostgresPublicationRepository(db),
+    assets: new PostgresAssetRepository(db),
+    publishedAssets: new PostgresPublishedAssetRepository(db),
   };
 }
 
@@ -33,6 +37,8 @@ export class PostgresUnitOfWork implements UnitOfWork {
   readonly interpretations: CoreRepositories['interpretations'];
   readonly works: CoreRepositories['works'];
   readonly publications: CoreRepositories['publications'];
+  readonly assets: CoreRepositories['assets'];
+  readonly publishedAssets: CoreRepositories['publishedAssets'];
 
   constructor(private readonly pool: Pool) {
     const repos = createRepositories(pool);
@@ -42,6 +48,8 @@ export class PostgresUnitOfWork implements UnitOfWork {
     this.interpretations = repos.interpretations;
     this.works = repos.works;
     this.publications = repos.publications;
+    this.assets = repos.assets;
+    this.publishedAssets = repos.publishedAssets;
   }
 
   /**

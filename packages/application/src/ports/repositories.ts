@@ -24,6 +24,13 @@
 
 import type {
   Actor,
+  Asset,
+  AssetId,
+  AssetMetadataCorrection,
+  CorrectionField,
+  CorrectionId,
+  CorrectionSource,
+  CreateAssetInput,
   CreateJourneyInput,
   CreateMomentInput,
   InterpretationRevision,
@@ -32,6 +39,8 @@ import type {
   JourneyId,
   Moment,
   MomentId,
+  MomentAsset,
+  MomentAssetRole,
   MomentTombstone,
   Observation,
   ObservationId,
@@ -238,4 +247,99 @@ export interface PublicationRepository {
    * 和「不存在」在产品上是两种不同的页面。
    */
   findBySlug(actor: Actor, slug: string): Promise<PublishedPage | null>;
+}
+
+// ── Asset / 证据（ADR-008）────────────────────────────────────────────────────
+
+/**
+ * 一份证据在某个 Moment 里的完整视图。
+ *
+ * 关系和素材一起返回 —— 分两次查会让调用方自己去 join，
+ * 而那正是「某个页面漏了 role」这类 bug 的来源。
+ */
+export interface MomentAssetView {
+  readonly link: MomentAsset;
+  readonly asset: Asset;
+}
+
+export interface AttachAssetInput {
+  readonly role?: MomentAssetRole;
+  readonly note?: string;
+}
+
+export interface AppendCorrectionInput {
+  readonly field: CorrectionField;
+  readonly value: unknown;
+  readonly source: CorrectionSource;
+  readonly confidence?: number;
+  readonly supersedesId?: CorrectionId;
+}
+
+export interface AssetRepository {
+  create(actor: Actor, input: CreateAssetInput): Promise<Asset>;
+  findById(actor: Actor, id: AssetId): Promise<Asset | null>;
+  /** 去重用：同一用户 + 同一字节 = 同一个 Asset（A-1） */
+  findBySha256(actor: Actor, sha256: string): Promise<Asset | null>;
+  listByUser(actor: Actor, page?: Page): Promise<Asset[]>;
+  /**
+   * 软删除。**不物理删对象**（ADR-008 A7）——
+   * 引用它的 Moment 要留下占位，作品里不出现无法解释的空洞。
+   */
+  softDelete(actor: Actor, id: AssetId): Promise<Asset>;
+  /** 重新上传一份删掉的素材 = 想要它回来。清 deleted_at，不新建行。 */
+  restore(actor: Actor, id: AssetId): Promise<Asset>;
+
+  listByMoment(actor: Actor, momentId: MomentId): Promise<MomentAssetView[]>;
+  /** 批量版本，给发布快照用 —— 避免 N+1 */
+  listByMoments(actor: Actor, momentIds: readonly MomentId[]): Promise<MomentAssetView[]>;
+  attach(
+    actor: Actor,
+    momentId: MomentId,
+    assetId: AssetId,
+    input?: AttachAssetInput
+  ): Promise<MomentAsset>;
+  /** 「从 Moment 移除」—— 和「删除 Asset」是两件事（A7） */
+  detach(actor: Actor, momentId: MomentId, assetId: AssetId): Promise<void>;
+  reorder(
+    actor: Actor,
+    momentId: MomentId,
+    orderedAssetIds: readonly AssetId[]
+  ): Promise<MomentAsset[]>;
+
+  listCorrections(actor: Actor, assetId: AssetId): Promise<AssetMetadataCorrection[]>;
+  appendCorrection(
+    actor: Actor,
+    assetId: AssetId,
+    input: AppendCorrectionInput
+  ): Promise<AssetMetadataCorrection>;
+}
+
+export interface CreatePublishedAssetInput {
+  readonly workVersionId: WorkVersionId;
+  readonly sourceAssetId?: AssetId;
+  readonly objectKey: string;
+  readonly sha256: string;
+  readonly mimeType: string;
+  readonly width: number;
+  readonly height: number;
+  readonly byteSize: number;
+  readonly preset: 'web1600';
+}
+
+export interface PublishedAsset extends CreatePublishedAssetInput {
+  readonly id: string;
+  readonly userId: string;
+  readonly createdAt: string;
+}
+
+/**
+ * 发布派生副本的账本。
+ *
+ * ⚠️ **不在读取路径上**（ADR-008 A10）。渲染发布页和取派生图都只读
+ * publications + work_versions —— 需要的一切都在快照里。
+ * 这张表只用于账号删除时清理、对账、避免重复派生。
+ */
+export interface PublishedAssetRepository {
+  create(actor: Actor, input: CreatePublishedAssetInput): Promise<PublishedAsset>;
+  listByVersion(actor: Actor, workVersionId: WorkVersionId): Promise<PublishedAsset[]>;
 }

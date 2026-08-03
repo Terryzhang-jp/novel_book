@@ -18,11 +18,13 @@
  */
 
 import type {
+  AssetRepository,
   InterpretationRepository,
   JourneyRepository,
   MomentRepository,
   ObservationRepository,
   PublicationRepository,
+  PublishedAssetRepository,
   WorkRepository,
 } from './repositories';
 
@@ -33,6 +35,8 @@ export interface CoreRepositories {
   readonly interpretations: InterpretationRepository;
   readonly works: WorkRepository;
   readonly publications: PublicationRepository;
+  readonly assets: AssetRepository;
+  readonly publishedAssets: PublishedAssetRepository;
 }
 
 export interface UnitOfWork extends CoreRepositories {

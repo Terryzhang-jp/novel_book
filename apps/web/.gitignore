@@ -61,3 +61,6 @@ SUPABASE_MIGRATION.md
 MINIMAL_DESIGN.md
 PHOTO_EDITOR_OPTIMIZATION.md
 perf-results/
+
+# 新核心的本地对象存储（ADR-002：必须在 public/ 之外）
+.storage/

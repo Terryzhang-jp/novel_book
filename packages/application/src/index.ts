@@ -9,9 +9,11 @@
  */
 
 export * from './ports/repositories';
+export * from './ports/media';
 export * from './ports/unit-of-work';
 export * from './snapshot';
 export * from './use-cases/journey';
 export * from './use-cases/moment';
+export * from './use-cases/asset';
 export * from './use-cases/work';
 export * from './use-cases/publication';

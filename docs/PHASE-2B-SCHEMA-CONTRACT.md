@@ -32,7 +32,7 @@ migration 里的约束名和测试里的断言都引用同一个编号。
 | `duration_ms` | int | NULL, CHECK > 0 | audio/video 用 |
 | `captured_local_at` | timestamp **without** time zone | NULL | 相机的墙上时间（T1） |
 | `captured_at` | timestamptz | NULL | 时区已知才有值（T2） |
-| `timezone` | text | NULL | IANA 名，如 `Asia/Tokyo` |
+| `timezone` | text | NULL | IANA 名（`Asia/Tokyo`）**或**固定偏移（`+09:00`）。EXIF 只给得出后者 —— 从偏移量推时区名是伪造 |
 | `timezone_source` | text | NOT NULL DEFAULT `unknown`, CHECK in (`exif`,`gps_inferred`,`user`,`unknown`) | |
 | `timezone_confidence` | real | NULL, CHECK 0..1 | 仅推断时有意义 |
 | `original_metadata` | jsonb | NOT NULL DEFAULT `{"_v":1}` | **不可变**（T6） |
@@ -237,6 +237,7 @@ GET /p/{slug}/a/{derivedHash}.{ext}
 | 视频处理链 | A2 |
 | 响应式多尺寸 / srcset | 单一 `web1600` 预设先跑通 |
 | GPS → 时区反查 | 需要 tz 边界数据；ADR-009 留了 `gps_inferred` 位置 |
+| Asset 的 seed 数据 | seed 只能造数据库行，造不出对应的存储对象。造了行会让开发环境满屏裂图 —— 素材靠真实上传产生 |
 | 地址反查 | T5 已决定它不自动写进 placeLabel |
 | AI 识图 / 自动打标 | 会把推断混进事实层 |
 | 批量上传 / 瀑布流 / 相册 | 旧 Gallery 的形状，会把中心拉回素材 |

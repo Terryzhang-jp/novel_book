@@ -10,6 +10,7 @@
  * 用户必须一开始选工具 = 提前选定最终输出格式。
  */
 
+import type { MomentAssetRole } from './asset';
 import type {
   InterpretationRevision,
   InterpretationRevisionId,
@@ -141,6 +142,29 @@ export interface SnapshotMomentBlock {
   readonly tombstone?: MomentTombstone;
 }
 
+/**
+ * 快照里的一份素材 —— ADR-008 A9。
+ *
+ * 这里存的**永远是派生副本**，不是原图（S-2）。原图永不公开。
+ *
+ * 两个 hash 分工不同：
+ *   derivedHash  出现在公开 URL 里。用它而不是 objectKey，
+ *                因为 objectKey 含 `users/{userId}/`，会泄露作者的内部 id
+ *   objectKey    服务端取件用，不出现在页面上
+ *
+ * 刻意**没有 URL 字段**（S-1）：签名 URL 会过期，存进不可变快照
+ * 就等于给这篇文章设了一个到期日，过期后整页变裂图。
+ */
+export interface SnapshotAsset {
+  readonly role: MomentAssetRole;
+  readonly derivedHash: string;
+  readonly objectKey: string;
+  readonly mimeType: string;
+  readonly width: number;
+  readonly height: number;
+  readonly note?: string;
+}
+
 /** 发布那一刻冻结的 Moment 展示内容 */
 export interface SnapshotMoment {
   readonly title?: string;
@@ -157,6 +181,11 @@ export interface SnapshotMoment {
     readonly content: string;
     readonly createdAt: string;
   };
+  /**
+   * 证据。缺失或空数组都合法（S-3）——
+   * 无素材的 Moment 是一等公民，不是「还没上传」的中间状态。
+   */
+  readonly assets?: readonly SnapshotAsset[];
 }
 
 export interface WorkVersion {
@@ -302,5 +331,17 @@ export function assertSnapshotIsSelfContained(snapshot: WorkSnapshot): void {
         `第 ${i} 个 moment_ref block 只有 id 没有冻结内容 —— 渲染时会需要查实时表`
       );
     }
+    // S-4：素材同理。只有 id 没有派生副本信息 = 渲染时得回头查 assets 表
+    (b.moment?.assets ?? []).forEach((a, j) => {
+      if (!a.derivedHash || !a.objectKey) {
+        throw new InvariantViolation(
+          'P-3',
+          `第 ${i} 个 block 的第 ${j} 份素材缺少派生副本信息 —— 渲染时会需要查实时表`
+        );
+      }
+      if (!a.width || !a.height) {
+        throw new InvariantViolation('P-3', `第 ${i} 个 block 的第 ${j} 份素材缺少尺寸`);
+      }
+    });
   });
 }
