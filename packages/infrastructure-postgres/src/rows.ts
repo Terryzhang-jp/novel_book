@@ -37,6 +37,7 @@ import type {
   PresentationConfig,
   Publication,
   RendererType,
+  TimezoneKind,
   TimezoneSource,
   Visibility,
   Work,
@@ -390,7 +391,7 @@ export function mapPublication(row: PublicationRow): Publication {
 
 export const ASSET_COLUMNS =
   'id, user_id, type, object_key, sha256, mime_type, byte_size, width, height, ' +
-  'duration_ms, captured_local_at, captured_at, timezone, timezone_source, ' +
+  'duration_ms, captured_local_at, captured_at, timezone_kind, timezone_value, timezone_source, ' +
   'timezone_confidence, original_metadata, derived_from_asset_id, created_at, deleted_at';
 
 export interface AssetRow {
@@ -406,7 +407,8 @@ export interface AssetRow {
   duration_ms: number | null;
   captured_local_at: Date | string | null;
   captured_at: Date | string | null;
-  timezone: string | null;
+  timezone_kind: string;
+  timezone_value: string | null;
   timezone_source: string;
   timezone_confidence: number | null;
   original_metadata: Record<string, unknown>;
@@ -447,12 +449,15 @@ export function mapAsset(row: AssetRow): Asset {
     ...optionalField('durationMs', opt(present(t, 'duration_ms', row.duration_ms))),
     ...optionalField('capturedLocalAt', localAt === null ? undefined : toLocalStamp(localAt)),
     ...optionalField('capturedAt', optIso(present(t, 'captured_at', row.captured_at))),
-    ...optionalField('timezone', opt(present(t, 'timezone', row.timezone))),
-    timezoneSource: required(t, 'timezone_source', row.timezone_source) as TimezoneSource,
-    ...optionalField(
-      'timezoneConfidence',
-      opt(present(t, 'timezone_confidence', row.timezone_confidence))
-    ),
+    timezone: {
+      kind: required(t, 'timezone_kind', row.timezone_kind) as TimezoneKind,
+      ...optionalField('value', opt(present(t, 'timezone_value', row.timezone_value))),
+      source: required(t, 'timezone_source', row.timezone_source) as TimezoneSource,
+      ...optionalField(
+        'confidence',
+        opt(present(t, 'timezone_confidence', row.timezone_confidence))
+      ),
+    },
     originalMetadata: required(t, 'original_metadata', row.original_metadata),
     ...optionalField(
       'derivedFromAssetId',

@@ -118,6 +118,19 @@
       "impact": "`+09:00` 和 `Asia/Tokyo` 不是同一种数据：前者没有夏令时规则，后者包含历史与未来的时区规则。现在两者共用一列，后续代码只能靠**字符串形状**猜类型（`/^[+-]\\d{2}:\\d{2}$/`）。猜得越久，改起来越贵。",
       "mitigation": "第一版只允许写入固定偏移（UI 的下拉里没有 IANA 选项），所以实际数据是单一语义的。`effectiveMetadata` 里那个正则是唯一的猜测点，并有注释说明。",
       "closeWhen": "**最迟在 GPS 时区反查接入之前**拆成 timezone_kind(offset|iana) + timezone_value，并加约束：kind=offset 必须匹配 ±HH:MM，kind=iana 不能是固定偏移。这是一个明确的 schema hardening 任务，不是「以后再说」。",
+      "owner": "engineering",
+      "status": "closed",
+      "closedAt": "2026-08-03",
+      "closedBy": "migration 20260806000000：拆成 timezone_kind + timezone_value，三条互斥 CHECK，且固定偏移不能被登记成 IANA 名。领域层用 TimezoneDeclaration 打包，读取方不再需要猜。"
+    },
+    {
+      "id": "original-asset-no-store-costs-bandwidth",
+      "title": "原图改成 no-store 之后，作者每次打开页面都重新下载缩略图",
+      "severity": "low",
+      "area": "app/api/studio/assets/[id]/raw/route.ts",
+      "impact": "原图带 GPS 和相机序列号，所以响应头是 `private, no-store` —— 连落盘都不许。代价是 Moment 页面上的缩略图不会被缓存，每次渲染都要重新传输整张原图。",
+      "mitigation": "当前规模下可接受（一个 Moment 的素材是个位数）。",
+      "closeWhen": "成为问题时，解法是**服务端生成受控尺寸的预览副本**（复用发布派生那套机制，同样剥离元数据），而不是放松这里的缓存策略。",
       "owner": "engineering"
     }
   ]

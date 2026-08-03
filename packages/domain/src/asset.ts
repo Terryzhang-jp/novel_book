@@ -31,8 +31,77 @@ export const SUPPORTED_UPLOAD_TYPES: readonly AssetType[] = ['image', 'audio'];
  *
  * `unknown` 是**默认值**，不是异常值 —— 大多数相机 EXIF 确实没有时区。
  */
-export const TIMEZONE_SOURCES = ['exif', 'gps_inferred', 'user', 'unknown'] as const;
+// 'ai' 在这里出现是因为 CORRECTION_SOURCES 里有它：一次 AI 修正当然
+// 可以针对时区。两个取值域不一致的话，修正链的 source 就没法原样带过来。
+export const TIMEZONE_SOURCES = ['exif', 'gps_inferred', 'user', 'ai', 'unknown'] as const;
 export type TimezoneSource = (typeof TIMEZONE_SOURCES)[number];
+
+/**
+ * 时区是**哪一种**时区。
+ *
+ * `+09:00` 和 `Asia/Tokyo` 不是同一类数据：前者没有夏令时规则，
+ * 后者含历史与未来的规则。同一列装两种，所有读取方就只能靠字符串形状猜。
+ *
+ * `unknown` 是有名字的第三种状态，不是「值为空」—— ADR-009 的
+ * 「未知就是未知」因此变成一个可以被类型系统看见的事实。
+ */
+export const TIMEZONE_KINDS = ['offset', 'iana', 'unknown'] as const;
+export type TimezoneKind = (typeof TIMEZONE_KINDS)[number];
+
+/** 一个完整的时区声明。三个字段一起才有意义，所以打包成一个值。 */
+export interface TimezoneDeclaration {
+  readonly kind: TimezoneKind;
+  /** kind='unknown' 时必须缺失 */
+  readonly value?: string;
+  readonly source: TimezoneSource;
+  readonly confidence?: number;
+}
+
+export const UNKNOWN_TIMEZONE: TimezoneDeclaration = { kind: 'unknown', source: 'unknown' };
+
+const OFFSET_RE = /^[+-]\d{2}:\d{2}$/;
+const IANA_RE = /^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+)+$/;
+
+/**
+ * 校验一个时区声明的形状。数据库有同款 CHECK 兜底。
+ *
+ * 关键一条：**固定偏移不能被登记成 IANA 名**。
+ * `+09:00` 可能是东京、首尔、雅库茨克 —— 混进来就等于伪造了时区规则。
+ */
+export function assertValidTimezone(tz: TimezoneDeclaration): void {
+  if (tz.kind === 'unknown') {
+    if (tz.value !== undefined) {
+      throw new InvariantViolation('TZ-1', 'kind=unknown 时不能有 value');
+    }
+    return;
+  }
+  if (!tz.value) {
+    throw new InvariantViolation('TZ-1', `kind=${tz.kind} 时必须有 value`);
+  }
+  if (tz.kind === 'offset' && !OFFSET_RE.test(tz.value)) {
+    throw new InvariantViolation('TZ-1', `固定偏移必须形如 ±HH:MM，收到 ${tz.value}`);
+  }
+  if (tz.kind === 'iana') {
+    if (tz.value.startsWith('+') || tz.value.startsWith('-') || !IANA_RE.test(tz.value)) {
+      throw new InvariantViolation(
+        'TZ-1',
+        `${tz.value} 不是合法的 IANA 时区标识。固定偏移请用 kind='offset' —— ` +
+          '把 +09:00 说成时区名等于伪造了夏令时规则'
+      );
+    }
+  }
+  if (tz.source === 'unknown') {
+    throw new InvariantViolation('T-2', '时区已知时必须说明它从哪来');
+  }
+  if (tz.source === 'gps_inferred' && tz.confidence === undefined) {
+    throw new InvariantViolation('T-3', 'GPS 推断的时区必须带置信度');
+  }
+}
+
+/** 能不能由它算出绝对时间。只有固定偏移可以 —— IANA 需要夏令时规则数据。 */
+export function canResolveAbsoluteTime(tz: TimezoneDeclaration): boolean {
+  return tz.kind === 'offset' && Boolean(tz.value);
+}
 
 /**
  * 一份不可变的媒体素材。
@@ -57,9 +126,8 @@ export interface Asset {
   readonly capturedLocalAt?: string;
   /** 只有时区已知时才有值（T-1） */
   readonly capturedAt?: string;
-  readonly timezone?: string;
-  readonly timezoneSource: TimezoneSource;
-  readonly timezoneConfidence?: number;
+  /** 三个字段打包 —— 单独一个 value 说明不了它是偏移还是时区名 */
+  readonly timezone: TimezoneDeclaration;
   /** 上传时提取的原始元数据。**不可变** —— 修正走 corrections（T6） */
   readonly originalMetadata: Readonly<Record<string, unknown>>;
   readonly derivedFromAssetId?: AssetId;
@@ -147,9 +215,7 @@ export interface CreateAssetInput {
   readonly durationMs?: number;
   readonly capturedLocalAt?: string;
   readonly capturedAt?: string;
-  readonly timezone?: string;
-  readonly timezoneSource?: TimezoneSource;
-  readonly timezoneConfidence?: number;
+  readonly timezone?: TimezoneDeclaration;
   readonly originalMetadata?: Readonly<Record<string, unknown>>;
   readonly derivedFromAssetId?: AssetId;
 }
@@ -190,30 +256,23 @@ export function assertValidAssetInput(input: CreateAssetInput): void {
  */
 export function assertValidCapturedTime(input: {
   capturedAt?: string;
-  timezone?: string;
-  timezoneSource?: TimezoneSource;
-  timezoneConfidence?: number;
+  timezone?: TimezoneDeclaration;
 }): void {
-  const hasTz = Boolean(input.timezone);
+  const tz = input.timezone ?? UNKNOWN_TIMEZONE;
+  assertValidTimezone(tz);
+
+  const known = tz.kind !== 'unknown';
   const hasAbs = Boolean(input.capturedAt);
 
   // T-1：时区未知时绝不伪造绝对时间。
   // 用服务器时区或用户当前时区补全，等于系统在断言一件它不知道的事。
-  if (hasAbs !== hasTz) {
+  if (hasAbs !== known) {
     throw new InvariantViolation(
       'T-1',
       hasAbs
-        ? 'capturedAt 有值但 timezone 为空 —— 时区未知时不能推出绝对时间'
-        : 'timezone 有值但 capturedAt 为空 —— 时区已知就应该算出绝对时间'
+        ? 'capturedAt 有值但时区未知 —— 未知时不能推出绝对时间'
+        : '时区已知就应该算出绝对时间'
     );
-  }
-  const source = input.timezoneSource ?? 'unknown';
-  if (hasTz && source === 'unknown') {
-    throw new InvariantViolation('T-2', 'timezone 有值时必须说明它从哪来');
-  }
-  if (source === 'gps_inferred' && input.timezoneConfidence === undefined) {
-    // 没有置信度就无法与「用户确认过的值」区分，下一次推断会覆盖它
-    throw new InvariantViolation('T-3', 'GPS 推断的时区必须带置信度');
   }
 }
 
@@ -236,7 +295,7 @@ export interface CapturedTimeDisplay {
  */
 export function formatCapturedTime(asset: {
   capturedLocalAt?: string;
-  timezone?: string;
+  timezone?: TimezoneDeclaration;
 }): CapturedTimeDisplay {
   if (!asset.capturedLocalAt) {
     return { text: '时间未知', timezoneKnown: false, hasTime: false };
@@ -246,8 +305,9 @@ export function formatCapturedTime(asset: {
   const time = asset.capturedLocalAt.slice(11, 16);
   const stamp = `${date} ${time}`;
 
-  if (asset.timezone) {
-    return { text: `${stamp} (${asset.timezone})`, timezoneKnown: true, hasTime: true };
+  const tz = asset.timezone ?? UNKNOWN_TIMEZONE;
+  if (tz.kind !== 'unknown' && tz.value) {
+    return { text: `${stamp} (${tz.value})`, timezoneKnown: true, hasTime: true };
   }
   // 既不转换也不标 UTC。标 UTC 是在断言一件没被断言过的事。
   return { text: `${stamp} · 相机本地时间，时区未知`, timezoneKnown: false, hasTime: true };
@@ -315,16 +375,7 @@ export function assertCorrectionAllowed(
   }
 }
 
-/**
- * `+09:00` / `-05:30` 这类固定偏移。
- *
- * EXIF 的 OffsetTimeOriginal 只给得出这个 —— 它不知道 `Asia/Tokyo`。
- * 从偏移量推时区名是伪造（`+09:00` 也可能是首尔），所以两种都允许存进
- * timezone 列，靠这个正则区分能不能算绝对时间。
- */
-const FIXED_OFFSET_RE = /^[+-]\d{2}:\d{2}$/;
-
-/** 界面上可选的偏移量。第一版不接 IANA 时区库，只提供固定偏移。 */
+/** 界面上可选的偏移量。第一版不接 IANA 时区库，只提供固定偏移（kind='offset'）。 */
 export const COMMON_UTC_OFFSETS: readonly { value: string; label: string }[] = [
   { value: '+09:00', label: '+09:00 日本 / 韩国' },
   { value: '+08:00', label: '+08:00 中国 / 新加坡' },
@@ -341,8 +392,7 @@ export const COMMON_UTC_OFFSETS: readonly { value: string; label: string }[] = [
 export interface EffectiveAssetMetadata {
   readonly capturedLocalAt?: string;
   readonly capturedAt?: string;
-  readonly timezone?: string;
-  readonly timezoneSource: TimezoneSource;
+  readonly timezone: TimezoneDeclaration;
   readonly gps?: { readonly latitude: number; readonly longitude: number };
   readonly orientation?: number;
 }
@@ -360,30 +410,31 @@ export function effectiveMetadata(
 
   const capturedLocalAt =
     (timeCorrection?.value as string | undefined) ?? asset.capturedLocalAt;
-  const timezone = (tzCorrection?.value as string | undefined) ?? asset.timezone;
+
+  // 修正的 value 就是一个完整的 TimezoneDeclaration —— 不再是一个裸字符串，
+  // 所以这里没有任何「猜它是偏移还是时区名」的余地。
+  const timezone: TimezoneDeclaration = tzCorrection
+    ? { ...(tzCorrection.value as TimezoneDeclaration), source: tzCorrection.source }
+    : asset.timezone;
 
   // 时区被修正过就要重算绝对时间。
   //
-  // 固定偏移（`+09:00`）能算 —— 那是纯字符串运算，不需要任何时区数据库。
-  // IANA 名（`Asia/Tokyo`）**算不了**：夏令时规则不在这个包里，
-  // 而按「大概是这个偏移」硬算就是又一次伪造。所以那种情况 capturedAt
-  // 保持 undefined，直到有真正的 tz 数据可用。
+  // 只有固定偏移能算 —— 那是纯字符串运算。IANA 名**算不了**：
+  // 夏令时规则不在这个包里，按「大概是这个偏移」硬算就是又一次伪造。
+  // 所以那种情况 capturedAt 保持缺失，直到有真正的 tz 数据可用。
   const recomputed =
-    tzCorrection && capturedLocalAt && timezone && FIXED_OFFSET_RE.test(timezone)
-      ? new Date(`${capturedLocalAt}${timezone}`).toISOString()
+    tzCorrection && capturedLocalAt && canResolveAbsoluteTime(timezone)
+      ? new Date(`${capturedLocalAt}${timezone.value}`).toISOString()
       : undefined;
 
   return {
     ...(capturedLocalAt ? { capturedLocalAt } : {}),
     ...(recomputed
       ? { capturedAt: recomputed }
-      : timezone && !tzCorrection && asset.capturedAt
+      : !tzCorrection && asset.capturedAt
         ? { capturedAt: asset.capturedAt }
         : {}),
-    ...(timezone ? { timezone } : {}),
-    timezoneSource: tzCorrection
-      ? (tzCorrection.source as TimezoneSource)
-      : asset.timezoneSource,
+    timezone,
     ...(gpsCorrection
       ? { gps: gpsCorrection.value as { latitude: number; longitude: number } }
       : {}),

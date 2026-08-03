@@ -47,9 +47,10 @@ column	assets.mime_type	text NOT NULL
 column	assets.object_key	text NOT NULL
 column	assets.original_metadata	jsonb NOT NULL DEFAULT '{"_v": 1}'::jsonb
 column	assets.sha256	text NOT NULL
-column	assets.timezone	text
 column	assets.timezone_confidence	real
+column	assets.timezone_kind	text NOT NULL DEFAULT 'unknown'::text
 column	assets.timezone_source	text NOT NULL DEFAULT 'unknown'::text
+column	assets.timezone_value	text
 column	assets.type	text NOT NULL
 column	assets.user_id	text NOT NULL
 column	assets.width	integer
@@ -255,15 +256,17 @@ constraint	assets.assets_height_check	CHECK ((height > 0))
 constraint	assets.assets_pkey	PRIMARY KEY (id)
 constraint	assets.assets_sha256_check	CHECK ((sha256 ~ '^[a-f0-9]{64}$'::text))
 constraint	assets.assets_timezone_confidence_check	CHECK (((timezone_confidence >= (0)::double precision) AND (timezone_confidence <= (1)::double precision)))
-constraint	assets.assets_timezone_source_check	CHECK ((timezone_source = ANY (ARRAY['exif'::text, 'gps_inferred'::text, 'user'::text, 'unknown'::text])))
+constraint	assets.assets_timezone_kind_check	CHECK ((timezone_kind = ANY (ARRAY['offset'::text, 'iana'::text, 'unknown'::text])))
+constraint	assets.assets_timezone_source_check	CHECK ((timezone_source = ANY (ARRAY['exif'::text, 'gps_inferred'::text, 'user'::text, 'ai'::text, 'unknown'::text])))
 constraint	assets.assets_type_check	CHECK ((type = ANY (ARRAY['image'::text, 'audio'::text, 'video'::text])))
 constraint	assets.assets_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
 constraint	assets.assets_width_check	CHECK ((width > 0))
 constraint	assets.chk_asset_dimensions	CHECK ((((type <> 'image'::text) OR ((width IS NOT NULL) AND (height IS NOT NULL))) AND ((type <> 'audio'::text) OR (duration_ms IS NOT NULL))))
 constraint	assets.chk_asset_no_self_derive	CHECK ((derived_from_asset_id IS DISTINCT FROM id))
-constraint	assets.chk_captured_at_requires_tz	CHECK ((((captured_at IS NULL) AND (timezone IS NULL)) OR ((captured_at IS NOT NULL) AND (timezone IS NOT NULL))))
+constraint	assets.chk_captured_at_requires_tz	CHECK ((((timezone_kind = 'unknown'::text) AND (captured_at IS NULL)) OR ((timezone_kind <> 'unknown'::text) AND (captured_at IS NOT NULL))))
 constraint	assets.chk_inferred_tz_has_confidence	CHECK (((timezone_source <> 'gps_inferred'::text) OR (timezone_confidence IS NOT NULL)))
-constraint	assets.chk_timezone_has_source	CHECK (((timezone IS NULL) OR (timezone_source <> 'unknown'::text)))
+constraint	assets.chk_timezone_has_source	CHECK (((timezone_kind = 'unknown'::text) OR (timezone_source <> 'unknown'::text)))
+constraint	assets.chk_timezone_shape	CHECK ((((timezone_kind = 'unknown'::text) AND (timezone_value IS NULL)) OR ((timezone_kind = 'offset'::text) AND (timezone_value ~ '^[+-][0-9]{2}:[0-9]{2}$'::text)) OR ((timezone_kind = 'iana'::text) AND (timezone_value ~ '^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)+$'::text) AND (timezone_value !~ '^[+-]'::text))))
 constraint	canvas_projects.canvas_projects_pkey	PRIMARY KEY (id)
 constraint	canvas_projects.canvas_projects_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
 constraint	documents.documents_pkey	PRIMARY KEY (id)

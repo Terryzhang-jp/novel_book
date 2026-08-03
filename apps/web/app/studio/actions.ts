@@ -361,7 +361,10 @@ export async function setAssetTimezoneAction(form: FormData) {
     const actor = await requireActor();
     await applyMetadataCorrection(getCore(), actor, str(form, 'assetId'), {
       field: 'timezone',
-      value: str(form, 'timezone'),
+      // 存的是一个完整的时区声明，不是裸字符串 —— 读取方因此不需要
+      // 靠 `+09:00` 的形状去猜它是偏移还是时区名（ADR-009 hardening）。
+      // 第一版界面只提供固定偏移。
+      value: { kind: 'offset', value: str(form, 'timezone'), source: 'user' },
       source: 'user',
     });
     return `/studio/moments/${momentId}?notice=${encodeURIComponent('时区已补上。原始 EXIF 没有被改动，这是一条修正记录。')}`;

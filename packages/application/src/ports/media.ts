@@ -9,7 +9,7 @@
  * 不为它单开一个包 —— 包的数量本身也是成本，而这个 adapter 只有一个消费者。
  */
 
-import type { AssetType, ObjectKey, ObjectStorage, TimezoneSource } from '@tc/domain';
+import type { AssetType, ObjectKey, ObjectStorage, TimezoneDeclaration } from '@tc/domain';
 
 /**
  * 从字节里能读出来的东西。
@@ -27,9 +27,7 @@ export interface ProbedMedia {
   readonly durationMs?: number;
   readonly capturedLocalAt?: string;
   readonly capturedAt?: string;
-  readonly timezone?: string;
-  readonly timezoneSource: TimezoneSource;
-  readonly timezoneConfidence?: number;
+  readonly timezone: TimezoneDeclaration;
   /** 原封不动的原始元数据，落进 assets.original_metadata（不可变） */
   readonly originalMetadata: Readonly<Record<string, unknown>>;
 }

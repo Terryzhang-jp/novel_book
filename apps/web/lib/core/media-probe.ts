@@ -17,7 +17,7 @@
 
 import sharp from 'sharp';
 import type { ImageDeriver, MediaProbe, ProbedMedia, DerivedImage } from '@tc/application';
-import type { AssetType } from '@tc/domain';
+import { UNKNOWN_TIMEZONE, type AssetType, type TimezoneDeclaration } from '@tc/domain';
 import { sniffImageMime } from '@/lib/api/guard';
 
 /** 原始元数据的体积上限。相机厂商的私有段能塞进几百 KB，没必要全存。 */
@@ -121,7 +121,7 @@ export class SharpMediaProbe implements MediaProbe {
     return {
       type,
       mimeType: sniffed,
-      timezoneSource: 'unknown',
+      timezone: UNKNOWN_TIMEZONE,
       originalMetadata: { _v: 1 },
     };
   }
@@ -157,7 +157,12 @@ export class SharpMediaProbe implements MediaProbe {
     // EXIF 只给偏移量，给不了 IANA 时区名。
     // `+09:00` 可能是东京也可能是首尔 —— 猜一个就是伪造。
     // 所以 timezone 存偏移量本身：它是我们真正知道的东西。
-    const timezone = capturedLocalAt && offset ? offset : undefined;
+    // kind='offset'：EXIF 给的就是偏移量。**不猜时区名** ——
+    // `+09:00` 可能是东京、首尔、雅库茨克。
+    const timezone: TimezoneDeclaration =
+      capturedLocalAt && offset
+        ? { kind: 'offset', value: offset, source: 'exif' }
+        : UNKNOWN_TIMEZONE;
     const capturedAt =
       capturedLocalAt && offset
         ? new Date(`${capturedLocalAt}${offset}`).toISOString()
@@ -176,8 +181,7 @@ export class SharpMediaProbe implements MediaProbe {
       height,
       ...(capturedLocalAt ? { capturedLocalAt } : {}),
       ...(capturedAt ? { capturedAt } : {}),
-      ...(timezone ? { timezone } : {}),
-      timezoneSource: timezone ? 'exif' : 'unknown',
+      timezone,
       originalMetadata: boundedMetadata(raw),
     };
   }
@@ -196,7 +200,7 @@ export class SharpMediaProbe implements MediaProbe {
       type: 'audio',
       mimeType,
       durationMs: Math.round(seconds * 1000),
-      timezoneSource: 'unknown',
+      timezone: UNKNOWN_TIMEZONE,
       originalMetadata: boundedMetadata({
         container: parsed.format.container,
         codec: parsed.format.codec,

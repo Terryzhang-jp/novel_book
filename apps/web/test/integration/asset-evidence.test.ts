@@ -183,14 +183,14 @@ describe('灵魂 2：不可变与去重', () => {
 
     await applyMetadataCorrection(core, ALICE, asset.id, {
       field: 'timezone',
-      value: '+09:00',
+      value: { kind: 'offset', value: '+09:00', source: 'user' },
       source: 'user',
     });
 
     const after = await getAssetDetail(core, ALICE, asset.id);
     expect(JSON.stringify(after.asset.originalMetadata)).toBe(before);
     // 修正生效了，但走的是另一条链
-    expect(after.effective.timezone).toBe('+09:00');
+    expect(after.effective.timezone).toMatchObject({ kind: 'offset', value: '+09:00' });
     expect(after.corrections).toHaveLength(1);
   });
 
@@ -213,8 +213,9 @@ describe('灵魂 3：未知就是未知', () => {
     expect(asset.capturedLocalAt).toBe('2026-03-14T16:20:00');
     // ⭐ 相机没说时区，系统就不说
     expect(asset.capturedAt).toBeUndefined();
-    expect(asset.timezone).toBeUndefined();
-    expect(asset.timezoneSource).toBe('unknown');
+    expect(asset.timezone.kind).toBe('unknown');
+    expect(asset.timezone.value).toBeUndefined();
+    expect(asset.timezone.source).toBe('unknown');
 
     const shown = formatCapturedTime(asset);
     expect(shown.text).toBe('2026-03-14 16:20 · 相机本地时间，时区未知');
@@ -235,12 +236,15 @@ describe('灵魂 3：未知就是未知', () => {
 
     const after = await applyMetadataCorrection(core, ALICE, asset.id, {
       field: 'timezone',
-      value: '+09:00',
+      value: { kind: 'offset', value: '+09:00', source: 'user' },
       source: 'user',
     });
 
-    expect(after.effective.timezone).toBe('+09:00');
-    expect(after.effective.timezoneSource).toBe('user');
+    expect(after.effective.timezone).toMatchObject({
+      kind: 'offset',
+      value: '+09:00',
+      source: 'user',
+    });
     // 16:20 +09:00 == 07:20Z
     expect(after.effective.capturedAt).toBe('2026-03-14T07:20:00.000Z');
     expect(formatCapturedTime(after.effective).text).toBe('2026-03-14 16:20 (+09:00)');
@@ -252,7 +256,7 @@ describe('灵魂 3：未知就是未知', () => {
 
     await applyMetadataCorrection(core, ALICE, asset.id, {
       field: 'timezone',
-      value: '+09:00',
+      value: { kind: 'offset', value: '+09:00', source: 'user' },
       source: 'user',
     });
 
@@ -260,22 +264,22 @@ describe('灵魂 3：未知就是未知', () => {
     await expect(
       applyMetadataCorrection(core, ALICE, asset.id, {
         field: 'timezone',
-        value: '+08:00',
+        value: { kind: 'iana', value: 'Asia/Seoul', source: 'gps_inferred', confidence: 0.9 },
         source: 'gps_inferred',
         confidence: 0.9,
       })
     ).rejects.toThrow(/C-5/);
 
     const after = await getAssetDetail(core, ALICE, asset.id);
-    expect(after.effective.timezone).toBe('+09:00');
+    expect(after.effective.timezone).toMatchObject({ value: '+09:00' });
 
     // 但用户自己还能继续改
     const again = await applyMetadataCorrection(core, ALICE, asset.id, {
       field: 'timezone',
-      value: '+08:00',
+      value: { kind: 'offset', value: '+08:00', source: 'user' },
       source: 'user',
     });
-    expect(again.effective.timezone).toBe('+08:00');
+    expect(again.effective.timezone).toMatchObject({ value: '+08:00' });
     // 链上两版都在
     expect(again.corrections).toHaveLength(2);
   });

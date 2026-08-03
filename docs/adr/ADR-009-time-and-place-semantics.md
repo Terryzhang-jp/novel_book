@@ -81,6 +81,25 @@ CONSTRAINT chk_captured_at_requires_tz CHECK (
 
 不做的是：给未知的填一个假值让 `ORDER BY` 好写。
 
+#### 已落实（2026-08-03）：拆成 kind + value
+
+这一节最初写的是「timezone 列存 IANA 名**或**固定偏移」。
+那让所有读取方只能靠正则 `^[+-]\d{2}:\d{2}$` 猜自己拿到的是哪一种。
+
+migration `20260806000000` 拆成：
+
+```
+timezone_kind    offset | iana | unknown
+timezone_value   +09:00 | Asia/Tokyo | NULL
+```
+
+三条互斥 CHECK，其中最关键的一条是：
+**kind='iana' 时 value 不能以 + 或 - 开头** ——
+把 `+09:00` 说成时区名等于伪造了夏令时规则。
+
+`unknown` 因此从「值为空」变成一个**有名字的状态**，
+「未知就是未知」也就成了类型系统能看见的事实。
+
 #### 补充：EXIF 给的是偏移量，不是时区名
 
 实现时确认的一点：`OffsetTimeOriginal` 只有 `+09:00`，**没有** `Asia/Tokyo`。

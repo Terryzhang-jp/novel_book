@@ -15,6 +15,10 @@ import { describe, expect, it } from 'vitest';
 import {
   assertSnapshotIsSelfContained,
   assertValidBlock,
+  assertValidTimezone,
+  canResolveAbsoluteTime,
+  formatCapturedTime,
+  UNKNOWN_TIMEZONE,
   assertValidJourneyInput,
   assertValidSupersede,
   buildInterpretationChain,
@@ -403,5 +407,50 @@ describe('快照版本迁移（ADR-010 R6）', () => {
   it('无法识别的版本要报错，不猜', () => {
     expect(() => normalizeSnapshot({ _v: 99 })).toThrow(/P-1/);
     expect(() => normalizeSnapshot(null)).toThrow(/P-1/);
+  });
+});
+
+describe('时区的两种语义必须分开（schema hardening）', () => {
+  it('固定偏移不能被登记成 IANA 时区名', () => {
+    // '+09:00' 可能是东京、首尔、雅库茨克 —— 混进 iana 就等于伪造了夏令时规则
+    expect(() =>
+      assertValidTimezone({ kind: 'iana', value: '+09:00', source: 'user' })
+    ).toThrow(/TZ-1/);
+    expect(() =>
+      assertValidTimezone({ kind: 'iana', value: 'Asia/Tokyo', source: 'user' })
+    ).not.toThrow();
+  });
+
+  it('offset 必须是 ±HH:MM', () => {
+    expect(() =>
+      assertValidTimezone({ kind: 'offset', value: 'Asia/Tokyo', source: 'user' })
+    ).toThrow(/TZ-1/);
+    expect(() =>
+      assertValidTimezone({ kind: 'offset', value: '+09:00', source: 'user' })
+    ).not.toThrow();
+  });
+
+  it('unknown 不能带值', () => {
+    expect(() =>
+      assertValidTimezone({ kind: 'unknown', value: '+09:00', source: 'unknown' })
+    ).toThrow(/TZ-1/);
+    expect(() => assertValidTimezone(UNKNOWN_TIMEZONE)).not.toThrow();
+  });
+
+  it('只有固定偏移能算出绝对时间 —— IANA 需要夏令时规则数据', () => {
+    expect(canResolveAbsoluteTime({ kind: 'offset', value: '+09:00', source: 'user' })).toBe(true);
+    expect(canResolveAbsoluteTime({ kind: 'iana', value: 'Asia/Tokyo', source: 'user' })).toBe(
+      false
+    );
+    expect(canResolveAbsoluteTime(UNKNOWN_TIMEZONE)).toBe(false);
+  });
+
+  it('时区未知时不显示 UTC，也不做转换', () => {
+    const shown = formatCapturedTime({
+      capturedLocalAt: '2026-08-03T14:35:00',
+      timezone: UNKNOWN_TIMEZONE,
+    });
+    expect(shown.text).toBe('2026-08-03 14:35 · 相机本地时间，时区未知');
+    expect(shown.text).not.toContain('UTC');
   });
 });

@@ -136,11 +136,7 @@ export async function uploadAsset(
     ...(probed.durationMs ? { durationMs: probed.durationMs } : {}),
     ...(probed.capturedLocalAt ? { capturedLocalAt: probed.capturedLocalAt } : {}),
     ...(probed.capturedAt ? { capturedAt: probed.capturedAt } : {}),
-    ...(probed.timezone ? { timezone: probed.timezone } : {}),
-    timezoneSource: probed.timezoneSource,
-    ...(probed.timezoneConfidence !== undefined
-      ? { timezoneConfidence: probed.timezoneConfidence }
-      : {}),
+    timezone: probed.timezone,
     originalMetadata: probed.originalMetadata,
   };
   // 领域层先校验，给出可读的错误；数据库的 CHECK 兜底

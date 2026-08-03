@@ -55,13 +55,14 @@ export class PostgresAssetRepository implements AssetRepository {
         `INSERT INTO assets (
            user_id, type, object_key, sha256, mime_type, byte_size,
            width, height, duration_ms,
-           captured_local_at, captured_at, timezone, timezone_source, timezone_confidence,
+           captured_local_at, captured_at, timezone_kind, timezone_value,
+           timezone_source, timezone_confidence,
            original_metadata, derived_from_asset_id
          ) VALUES (
            $1, $2, $3, $4, $5, $6,
            $7, $8, $9,
-           $10::timestamp, $11::timestamptz, $12, $13, $14,
-           $15::jsonb, $16
+           $10::timestamp, $11::timestamptz, $12, $13, $14, $15,
+           $16::jsonb, $17
          )
          RETURNING ${ASSET_COLUMNS}`,
         [
@@ -78,9 +79,10 @@ export class PostgresAssetRepository implements AssetRepository {
           // 那会按进程时区解释一个本来就没有时区的墙上时间（ADR-009 T1）。
           input.capturedLocalAt ?? null,
           input.capturedAt ?? null,
-          input.timezone ?? null,
-          input.timezoneSource ?? 'unknown',
-          input.timezoneConfidence ?? null,
+          input.timezone?.kind ?? 'unknown',
+          input.timezone?.value ?? null,
+          input.timezone?.source ?? 'unknown',
+          input.timezone?.confidence ?? null,
           JSON.stringify(input.originalMetadata ?? { _v: 1 }),
           input.derivedFromAssetId ?? null,
         ]
