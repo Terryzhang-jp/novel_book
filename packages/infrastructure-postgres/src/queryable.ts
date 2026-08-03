@@ -7,7 +7,7 @@
  */
 
 import type { Pool, PoolClient } from 'pg';
-import { ConflictError, InvariantViolation, NotFoundError } from '@tc/domain';
+import { ConflictError, ForbiddenError, InvariantViolation, NotFoundError } from '@tc/domain';
 
 /**
  * 连接池或事务连接。
@@ -42,7 +42,10 @@ function isPgError(e: unknown): e is PgError {
  * 没列到的约束**原样抛出**，不做兜底翻译 —— 假装认识一个不认识的错误
  * 比报错更危险。
  */
-const CONSTRAINT_MAP: Record<string, { kind: 'conflict' | 'invariant'; code: string; hint: string }> = {
+const CONSTRAINT_MAP: Record<
+  string,
+  { kind: 'conflict' | 'invariant' | 'forbidden'; code: string; hint: string }
+> = {
   uq_publication_slug: { kind: 'conflict', code: 'publication.slug', hint: '这个链接地址已被占用' },
   uq_interpretation_current: {
     kind: 'invariant',
@@ -69,6 +72,14 @@ const CONSTRAINT_MAP: Record<string, { kind: 'conflict' | 'invariant'; code: str
   chk_journey_period: { kind: 'invariant', code: 'J-4', hint: 'endedAt 不能早于 startedAt' },
   chk_snapshot_versioned: { kind: 'invariant', code: 'P-1', hint: '快照必须带 _v 版本号' },
   chk_no_self_supersede: { kind: 'invariant', code: 'I-4', hint: '一版理解不能取代它自己' },
+
+  // 触发器抛的（20260809000000）。它带 CONSTRAINT 子句，所以走的是这张表
+  // 而不是下面那条按 message 前缀的兜底 —— 后者认的是「违反不变量 」开头的消息。
+  require_active_owner: {
+    kind: 'forbidden',
+    code: 'AC-5',
+    hint: '这个账号已被停用或正在等待删除，系统不再为它写入新内容',
+  },
 };
 
 /** 把一次 pg 调用包起来，出错时翻译成领域错误 */
@@ -80,9 +91,11 @@ export async function translating<T>(fn: () => Promise<T>): Promise<T> {
 
     const mapped = err.constraint ? CONSTRAINT_MAP[err.constraint] : undefined;
     if (mapped) {
-      throw mapped.kind === 'conflict'
-        ? new ConflictError(mapped.code, mapped.hint)
-        : new InvariantViolation(mapped.code, mapped.hint);
+      if (mapped.kind === 'conflict') throw new ConflictError(mapped.code, mapped.hint);
+      // ForbiddenError 而不是 NotFoundError：这里资源存在与否本身不敏感 ——
+      // 调用方就是账号本人或代表他的后台任务，说清楚比含糊其辞有用。
+      if (mapped.kind === 'forbidden') throw new ForbiddenError(mapped.hint);
+      throw new InvariantViolation(mapped.code, mapped.hint);
     }
 
     // 触发器抛的 RAISE EXCEPTION 没有 constraint 字段，只能认 message。

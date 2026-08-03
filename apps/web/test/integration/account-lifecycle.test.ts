@@ -772,3 +772,128 @@ describe('灵魂 9：字节删不掉是可重试的工作', () => {
     expect(new Set(mine).size).toBe(keys.length);
   });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 15B：非 active 账号不能被写入 —— 包括没有 session 的后台路径
+// ════════════════════════════════════════════════════════════════════════════
+
+describe('灵魂 10：停用之后，连后台任务也不能再写内容', () => {
+  /**
+   * 每一类内容各写一次。
+   *
+   * 逐张表列出来而不是抽查一两个：这条保护的价值恰恰在于**没有例外**，
+   * 而抽查会让「新加的那张表忘了装触发器」一直是绿的。
+   */
+  const CONTENT_INSERTS: { table: string; sql: (u: string) => [string, unknown[]] }[] = [
+    {
+      table: 'journeys',
+      sql: (u) => [
+        `INSERT INTO journeys (id, user_id, title, type, started_at)
+         VALUES (gen_random_uuid(), $1, 'X', 'trip', now())`,
+        [u],
+      ],
+    },
+    {
+      table: 'moments',
+      sql: (u) => [
+        `INSERT INTO moments (id, user_id, title) VALUES (gen_random_uuid(), $1, 'X')`,
+        [u],
+      ],
+    },
+    {
+      table: 'works',
+      sql: (u) => [
+        `INSERT INTO works (id, user_id, title) VALUES (gen_random_uuid(), $1, 'X')`,
+        [u],
+      ],
+    },
+    {
+      table: 'assets',
+      sql: (u) => [
+        `INSERT INTO assets (id, user_id, type, object_key, sha256, mime_type, byte_size, width, height)
+         VALUES (gen_random_uuid(), $1, 'image',
+                 'users/' || $1 || '/sha256/ff/' || repeat('f', 64) || '.jpg',
+                 repeat('f', 64), 'image/jpeg', 1, 1, 1)`,
+        [u],
+      ],
+    },
+    {
+      table: 'photos',
+      sql: (u) => [
+        `INSERT INTO photos (id, user_id, file_name, original_name, file_url, metadata, category)
+         VALUES (gen_random_uuid(), $1, 'x.jpg', 'x.jpg', 'http://example/x.jpg',
+                 '{"fileSize":1,"mimeType":"image/jpeg"}'::jsonb, 'neither')`,
+        [u],
+      ],
+    },
+    {
+      table: 'documents',
+      sql: (u) => [
+        `INSERT INTO documents (id, user_id, title, content)
+         VALUES (gen_random_uuid(), $1, 'X', '{}'::jsonb)`,
+        [u],
+      ],
+    },
+  ];
+
+  it('active 账号：每一类内容都写得进去（先证明这组 SQL 本身是对的）', async () => {
+    const { userId } = await makeUser('activewrite');
+    for (const c of CONTENT_INSERTS) {
+      const [text, params] = c.sql(userId);
+      await expect(sql(text, params), `active 用户写 ${c.table} 应当成功`).resolves.toBeDefined();
+    }
+  });
+
+  it('disabled 账号：每一类内容都被数据库拒绝', async () => {
+    const { actor, userId } = await makeUser('disabledwrite');
+    await disableAccount({ core, clock: systemClock, tokens: tokenIssuer }, OPS, userId, '集成测试');
+
+    for (const c of CONTENT_INSERTS) {
+      const [text, params] = c.sql(userId);
+      await expect(sql(text, params), `disabled 用户写 ${c.table} 应当被拒`).rejects.toThrow(
+        /不能新增内容/
+      );
+    }
+    void actor;
+  });
+
+  it('deletion_requested 账号：同样一条都写不进去', async () => {
+    const { actor, userId } = await makeUser('pendingwrite');
+    await requestAccountDeletion(
+      { core, clock: advanceableClock(T0), tokens: tokenIssuer },
+      actor,
+      {}
+    );
+
+    for (const c of CONTENT_INSERTS) {
+      const [text, params] = c.sql(userId);
+      await expect(sql(text, params), `待删除用户写 ${c.table} 应当被拒`).rejects.toThrow(
+        /不能新增内容/
+      );
+    }
+  });
+
+  it('用例层拿到的是 ForbiddenError，不是一串 Postgres 报错', async () => {
+    const { actor, userId } = await makeUser('usecaseblocked');
+    await disableAccount({ core, clock: systemClock, tokens: tokenIssuer }, OPS, userId, '集成测试');
+
+    // 这条模拟的正是那个场景：用户已经被停用，但一个早就排好队的任务
+    // 现在才跑到写入这一步。它没有 session，前两道拦截都碰不到它。
+    await expect(
+      createMoment(core, actor, { firstObservation: '延迟任务写进来的', now: NOW })
+    ).rejects.toThrow(ForbiddenError);
+  });
+
+  it('恢复之后又能正常写了', async () => {
+    const { actor, userId } = await makeUser('reenable');
+    const deps: AccountDeps = { core, clock: systemClock, tokens: tokenIssuer };
+    await disableAccount(deps, OPS, userId, '集成测试');
+    await reactivateAccount(deps, OPS, userId, '集成测试：恢复');
+
+    const { moment } = await createMoment(core, actor, {
+      firstObservation: '恢复之后',
+      now: NOW,
+    });
+    expect(moment.id).toBeTruthy();
+  });
+});

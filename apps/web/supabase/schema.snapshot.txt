@@ -396,6 +396,7 @@ function	assert_version_renderer_matches()	RETURNS trigger LANGUAGE plpgsql |  D
 function	assert_work_block_same_owner()	RETURNS trigger LANGUAGE plpgsql |  DECLARE work_owner text; moment_owner text; BEGIN IF NEW.moment_id IS NULL THEN RETURN NEW; END IF; SELECT user_id INTO work_owner FROM works WHERE id = NEW.work_id; SELECT user_id INTO moment_owner FROM moments WHERE id = NEW.moment_id; IF work_owner IS DISTINCT FROM moment_owner THEN RAISE EXCEPTION '违反不变量 W-2：Work 与被引用的 Moment 不属于同一个用户（% vs %）', work_owner, moment_owner; END IF; RETURN NEW; END; 
 function	check_interpretation_same_moment()	RETURNS trigger LANGUAGE plpgsql |  DECLARE target_moment uuid; BEGIN IF NEW.supersedes_id IS NULL THEN RETURN NEW; END IF; SELECT moment_id INTO target_moment FROM interpretation_revisions WHERE id = NEW.supersedes_id; IF target_moment IS NULL THEN RAISE EXCEPTION 'supersedes_id % 不存在', NEW.supersedes_id; END IF; IF target_moment <> NEW.moment_id THEN RAISE EXCEPTION '违反不变量 I-4：不能 supersede 另一个 Moment 的 revision（% vs %）', target_moment, NEW.moment_id; END IF; RETURN NEW; END 
 function	guard_user_delete()	RETURNS trigger LANGUAGE plpgsql |  BEGIN -- current_setting(..., true) 在没设置时返回 NULL 而不是报错 IF current_setting('tc.allow_user_delete', true) IS DISTINCT FROM OLD.id THEN RAISE EXCEPTION '禁止直接删除 user 行（id=%）。删除账号必须走 finalizeAccountDeletion —— ' '它会先收集对象存储的 key、写审计、再在同一事务里 SET LOCAL ' 'tc.allow_user_delete 放行。见 ADR-007。', OLD.id USING ERRCODE = 'raise_exception'; END IF; RETURN OLD; END
+function	require_active_owner()	RETURNS trigger LANGUAGE plpgsql |  DECLARE owner_status text; BEGIN SELECT status INTO owner_status FROM "user" WHERE id = NEW.user_id; -- 行不存在交给外键去报错。在这里抢着报会把「用户不存在」说成 -- 「用户被停用了」，那是两件事。 IF owner_status IS NULL THEN RETURN NEW; END IF; IF owner_status <> 'active' THEN RAISE EXCEPTION '账号当前状态是 %，不能新增内容（ADR-007）。' '停用与待删除期间系统不再为这个账号写入任何东西 —— ' '包括队列任务和后台作业。', owner_status USING ERRCODE = 'check_violation', -- 用例层靠这个前缀把它翻成人话，而不是比对整句消息 CONSTRAINT = 'require_active_owner'; END IF; RETURN NEW; END
 function	update_canvas_updated_at()	RETURNS trigger LANGUAGE plpgsql |  BEGIN NEW.updated_at = NOW(); RETURN NEW; END; 
 function	update_updated_at_column()	RETURNS trigger LANGUAGE plpgsql |  BEGIN NEW.updated_at = NOW(); RETURN NEW; END; 
 function	uuid_generate_v1()	RETURNS uuid LANGUAGE c | uuid_generate_v1
@@ -561,18 +562,30 @@ table	work_versions	rls=disabled
 table	works	rls=disabled
 trigger	account.update_account_updated_at	CREATE TRIGGER update_account_updated_at BEFORE UPDATE ON public.account FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	asset_metadata_corrections.trg_correction_same_target	CREATE TRIGGER trg_correction_same_target BEFORE INSERT OR UPDATE ON public.asset_metadata_corrections FOR EACH ROW EXECUTE FUNCTION assert_correction_same_target()
+trigger	asset_metadata_corrections.trg_require_active_owner	CREATE TRIGGER trg_require_active_owner BEFORE INSERT ON public.asset_metadata_corrections FOR EACH ROW EXECUTE FUNCTION require_active_owner()
 trigger	assets.trg_assets_immutable	CREATE TRIGGER trg_assets_immutable BEFORE UPDATE ON public.assets FOR EACH ROW EXECUTE FUNCTION assert_asset_immutable()
 trigger	assets.trg_assets_object_key_namespace	CREATE TRIGGER trg_assets_object_key_namespace BEFORE INSERT OR UPDATE OF object_key, user_id ON public.assets FOR EACH ROW EXECUTE FUNCTION assert_object_key_namespace()
+trigger	assets.trg_require_active_owner	CREATE TRIGGER trg_require_active_owner BEFORE INSERT ON public.assets FOR EACH ROW EXECUTE FUNCTION require_active_owner()
 trigger	canvas_projects.canvas_projects_updated_at	CREATE TRIGGER canvas_projects_updated_at BEFORE UPDATE ON public.canvas_projects FOR EACH ROW EXECUTE FUNCTION update_canvas_updated_at()
+trigger	canvas_projects.trg_require_active_owner	CREATE TRIGGER trg_require_active_owner BEFORE INSERT ON public.canvas_projects FOR EACH ROW EXECUTE FUNCTION require_active_owner()
+trigger	documents.trg_require_active_owner	CREATE TRIGGER trg_require_active_owner BEFORE INSERT ON public.documents FOR EACH ROW EXECUTE FUNCTION require_active_owner()
 trigger	documents.update_documents_updated_at	CREATE TRIGGER update_documents_updated_at BEFORE UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	interpretation_revisions.trg_interpretation_same_moment	CREATE TRIGGER trg_interpretation_same_moment BEFORE INSERT OR UPDATE ON public.interpretation_revisions FOR EACH ROW EXECUTE FUNCTION check_interpretation_same_moment()
+trigger	interpretation_revisions.trg_require_active_owner	CREATE TRIGGER trg_require_active_owner BEFORE INSERT ON public.interpretation_revisions FOR EACH ROW EXECUTE FUNCTION require_active_owner()
 trigger	journeys.trg_journeys_updated_at	CREATE TRIGGER trg_journeys_updated_at BEFORE UPDATE ON public.journeys FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+trigger	journeys.trg_require_active_owner	CREATE TRIGGER trg_require_active_owner BEFORE INSERT ON public.journeys FOR EACH ROW EXECUTE FUNCTION require_active_owner()
+trigger	locations.trg_require_active_owner	CREATE TRIGGER trg_require_active_owner BEFORE INSERT ON public.locations FOR EACH ROW EXECUTE FUNCTION require_active_owner()
 trigger	locations.update_locations_updated_at	CREATE TRIGGER update_locations_updated_at BEFORE UPDATE ON public.locations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	moment_assets.trg_moment_asset_same_owner	CREATE TRIGGER trg_moment_asset_same_owner BEFORE INSERT OR UPDATE OF moment_id, asset_id ON public.moment_assets FOR EACH ROW EXECUTE FUNCTION assert_moment_asset_same_owner()
 trigger	moments.trg_moment_journey_same_owner	CREATE TRIGGER trg_moment_journey_same_owner BEFORE INSERT OR UPDATE OF journey_id, user_id ON public.moments FOR EACH ROW EXECUTE FUNCTION assert_moment_journey_same_owner()
 trigger	moments.trg_moments_updated_at	CREATE TRIGGER trg_moments_updated_at BEFORE UPDATE ON public.moments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+trigger	moments.trg_require_active_owner	CREATE TRIGGER trg_require_active_owner BEFORE INSERT ON public.moments FOR EACH ROW EXECUTE FUNCTION require_active_owner()
+trigger	observations.trg_require_active_owner	CREATE TRIGGER trg_require_active_owner BEFORE INSERT ON public.observations FOR EACH ROW EXECUTE FUNCTION require_active_owner()
+trigger	photos.trg_require_active_owner	CREATE TRIGGER trg_require_active_owner BEFORE INSERT ON public.photos FOR EACH ROW EXECUTE FUNCTION require_active_owner()
 trigger	photos.update_photos_updated_at	CREATE TRIGGER update_photos_updated_at BEFORE UPDATE ON public.photos FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+trigger	publications.trg_require_active_owner	CREATE TRIGGER trg_require_active_owner BEFORE INSERT ON public.publications FOR EACH ROW EXECUTE FUNCTION require_active_owner()
 trigger	published_assets.trg_published_assets_object_key_namespace	CREATE TRIGGER trg_published_assets_object_key_namespace BEFORE INSERT OR UPDATE OF object_key, user_id ON public.published_assets FOR EACH ROW EXECUTE FUNCTION assert_object_key_namespace()
+trigger	published_assets.trg_require_active_owner	CREATE TRIGGER trg_require_active_owner BEFORE INSERT ON public.published_assets FOR EACH ROW EXECUTE FUNCTION require_active_owner()
 trigger	session.update_session_updated_at	CREATE TRIGGER update_session_updated_at BEFORE UPDATE ON public.session FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	user.trg_guard_user_delete	CREATE TRIGGER trg_guard_user_delete BEFORE DELETE ON public."user" FOR EACH ROW EXECUTE FUNCTION guard_user_delete()
 trigger	user.update_user_updated_at	CREATE TRIGGER update_user_updated_at BEFORE UPDATE ON public."user" FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
@@ -581,5 +594,7 @@ trigger	verification.update_verification_updated_at	CREATE TRIGGER update_verifi
 trigger	work_blocks.trg_work_block_same_owner	CREATE TRIGGER trg_work_block_same_owner BEFORE INSERT OR UPDATE OF moment_id, work_id ON public.work_blocks FOR EACH ROW EXECUTE FUNCTION assert_work_block_same_owner()
 trigger	work_blocks.trg_work_blocks_updated_at	CREATE TRIGGER trg_work_blocks_updated_at BEFORE UPDATE ON public.work_blocks FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	work_presentations.trg_work_presentations_updated_at	CREATE TRIGGER trg_work_presentations_updated_at BEFORE UPDATE ON public.work_presentations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+trigger	work_versions.trg_require_active_owner	CREATE TRIGGER trg_require_active_owner BEFORE INSERT ON public.work_versions FOR EACH ROW EXECUTE FUNCTION require_active_owner()
 trigger	work_versions.trg_version_renderer_matches	CREATE TRIGGER trg_version_renderer_matches BEFORE INSERT OR UPDATE OF renderer_type, snapshot ON public.work_versions FOR EACH ROW EXECUTE FUNCTION assert_version_renderer_matches()
+trigger	works.trg_require_active_owner	CREATE TRIGGER trg_require_active_owner BEFORE INSERT ON public.works FOR EACH ROW EXECUTE FUNCTION require_active_owner()
 trigger	works.trg_works_updated_at	CREATE TRIGGER trg_works_updated_at BEFORE UPDATE ON public.works FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
