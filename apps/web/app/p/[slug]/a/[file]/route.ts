@@ -21,6 +21,24 @@
  *
  * publications + work_versions。不查 published_assets，
  * 也不查任何实时表 —— 派生副本的信息就在快照里。
+ *
+ * ## ⚠️ 「内容不可变」不等于「响应可以永久缓存」
+ *
+ * 这两件事以前被混为一谈，响应头写的是
+ * `public, max-age=31536000, immutable`。那是错的：
+ *
+ *   对象内容不可变   同一个 hash 永远对应同一份字节 —— 这是真的
+ *   响应永久有效     浏览器 / CDN 拿到之后可以长期不再询问服务器 —— 这是假的
+ *
+ * 因为**可访问性是会变的**。作者撤回之后 origin 确实返回 404，
+ * 但已经缓存过的客户端**根本不会来问**，于是撤回在那些客户端上没有发生。
+ * E2E 只覆盖了 origin 的访问控制，覆盖不到这一层。
+ *
+ * 所以改成 `no-cache, must-revalidate` + `ETag`：
+ * 字节仍然可以被缓存（省流量），但每次使用前必须回来验证一次。
+ * Publication 还有效就回 304，撤回了就回 404。
+ *
+ * 等将来有了能主动 purge 的 CDN，才谈得上长期缓存。
  */
 
 import { NextResponse } from 'next/server';
@@ -33,8 +51,22 @@ export const dynamic = 'force-dynamic';
 
 const notFound = () => new NextResponse('Not found', { status: 404 });
 
+/**
+ * 可缓存但必须重新验证。
+ *
+ * `no-cache` 的实际含义是「可以存，但用之前必须回来问」——
+ * 不是「不要缓存」（那是 `no-store`）。这正是我们要的：
+ * 省下重复传输，同时让撤回在下一次访问就生效。
+ */
+function revalidatableHeaders(etag: string): Record<string, string> {
+  return {
+    'Cache-Control': 'public, no-cache, must-revalidate',
+    ETag: etag,
+  };
+}
+
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ slug: string; file: string }> }
 ) {
   const { slug, file } = await params;
@@ -62,14 +94,21 @@ export async function GET(
     }
     if (!found) return notFound();
 
+    // 内容寻址 ⇒ hash 就是最强的 ETag：字节变了 hash 必然变。
+    const etag = `"${found.derivedHash}"`;
+
+    // 走到这里说明 Publication **此刻**可访问。客户端手上的副本仍然有效，
+    // 不用重传字节 —— 但它必须每次都来问一次，这正是撤回能立刻生效的原因。
+    if (request.headers.get('if-none-match') === etag) {
+      return new NextResponse(null, { status: 304, headers: revalidatableHeaders(etag) });
+    }
+
     const bytes = await getObjectStorage().get(found.objectKey);
 
     return new NextResponse(Buffer.from(bytes), {
       headers: {
+        ...revalidatableHeaders(etag),
         'Content-Type': found.mimeType,
-        // 内容寻址 ⇒ 这个 URL 的字节永不改变，可以放心 immutable。
-        // public 是安全的：这是剥离了元数据的派生副本，不是原图。
-        'Cache-Control': 'public, max-age=31536000, immutable',
         'X-Content-Type-Options': 'nosniff',
       },
     });

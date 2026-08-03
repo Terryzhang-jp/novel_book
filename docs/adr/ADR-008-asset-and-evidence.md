@@ -181,8 +181,34 @@ GET /p/{slug}/a/{derivedHash}.webp
   → 按 slug 查 Publication
   → 不可见（不存在 / private 非本人 / 已撤回）→ 404
   → 在该版本的 snapshot 里核对 derivedHash 确实属于这篇
-  → 流式返回，Cache-Control: immutable
+  → 流式返回，Cache-Control: public, no-cache, must-revalidate + ETag
 ```
+
+##### ⚠️ 修正（2026-08-03）：内容不可变 ≠ 响应可永久缓存
+
+这一条最初写的是 `Cache-Control: immutable`，**那是错的**，
+因为它把两件不同的事混为一谈：
+
+| | 是否成立 |
+|---|---|
+| 对象内容不可变（同 hash 同字节） | ✅ 真 |
+| 响应永久有效（客户端可长期不再询问） | ❌ 假 —— **可访问性会变** |
+
+作者撤回之后 origin 确实返回 404，但已经缓存过的浏览器或 CDN
+**根本不会来问**，于是撤回在那些客户端上没有发生 —— 而页面看起来完全正常。
+origin 侧的 E2E 覆盖不到这一层。
+
+正确做法是 `no-cache, must-revalidate` + `ETag: "<derivedHash>"`：
+字节仍可缓存（省传输），但每次使用前必须回来验证。
+有效 → 304；撤回 → 404。
+
+`no-cache` 的实际含义是「可以存，但用之前必须回来问」，
+不是「不要缓存」（那是 `no-store`）。
+
+长期 `immutable` 只有在**有能力主动 purge 的 CDN** 之后才谈得上。
+
+同样的修正适用于原图路由：原来的 `private, max-age=3600` 意味着
+删掉一份素材之后，作者自己的浏览器还能再看它一小时。
 
 三个后果，每个都是刻意的：
 
@@ -269,6 +295,9 @@ published_assets(work_version_id, source_asset_id?, object_key, sha256, …)
 - [ ] 绕过用例层直接 INSERT 跨用户 `moment_assets` → 数据库拒绝
 - [ ] 原始 Asset 的 objectKey 匿名不可访问，且没有任何静态路由直达
 - [ ] 发布后匿名可访问派生副本；**撤回后同一 URL 立即 404**
+- [ ] 响应头不含 `immutable`、不含正数 `max-age`；含 `no-cache` 和 `ETag`
+- [ ] 带 `If-None-Match` 请求：Publication 有效 → 304，撤回后 → 404
+- [ ] **已经缓存过该图的同一个浏览器上下文**，在撤回后再访问得到 404
 - [ ] 派生副本的字节里不含 EXIF / GPS
 - [ ] 删除 Asset → 引用它的 Moment 显示占位；已发布页面**逐字不变**
 - [ ] 「从 Moment 移除」不删 Asset

@@ -24,13 +24,33 @@ import { getStorageKit } from '@/lib/core/storage';
 
 export const dynamic = 'force-dynamic';
 
+/** private：原图绝不能进任何共享缓存或 CDN。no-cache：每次都要重新鉴权。 */
+function privateHeaders(etag: string): Record<string, string> {
+  return {
+    'Cache-Control': 'private, no-cache, must-revalidate',
+    ETag: etag,
+  };
+}
+
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   try {
     const actor = await getActor();
+    const asset = await getCore().assets.findById(actor, id);
+    if (!asset) return new NextResponse('Not found', { status: 404 });
+
+    // 和发布资源同一个道理：Asset 的**字节**不可变，但它的**可访问性**会变
+    // （软删除、账号状态）。所以是 no-cache + ETag，不是 max-age。
+    // 之前写的 `private, max-age=3600` 意味着删掉一份素材之后，
+    // 作者自己的浏览器还能再看它一小时。
+    const etag = `"${asset.sha256}"`;
+    if (request.headers.get('if-none-match') === etag) {
+      return new NextResponse(null, { status: 304, headers: privateHeaders(etag) });
+    }
+
     const { bytes, mimeType } = await readAssetBytes(
       { core: getCore(), storage: getStorageKit() },
       actor,
@@ -39,10 +59,8 @@ export async function GET(
 
     return new NextResponse(Buffer.from(bytes), {
       headers: {
+        ...privateHeaders(etag),
         'Content-Type': mimeType,
-        // private：这是原图，绝不能进任何共享缓存或 CDN。
-        // 内容不可变（Asset 是不可变的），所以浏览器缓存一小时是安全的。
-        'Cache-Control': 'private, max-age=3600',
         // 即使 MIME 判断出错也不让浏览器去猜
         'X-Content-Type-Options': 'nosniff',
         'Content-Disposition': 'inline',

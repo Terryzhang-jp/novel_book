@@ -167,6 +167,31 @@ test.describe('Phase 2A 纵向链路', () => {
     // 匿名能取到它（这是安全副本，不是原图）
     expect((await first.page.request.get(pubImgSrc)).status()).toBe(200);
 
+    // ⭐ 缓存语义：用**同一个浏览器上下文**先把图片装进 HTTP 缓存。
+    // 撤回之后要再用这个上下文访问一次 —— 只有它才能证明
+    // 「客户端不会拿着旧缓存继续看」。page.request 走的是独立的
+    // API context，不经过浏览器缓存，证明不了这件事。
+    const cacheProbe = await browser.newContext();
+    const cachePage = await cacheProbe.newPage();
+    const firstHit = await cachePage.goto(pubImgSrc);
+    expect(firstHit?.status()).toBe(200);
+
+    const cc = firstHit!.headers()['cache-control'] ?? '';
+    const etag = firstHit!.headers().etag ?? '';
+    // immutable / max-age 会让撤回在已缓存的客户端上根本不发生
+    expect(cc).not.toContain('immutable');
+    expect(cc).not.toMatch(/max-age=[1-9]/);
+    expect(cc).toContain('no-cache');
+    expect(cc).toContain('must-revalidate');
+    // ETag 就是派生内容的 hash —— 字节变了它必然变
+    expect(etag).toBe(`"${pubImgSrc.match(/([0-9a-f]{64})/)![1]}"`);
+
+    // 带 If-None-Match 回来验证 → 304，不重传字节
+    const revalidated = await cachePage.request.get(pubImgSrc, {
+      headers: { 'If-None-Match': etag },
+    });
+    expect(revalidated.status()).toBe(304);
+
     const firstRender = await first.page.locator('article').innerText();
     await first.context.close();
 
@@ -220,6 +245,17 @@ test.describe('Phase 2A 纵向链路', () => {
     // 要么留着（撤回是假的）。走路由则撤回当下就 404，字节还在。
     expect((await fourth.page.request.get(pubImgSrc)).status()).toBe(404);
     await fourth.context.close();
+
+    // ⭐⭐ 最关键的一条：**已经缓存过这张图的那个浏览器上下文**再访问一次。
+    // 如果响应头写的是 immutable / max-age，它根本不会来问服务器，
+    // 于是撤回在这个客户端上没有发生 —— 而它看起来完全正常。
+    const afterWithdraw = await cachePage.goto(pubImgSrc);
+    expect(afterWithdraw?.status()).toBe(404);
+    // 带着旧 ETag 回来也必须是 404，不能是 304
+    expect(
+      (await cachePage.request.get(pubImgSrc, { headers: { 'If-None-Match': etag } })).status()
+    ).toBe(404);
+    await cacheProbe.close();
   });
 
   test('未登录访问 /studio 会被挡在门外，但发布页不需要登录', async ({ page, browser }) => {

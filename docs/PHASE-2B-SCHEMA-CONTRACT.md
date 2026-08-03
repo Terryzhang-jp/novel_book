@@ -221,11 +221,14 @@ GET /p/{slug}/a/{derivedHash}.{ext}
 - **R-1** 先按 slug 判定 Publication 可见性（不存在 / private 非本人 / 已撤回 → **404**）。
 - **R-2** 再在该版本 snapshot 里核对 `derivedHash` 确实属于这篇，
   否则 404 —— 防止拿一篇的 slug 去取另一篇的图。
-- **R-3** 命中后流式返回，`Cache-Control: public, max-age=31536000, immutable`
-  （内容寻址，字节永不变）。
+- **R-3** 命中后流式返回，`Cache-Control: public, no-cache, must-revalidate`
+  + `ETag: "<derivedHash>"`，并支持 `If-None-Match` → 304。
+  **不能用 `immutable` 或正数 `max-age`** —— 字节确实不变，但**可访问性会变**，
+  已缓存的客户端不会来问，撤回就在那些客户端上没有发生（ADR-008 A8 修正）。
 - **R-4** URL 里**不允许出现 userId 或 objectKey**。
 - **R-5** 原始 Asset 的读取走另一条路由，必须先过所有权检查，
-  且 `Cache-Control: private`。
+  且 `Cache-Control: private, no-cache, must-revalidate` + `ETag: "<sha256>"`。
+  同 R-3：`max-age` 会让「删掉的素材还能再看一小时」。
 
 ---
 
