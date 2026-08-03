@@ -41,11 +41,13 @@ import {
   requestAccountDeletion,
   reviseInterpretation,
   runDueDeletions,
+  RecordingAccountLifecycleNotifier,
   systemClock,
   uploadAsset,
   viewPublication,
   type AccountDeps,
   type AssetDeps,
+  type Clock,
   type FinalizeDeps,
   type PublishDeps,
 } from '@tc/application';
@@ -75,6 +77,21 @@ const OPS: Actor = systemActor('集成测试：模拟运维操作');
 
 let seq = 0;
 const uniq = (p: string) => `${p}-${Date.now().toString(36)}-${++seq}`;
+
+/** 记录型通知器。测试可以断言「通知确实产生了」而不用真的发信。 */
+let notifier: RecordingAccountLifecycleNotifier;
+
+/** 一处构造，避免每条测试各写一遍依赖装配 */
+function accountDeps(clock: Clock = systemClock): FinalizeDeps {
+  return {
+    core,
+    clock,
+    tokens: tokenIssuer,
+    notifier,
+    appBaseUrl: 'https://example.test',
+    storage: getObjectStorage(),
+  };
+}
 
 /**
  * 每条测试用自己的一次性账号。
@@ -161,6 +178,7 @@ async function contentCounts(userId: string) {
 
 beforeAll(() => {
   core = new PostgresUnitOfWork(getPool() as unknown as Pool);
+  notifier = new RecordingAccountLifecycleNotifier();
   assetDeps = { core, storage: getStorageKit(), probe: getMediaProbe() };
   publishDeps = { core, storage: getStorageKit(), deriver: getImageDeriver(), audioDeriver: getAudioDeriver() };
 });
@@ -206,7 +224,7 @@ describe('灵魂 2：停用是「看不见」，不是「没有了」', () => {
     expect((await viewPublication(core, ANONYMOUS, slug)).status).toBe('ok');
 
     const result = await disableAccount(
-      { core, clock: systemClock, tokens: tokenIssuer },
+      accountDeps(),
       OPS,
       userId,
       '集成测试：违规内容待核实'
@@ -241,7 +259,7 @@ describe('灵魂 2：停用是「看不见」，不是「没有了」', () => {
     const { actor, userId } = await makeUser('reactivate');
     const { slug } = await seedContent(actor, '恢复之后');
 
-    const deps: AccountDeps = { core, clock: systemClock, tokens: tokenIssuer };
+    const deps = accountDeps();
     await disableAccount(deps, OPS, userId, '集成测试');
     expect((await viewPublication(core, ANONYMOUS, slug)).status).toBe('not_found');
 
@@ -255,7 +273,7 @@ describe('灵魂 2：停用是「看不见」，不是「没有了」', () => {
 
   it('停用不是产品功能：普通用户自己调不动', async () => {
     const { actor, userId } = await makeUser('selfdisable');
-    const deps: AccountDeps = { core, clock: systemClock, tokens: tokenIssuer };
+    const deps = accountDeps();
     await expect(disableAccount(deps, actor, userId, '我自己来')).rejects.toThrow(ForbiddenError);
   });
 });
@@ -268,7 +286,7 @@ describe('灵魂 3：申请删除当下就生效', () => {
     await makeSession(userId);
 
     const clock = advanceableClock(T0);
-    const deps: AccountDeps = { core, clock, tokens: tokenIssuer };
+    const deps = accountDeps(clock);
 
     expect((await viewPublication(core, ANONYMOUS, slug)).status).toBe('ok');
 
@@ -299,7 +317,7 @@ describe('灵魂 3：申请删除当下就生效', () => {
     const { actor, userId } = await makeUser('tokenhash');
     const clock = advanceableClock(T0);
     const request = await requestAccountDeletion(
-      { core, clock, tokens: tokenIssuer },
+      accountDeps(clock),
       actor,
       {}
     );
@@ -315,7 +333,7 @@ describe('灵魂 3：申请删除当下就生效', () => {
   it('重复申请不会把冷静期悄悄重置', async () => {
     const { actor } = await makeUser('doublerequest');
     const clock = advanceableClock(T0);
-    const deps: AccountDeps = { core, clock, tokens: tokenIssuer };
+    const deps = accountDeps(clock);
 
     await requestAccountDeletion(deps, actor, {});
     clock.advance(5 * DAY_MS);
@@ -338,7 +356,7 @@ describe('灵魂 4：30 天内撤销要能完全恢复', () => {
       viewBefore.status === 'ok' ? JSON.stringify(viewBefore.page.version.snapshot) : '';
 
     const clock = advanceableClock(T0);
-    const deps: AccountDeps = { core, clock, tokens: tokenIssuer };
+    const deps = accountDeps(clock);
     const request = await requestAccountDeletion(deps, actor, {});
     expect((await viewPublication(core, ANONYMOUS, slug)).status).toBe('not_found');
 
@@ -370,7 +388,7 @@ describe('灵魂 4：30 天内撤销要能完全恢复', () => {
     const alice = await makeUser('tokenowner');
     const bob = await makeUser('tokenother');
     const clock = advanceableClock(T0);
-    const deps: AccountDeps = { core, clock, tokens: tokenIssuer };
+    const deps = accountDeps(clock);
 
     const aliceRequest = await requestAccountDeletion(deps, alice.actor, {});
     await requestAccountDeletion(deps, bob.actor, {});
@@ -384,7 +402,7 @@ describe('灵魂 4：30 天内撤销要能完全恢复', () => {
 
   it('错误的令牌只会得到「找不到」，不会泄露账号是否存在', async () => {
     const clock = advanceableClock(T0);
-    const deps: AccountDeps = { core, clock, tokens: tokenIssuer };
+    const deps = accountDeps(clock);
     await expect(cancelAccountDeletion(deps, ANONYMOUS, 'not-a-real-token')).rejects.toThrow(
       NotFoundError
     );
@@ -393,7 +411,7 @@ describe('灵魂 4：30 天内撤销要能完全恢复', () => {
   it('用过一次的令牌不能再用第二次', async () => {
     const { actor } = await makeUser('reuse');
     const clock = advanceableClock(T0);
-    const deps: AccountDeps = { core, clock, tokens: tokenIssuer };
+    const deps = accountDeps(clock);
 
     const request = await requestAccountDeletion(deps, actor, {});
     await cancelAccountDeletion(deps, ANONYMOUS, request.cancelToken);
@@ -407,7 +425,7 @@ describe('灵魂 4：30 天内撤销要能完全恢复', () => {
   it('过了 30 天就不能再撤销 —— 否则「30 天」没有终点', async () => {
     const { actor } = await makeUser('toolate');
     const clock = advanceableClock(T0);
-    const deps: AccountDeps = { core, clock, tokens: tokenIssuer };
+    const deps = accountDeps(clock);
 
     const request = await requestAccountDeletion(deps, actor, {});
     clock.advance(DELETION_GRACE_DAYS * DAY_MS);
@@ -422,12 +440,7 @@ describe('灵魂 5：冷静期是硬的', () => {
   it('差 1 毫秒都不能执行永久删除', async () => {
     const { actor, userId } = await makeUser('early');
     const clock = advanceableClock(T0);
-    const deps: FinalizeDeps = {
-      core,
-      clock,
-      tokens: tokenIssuer,
-      storage: getObjectStorage(),
-    };
+    const deps: FinalizeDeps = accountDeps(clock);
 
     await requestAccountDeletion(deps, actor, {});
     clock.advance(DELETION_GRACE_DAYS * DAY_MS - 1);
@@ -446,23 +459,13 @@ describe('灵魂 5：冷静期是硬的', () => {
 
   it('active 账号直接调永久删除也会被拒绝', async () => {
     const { userId } = await makeUser('activefinalize');
-    const deps: FinalizeDeps = {
-      core,
-      clock: advanceableClock(T0),
-      tokens: tokenIssuer,
-      storage: getObjectStorage(),
-    };
+    const deps = accountDeps(advanceableClock(T0));
     await expect(finalizeAccountDeletion(deps, OPS, userId)).rejects.toThrow(/deletion_requested/);
   });
 
   it('永久删除不是产品功能：普通用户调不动', async () => {
     const { actor, userId } = await makeUser('selffinalize');
-    const deps: FinalizeDeps = {
-      core,
-      clock: advanceableClock(T0),
-      tokens: tokenIssuer,
-      storage: getObjectStorage(),
-    };
+    const deps = accountDeps(advanceableClock(T0));
     await expect(finalizeAccountDeletion(deps, actor, userId)).rejects.toThrow(ForbiddenError);
   });
 });
@@ -485,7 +488,7 @@ describe('灵魂 6：删了就是删了', () => {
     for (const key of derivedKeys) expect(await storage.exists(key)).toBe(true);
 
     const clock = advanceableClock(T0);
-    const deps: FinalizeDeps = { core, clock, tokens: tokenIssuer, storage };
+    const deps: FinalizeDeps = { ...accountDeps(clock), storage };
 
     await requestAccountDeletion(deps, actor, {});
     clock.advance(DELETION_GRACE_DAYS * DAY_MS);
@@ -527,12 +530,7 @@ describe('灵魂 6：删了就是删了', () => {
     const late = await makeUser('due-no');
 
     const clock = advanceableClock(T0);
-    const deps: FinalizeDeps = {
-      core,
-      clock,
-      tokens: tokenIssuer,
-      storage: getObjectStorage(),
-    };
+    const deps: FinalizeDeps = accountDeps(clock);
 
     await requestAccountDeletion(deps, early.actor, {});
     clock.advance(10 * DAY_MS);
@@ -560,12 +558,7 @@ describe('灵魂 6：删了就是删了', () => {
   it('已删除账号的 userId 查不到状态 —— 调用方据此拒绝一切访问', async () => {
     const { actor, userId } = await makeUser('gone');
     const clock = advanceableClock(T0);
-    const deps: FinalizeDeps = {
-      core,
-      clock,
-      tokens: tokenIssuer,
-      storage: getObjectStorage(),
-    };
+    const deps: FinalizeDeps = accountDeps(clock);
     await requestAccountDeletion(deps, actor, {});
     clock.advance(DELETION_GRACE_DAYS * DAY_MS);
     await finalizeAccountDeletion(deps, OPS, userId);
@@ -583,12 +576,7 @@ describe('灵魂 7：ADR-005 的「删 Work 保留 Publication」在删账号时
     expect((await viewPublication(core, ANONYMOUS, slug)).status).toBe('ok');
 
     const clock = advanceableClock(T0);
-    const deps: FinalizeDeps = {
-      core,
-      clock,
-      tokens: tokenIssuer,
-      storage: getObjectStorage(),
-    };
+    const deps: FinalizeDeps = accountDeps(clock);
     await requestAccountDeletion(deps, actor, {});
     clock.advance(DELETION_GRACE_DAYS * DAY_MS);
     await finalizeAccountDeletion(deps, OPS, userId);
@@ -614,12 +602,7 @@ describe('灵魂 8：删除是幂等的', () => {
     await seedContent(actor, '幂等删除');
 
     const clock = advanceableClock(T0);
-    const deps: FinalizeDeps = {
-      core,
-      clock,
-      tokens: tokenIssuer,
-      storage: getObjectStorage(),
-    };
+    const deps: FinalizeDeps = accountDeps(clock);
     await requestAccountDeletion(deps, actor, {});
     clock.advance(DELETION_GRACE_DAYS * DAY_MS);
 
@@ -644,12 +627,7 @@ describe('灵魂 8：删除是幂等的', () => {
     );
 
     const clock = advanceableClock(T0);
-    const deps: FinalizeDeps = {
-      core,
-      clock,
-      tokens: tokenIssuer,
-      storage: getObjectStorage(),
-    };
+    const deps: FinalizeDeps = accountDeps(clock);
     for (const u of users) await requestAccountDeletion(deps, u.actor, {});
     clock.advance(DELETION_GRACE_DAYS * DAY_MS);
 
@@ -697,7 +675,7 @@ describe('灵魂 9：字节删不掉是可重试的工作', () => {
       },
     } as unknown as FinalizeDeps['storage'];
 
-    const deps: FinalizeDeps = { core, clock, tokens: tokenIssuer, storage: brokenStorage };
+    const deps: FinalizeDeps = { ...accountDeps(clock), storage: brokenStorage };
     await requestAccountDeletion(deps, actor, {});
     clock.advance(DELETION_GRACE_DAYS * DAY_MS);
 
@@ -721,7 +699,7 @@ describe('灵魂 9：字节删不掉是可重试的工作', () => {
     expect(await storage.exists(asset.objectKey)).toBe(true);
 
     // 退避：第一次失败后要等 60 秒才会被重新认领
-    const healthy: FinalizeDeps = { core, clock, tokens: tokenIssuer, storage };
+    const healthy: FinalizeDeps = { ...accountDeps(clock), storage };
     expect((await processStorageCleanup(healthy, OPS, {})).claimed).toBe(0);
 
     clock.advance(61_000);
@@ -846,7 +824,7 @@ describe('灵魂 10：停用之后，连后台任务也不能再写内容', () =
 
   it('disabled 账号：每一类内容都被数据库拒绝', async () => {
     const { actor, userId } = await makeUser('disabledwrite');
-    await disableAccount({ core, clock: systemClock, tokens: tokenIssuer }, OPS, userId, '集成测试');
+    await disableAccount(accountDeps(), OPS, userId, '集成测试');
 
     for (const c of CONTENT_INSERTS) {
       const [text, params] = c.sql(userId);
@@ -860,7 +838,7 @@ describe('灵魂 10：停用之后，连后台任务也不能再写内容', () =
   it('deletion_requested 账号：同样一条都写不进去', async () => {
     const { actor, userId } = await makeUser('pendingwrite');
     await requestAccountDeletion(
-      { core, clock: advanceableClock(T0), tokens: tokenIssuer },
+      accountDeps(advanceableClock(T0)),
       actor,
       {}
     );
@@ -875,7 +853,7 @@ describe('灵魂 10：停用之后，连后台任务也不能再写内容', () =
 
   it('用例层拿到的是 ForbiddenError，不是一串 Postgres 报错', async () => {
     const { actor, userId } = await makeUser('usecaseblocked');
-    await disableAccount({ core, clock: systemClock, tokens: tokenIssuer }, OPS, userId, '集成测试');
+    await disableAccount(accountDeps(), OPS, userId, '集成测试');
 
     // 这条模拟的正是那个场景：用户已经被停用，但一个早就排好队的任务
     // 现在才跑到写入这一步。它没有 session，前两道拦截都碰不到它。
@@ -886,7 +864,7 @@ describe('灵魂 10：停用之后，连后台任务也不能再写内容', () =
 
   it('恢复之后又能正常写了', async () => {
     const { actor, userId } = await makeUser('reenable');
-    const deps: AccountDeps = { core, clock: systemClock, tokens: tokenIssuer };
+    const deps = accountDeps();
     await disableAccount(deps, OPS, userId, '集成测试');
     await reactivateAccount(deps, OPS, userId, '集成测试：恢复');
 
@@ -895,5 +873,108 @@ describe('灵魂 10：停用之后，连后台任务也不能再写内容', () =
       now: NOW,
     });
     expect(moment.id).toBeTruthy();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// Phase 3 前置：外部副作用必须在数据库之前就被拦住
+// ════════════════════════════════════════════════════════════════════════════
+
+describe('灵魂 12：拒绝发生在写字节之前，不是之后', () => {
+  it('停用账号上传素材 —— 对象存储里不留任何字节', async () => {
+    const { actor, userId } = await makeUser('nobytes');
+    await disableAccount(accountDeps(), OPS, userId, '集成测试');
+
+    const storage = getObjectStorage();
+    const bytes = await makeJpeg(77);
+    // 先算出如果真的写进去会是哪个 key
+    const wouldBeKey = getStorageKit().buildObjectKey(userId, bytes, 'image/jpeg');
+
+    await expect(
+      uploadAsset(assetDeps, actor, { bytes, declaredMimeType: 'image/jpeg' })
+    ).rejects.toThrow(ForbiddenError);
+
+    // ⭐ 这是这条测试的全部意义。
+    //
+    // 只靠数据库触发器的话，这里会是 true：探测跑完了、字节落盘了，
+    // 然后 INSERT 才被拒 —— 磁盘上留下一个任何表都查不到的孤儿对象。
+    // 对一个刚申请删除账号的用户来说，这正好是最不该发生的事。
+    expect(await storage.exists(wouldBeKey)).toBe(false);
+
+    // 数据库里当然也没有
+    expect(await sql('SELECT 1 FROM assets WHERE user_id = $1', [userId])).toHaveLength(0);
+  });
+
+  it('待删除账号发布作品 —— 不会产生派生副本', async () => {
+    const { actor, userId } = await makeUser('nopublish');
+    const { work } = await seedContent(actor, '停用前发布过');
+    const before = (
+      await sql<{ n: string }>(
+        'SELECT count(*)::text AS n FROM published_assets WHERE user_id = $1',
+        [userId]
+      )
+    )[0]!.n;
+
+    await requestAccountDeletion(accountDeps(advanceableClock(T0)), actor, {});
+
+    // 发布会转码（sharp / ffmpeg）并写派生副本的字节 —— 全都在 INSERT 之前
+    await expect(
+      publishWork(publishDeps, actor, { workId: work.id, now: NOW })
+    ).rejects.toThrow(ForbiddenError);
+
+    const after = (
+      await sql<{ n: string }>(
+        'SELECT count(*)::text AS n FROM published_assets WHERE user_id = $1',
+        [userId]
+      )
+    )[0]!.n;
+    expect(after).toBe(before);
+  });
+});
+
+describe('灵魂 13：状态变更会产生通知（当前只记录不发送）', () => {
+  it('申请删除产生一条带撤销地址的通知，撤销后再产生一条', async () => {
+    const { actor } = await makeUser('notify');
+    notifier.clear();
+
+    const clock = advanceableClock(T0);
+    const deps = accountDeps(clock);
+    const request = await requestAccountDeletion(deps, actor, {});
+
+    const first = notifier.recorded();
+    expect(first).toHaveLength(1);
+    expect(first[0]!.kind).toBe('deletionRequested');
+    // 撤销地址必须是能直接点开的完整地址，而不是一个裸令牌
+    const notice = first[0]!.notice as { cancellationUrl: string; expiresAt: Date };
+    expect(notice.cancellationUrl).toContain('https://example.test/account/restore?token=');
+    expect(notice.cancellationUrl).toContain(encodeURIComponent(request.cancelToken));
+    expect(notice.expiresAt.getTime()).toBe(request.effectiveAt.getTime());
+
+    await cancelAccountDeletion(deps, ANONYMOUS, request.cancelToken);
+    expect(notifier.recorded().map((n) => n.kind)).toEqual([
+      'deletionRequested',
+      'deletionCancelled',
+    ]);
+  });
+
+  it('通知发送失败不会让状态变更回滚', async () => {
+    const { actor, userId } = await makeUser('notifyfail');
+    const broken = {
+      deletionRequested: async () => {
+        throw new Error('模拟：邮件服务不可用');
+      },
+      deletionCancelled: async () => {},
+      deletionApproaching: async () => {},
+      accountDisabled: async () => {},
+    };
+
+    // 发信失败不能把「我要删除这个账号」变成「什么都没发生」——
+    // 状态变更是用户的意图，通知只是告知。
+    await requestAccountDeletion(
+      { ...accountDeps(advanceableClock(T0)), notifier: broken },
+      actor,
+      {}
+    );
+    expect(await core.accounts.findStatus(OPS, userId)).toBe('deletion_requested');
   });
 });

@@ -40,6 +40,7 @@ import {
   fixedClock,
   reactivateAccount,
   processStorageCleanup,
+  RecordingAccountLifecycleNotifier,
   runDueDeletions,
   systemClock,
   type Clock,
@@ -124,6 +125,10 @@ async function main(): Promise<void> {
         hash: () => fail('运维路径不应该校验撤销令牌'),
       },
       storage: getObjectStorage(),
+      // 运维路径也走同一套通知接线。当前实现只记录不发送，
+      // 但把它接上意味着将来换真实 adapter 时运维动作也自动有通知。
+      notifier: new RecordingAccountLifecycleNotifier((m) => console.log(`  ${m}`)),
+      appBaseUrl: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
     };
 
     if (command === 'run-due') {

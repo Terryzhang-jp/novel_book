@@ -43,6 +43,7 @@ import type {
 import type { AudioDeriver, ImageDeriver, StorageKit } from '../ports/media';
 import type { CoreRepositories, UnitOfWork } from '../ports/unit-of-work';
 import { buildWorkSnapshot } from '../snapshot';
+import { requireActiveOwner } from './guards';
 import { loadWorkDetail } from './work';
 
 /**
@@ -114,6 +115,10 @@ export async function publishWork(
   const visibility: Visibility = command.visibility ?? 'unlisted';
 
   return deps.core.transaction(async (r) => {
+    // ⭐ 在 deriveEvidence 之前。发布会转码（ffmpeg / sharp）并写入
+    // 派生副本的字节 —— 那些都发生在数据库 INSERT 之前。
+    await requireActiveOwner(r, actor);
+
     const detail = await loadWorkDetail(r, actor, command.workId);
 
     // Presentation 是独立实体（ADR-005 修正）。没有就建一份默认的 ——

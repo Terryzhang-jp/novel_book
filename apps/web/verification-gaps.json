@@ -147,19 +147,20 @@
       "severity": "medium",
       "area": "app/account/deletion-requested/page.tsx · use-cases/account.ts",
       "impact": "申请删除后 session 全部失效且无法再登录（ADR-007），所以撤销只能靠那串一次性令牌。用户没保存就自己撤销不了 —— 30 天后账号被永久删除。",
-      "mitigation": "运维路径可以恢复：`pnpm account restore <email> --reason ...`，状态机允许 deletion_requested → active，且会进审计表。页面上用红框明确写了「只显示这一次」。",
-      "closeWhen": "接入邮件发送后，申请删除时把撤销链接同时发到注册邮箱；那之后这个页面上的令牌变成便利项而不是唯一凭据。",
+      "mitigation": "运维路径可以恢复：`pnpm account restore <email> --reason ...`，状态机允许 deletion_requested → active，且会进审计表。页面上用红框明确写了「只显示这一次」。 AccountLifecycleNotifier 端口与记录型 adapter 已就位（Commit 15E）：申请/撤销/停用都会产生一条通知，接线有集成测试覆盖，换真实 adapter 时不需要改任何用例。",
+      "closeWhen": "接入真实邮件 adapter，并补齐：发送失败处理、令牌单次使用（已做）、重新申请使旧令牌失效（已做）、撤销接口限流。⚠️ 可靠投递（outbox 重试）之前必须先回答「明文令牌怎么安全暂存」—— 当前端口约定实现不得持久化 cancellationUrl。",
       "owner": "product"
     },
     {
       "id": "legacy-storage-not-cleaned-on-deletion",
-      "title": "永久删除清不掉遗留系统的文件",
-      "severity": "medium",
+      "title": "遗留 Supabase Storage 的可访问性已实测：历史实例已不存在",
+      "severity": "low",
       "area": "use-cases/account.ts · finalizeAccountDeletion",
-      "impact": "删除会清空新核心的对象存储（users/{userId}/ 前缀下的原图与发布派生副本，逐个删 + 扫前缀兜底）。但遗留的 photos / 文档图片走的是 Supabase Storage 和 public/images/，那些字节不在清理范围里 —— 数据库行被 CASCADE 删了，文件还在。",
-      "mitigation": "数据库行没了之后，遗留应用的所有读取路径都查不到这些文件（URL 是从 photos 行里取的）。所以这是**残留问题，不是公开泄露**。清理失败会写 storage_cleanup_incomplete 审计。",
-      "closeWhen": "遗留页面按 Strangler 计划迁到新核心后自然消失；在那之前若要提前关闭，需要在 finalizeAccountDeletion 里加一个遗留存储的清理器（先收集 photos.file_url，再删 Supabase 对象）。",
-      "owner": "engineering"
+      "impact": "原来的记录说「数据库行删了就取不到，所以是残留不是泄露」—— **那个推理是错的**。旧 photos bucket 是 public，is_public 只控制应用要不要显示，不控制对象能否被直接访问。只要 URL 曾经出现在浏览器历史、日志或别人手里，删行之后仍可能返回 200。",
+      "mitigation": "已实测（scripts/verify-legacy-storage.ts，可重复运行）：目标实例 nncrmixivirswjmkprpf.supabase.co 的 DNS 解析失败（ENOTFOUND），历史平台已不存在，**没有可执行的清理对象**。⚠️ 这不等于「已经清理干净」，只是没有东西可清；也因此无法验证当时 bucket 的实际可见性。",
+      "closeWhen": "这条**不能被静默关闭**。若将来重新配置任何遗留 Supabase 实例，必须先跑 pnpm verify:legacy-storage：结论是 public-leak 就把遗留对象纳入 storage_cleanup_jobs（reason=orphan），是 private 才降级为存储成本问题。",
+      "owner": "engineering",
+      "verifiedAt": "2026-08-03"
     },
     {
       "id": "audio-single-channel-loses-space",

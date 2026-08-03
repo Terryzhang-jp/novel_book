@@ -117,6 +117,33 @@ export function canServePublications(status: AccountStatus): boolean {
   return status === 'active';
 }
 
+/**
+ * 能不能为这个账号**新增内容**。
+ *
+ * 和上面两个取值相同，但**不是同一件事**。第三次重复同一个函数体是有理由的：
+ *
+ *   canAuthenticate         能不能建立/使用会话
+ *   canServePublications    公开内容能不能被送出去
+ *   canCreateContent        能不能往里写新东西
+ *
+ * 将来出现「只读账号」（能登录、能被读，不能写）时，三者会立刻分开。
+ * 合并成一个函数，那时候的修改就必须先做一次考古：搞清楚每个调用点
+ * 当初问的到底是哪个问题。
+ *
+ * ## 这个判断必须在**产生外部副作用之前**
+ *
+ * 数据库触发器（20260809000000）已经挡住了 INSERT，但它挡不住数据库之外
+ * 的东西。一个典型的后台任务是这样的：
+ *
+ *   写 ObjectStorage 字节 → INSERT assets → 触发器拒绝
+ *
+ * 结果是数据库干净了，磁盘上留下一个孤儿对象。转码、缩略图、外部 API
+ * 调用都是同一个形状。所以应用层要先问一次，触发器只做兜底。
+ */
+export function canCreateContent(status: AccountStatus): boolean {
+  return status === 'active';
+}
+
 // ── 删除窗口 ─────────────────────────────────────────────────────────────────
 
 export function deletionDeadline(requestedAt: Date, graceDays = DELETION_GRACE_DAYS): Date {

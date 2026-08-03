@@ -35,6 +35,7 @@ import {
 import type { AttachAssetInput, MomentAssetView, Page } from '../ports/repositories';
 import type { MediaProbe, StorageKit } from '../ports/media';
 import type { UnitOfWork } from '../ports/unit-of-work';
+import { requireActiveOwner } from './guards';
 
 export interface AssetDeps {
   readonly core: UnitOfWork;
@@ -76,7 +77,11 @@ export async function uploadAsset(
   actor: Actor,
   input: UploadAssetInput
 ): Promise<UploadAssetResult> {
-  const { userId } = requireUser(actor);
+  // ⭐ 第一件事，在探测和写对象存储之前。
+  // 这两步都是外部副作用：sharp/ffmpeg 要花时间，storage.put 会留下字节。
+  // 只靠数据库触发器的话，一个待删除账号的上传会「转码完、落盘完、
+  // 然后 INSERT 被拒」—— 磁盘上多一个任何表都查不到的孤儿。
+  const userId = await requireActiveOwner(deps.core, actor);
 
   if (input.bytes.byteLength === 0) {
     throw new InvariantViolation('A-byte', '空文件');

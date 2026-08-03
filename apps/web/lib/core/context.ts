@@ -14,7 +14,13 @@
 import { redirect } from 'next/navigation';
 import { Pool } from 'pg';
 import { PostgresUnitOfWork } from '@tc/infrastructure-postgres';
-import { systemClock, type AccountDeps, type FinalizeDeps } from '@tc/application';
+import {
+  RecordingAccountLifecycleNotifier,
+  systemClock,
+  type AccountDeps,
+  type AccountLifecycleNotifier,
+  type FinalizeDeps,
+} from '@tc/application';
 import {
   ANONYMOUS,
   accountStatusExplanation,
@@ -142,9 +148,39 @@ export async function requirePageActor(): Promise<Actor> {
 
 // ── 账号生命周期的依赖装配 ───────────────────────────────────────────────────
 
+/**
+ * 账号通知。
+ *
+ * ⚠️ **当前是记录型实现：它不发送任何邮件。**
+ *
+ * 这是一个明确的、已知的降级，不是遗漏：账号状态变更照常发生，
+ * 用户收不到信。撤销令牌因此只有一次展示机会（申请后的那个页面）。
+ *
+ * 接口现在就定下来，是因为账号生命周期的用例已经稳定 —— 这是固定
+ * 通知边界成本最低的时点。供应商、模板、退信处理留到公开 Beta 前
+ * （verification-gaps.json → account-cancel-token-not-emailed）。
+ */
+const globalForNotifier = globalThis as unknown as {
+  __tcNotifier?: AccountLifecycleNotifier;
+};
+
+export function getNotifier(): AccountLifecycleNotifier {
+  globalForNotifier.__tcNotifier ??= new RecordingAccountLifecycleNotifier((m) =>
+    console.warn(m)
+  );
+  return globalForNotifier.__tcNotifier;
+}
+
 /** 申请 / 撤销删除用。不含 storage —— 那两步不碰对象存储。 */
 export function getAccountDeps(): AccountDeps {
-  return { core: getCore(), clock: systemClock, tokens: tokenIssuer };
+  return {
+    core: getCore(),
+    clock: systemClock,
+    tokens: tokenIssuer,
+    notifier: getNotifier(),
+    appBaseUrl:
+      process.env.NEXT_PUBLIC_APP_URL ?? process.env.BETTER_AUTH_URL ?? 'http://localhost:3000',
+  };
 }
 
 /**

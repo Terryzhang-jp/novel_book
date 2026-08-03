@@ -40,12 +40,20 @@ import {
   type ObjectStorage,
 } from '@tc/domain';
 import type { Clock, TokenIssuer } from '../ports/clock';
+import type { AccountLifecycleNotifier } from '../ports/notifications';
 import type { CoreRepositories, UnitOfWork } from '../ports/unit-of-work';
 
 export interface AccountDeps {
   readonly core: UnitOfWork;
   readonly clock: Clock;
   readonly tokens: TokenIssuer;
+  /**
+   * 对外通知。第一版是记录型实现（不真的发信）——
+   * 接口现在定，供应商留到公开 Beta 前（见 ports/notifications）。
+   */
+  readonly notifier: AccountLifecycleNotifier;
+  /** 拼撤销地址用，例如 https://example.com */
+  readonly appBaseUrl: string;
 }
 
 /**
@@ -56,6 +64,23 @@ export interface AccountDeps {
  */
 export interface FinalizeDeps extends AccountDeps {
   readonly storage: ObjectStorage;
+}
+
+/**
+ * 发通知。**永远在事务提交之后，而且永远不抛。**
+ *
+ * 两个理由：
+ *   · 事务里发信意味着回滚之后信已经发出去了 —— 收不回来
+ *   · 发信失败不能让「申请删除」变成「什么都没发生」；
+ *     状态变更是用户的意图，通知只是告知
+ */
+async function notifySafely(what: string, send: () => Promise<void>): Promise<void> {
+  try {
+    await send();
+  } catch (err) {
+    // 吞掉但留痕。静默失败会让「用户没收到信」永远查不出原因。
+    console.error(`[account] ${what} 通知发送失败：`, err);
+  }
 }
 
 /**
@@ -103,7 +128,7 @@ export async function disableAccount(
   const systemReason = requireSystem(actor, '停用账号');
   const at = deps.clock.now();
 
-  return deps.core.transaction(async (repos) => {
+  const result = await deps.core.transaction(async (repos) => {
     const before = await loadAccount(repos, actor, userId);
     assertTransitionAllowed(before.status, 'disabled');
 
@@ -124,6 +149,15 @@ export async function disableAccount(
     });
     return { account, revokedSessions };
   });
+
+  await notifySafely('account_disabled', () =>
+    deps.notifier.accountDisabled({
+      userId: result.account.userId,
+      email: result.account.email,
+      ...(reason ? { reason } : {}),
+    })
+  );
+  return result;
 }
 
 export async function reactivateAccount(
@@ -183,7 +217,7 @@ export async function requestAccountDeletion(
   const effectiveAt = deletionDeadline(now);
   const issued = deps.tokens.issue();
 
-  return deps.core.transaction(async (repos) => {
+  const result = await deps.core.transaction(async (repos) => {
     const before = await loadAccount(repos, actor, userId);
     assertTransitionAllowed(before.status, 'deletion_requested');
 
@@ -207,6 +241,20 @@ export async function requestAccountDeletion(
     });
     return { account, cancelToken: issued.token, effectiveAt, revokedSessions };
   });
+
+  // ⚠️ 通知在事务之外。cancellationUrl 里带着明文令牌 ——
+  // 端口约定实现**不得持久化它**（ports/notifications）。
+  await notifySafely('deletion_requested', () =>
+    deps.notifier.deletionRequested({
+      userId: result.account.userId,
+      email: result.account.email,
+      cancellationUrl:
+        `${deps.appBaseUrl.replace(/\/$/, '')}/account/restore` +
+        `?token=${encodeURIComponent(result.cancelToken)}`,
+      expiresAt: result.effectiveAt,
+    })
+  );
+  return result;
 }
 
 /**
@@ -223,7 +271,7 @@ export async function cancelAccountDeletion(
   const now = deps.clock.now();
   const hash = deps.tokens.hash(token);
 
-  return deps.core.transaction(async (repos) => {
+  const restored = await deps.core.transaction(async (repos) => {
     const account = await repos.accounts.findByCancelTokenHash(actor, hash);
     if (!account || !account.deletion) throw new NotFoundError('DeletionRequest');
 
@@ -251,6 +299,11 @@ export async function cancelAccountDeletion(
     });
     return restored;
   });
+
+  await notifySafely('deletion_cancelled', () =>
+    deps.notifier.deletionCancelled({ userId: restored.userId, email: restored.email })
+  );
+  return restored;
 }
 
 // ── 永久删除 ─────────────────────────────────────────────────────────────────
