@@ -109,6 +109,16 @@
       "mitigation": "响应带 immutable 缓存头，浏览器和任何中间缓存只会取一次。ADR-008 A8 把这条记为已知代价。",
       "closeWhen": "有真实流量压力时，在路由前加一层带鉴权回源的 CDN；不能简单换成公开桶——那会让撤回失效。",
       "owner": "engineering"
+    },
+    {
+      "id": "timezone-column-holds-two-semantics",
+      "title": "timezone 列同时装着固定偏移和 IANA 时区名",
+      "severity": "medium",
+      "area": "assets.timezone · ADR-009 T1",
+      "impact": "`+09:00` 和 `Asia/Tokyo` 不是同一种数据：前者没有夏令时规则，后者包含历史与未来的时区规则。现在两者共用一列，后续代码只能靠**字符串形状**猜类型（`/^[+-]\\d{2}:\\d{2}$/`）。猜得越久，改起来越贵。",
+      "mitigation": "第一版只允许写入固定偏移（UI 的下拉里没有 IANA 选项），所以实际数据是单一语义的。`effectiveMetadata` 里那个正则是唯一的猜测点，并有注释说明。",
+      "closeWhen": "**最迟在 GPS 时区反查接入之前**拆成 timezone_kind(offset|iana) + timezone_value，并加约束：kind=offset 必须匹配 ±HH:MM，kind=iana 不能是固定偏移。这是一个明确的 schema hardening 任务，不是「以后再说」。",
+      "owner": "engineering"
     }
   ]
 }
