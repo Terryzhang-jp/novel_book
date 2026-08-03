@@ -69,20 +69,109 @@ async function attemptRegister(page: Page, email: string, name: string): Promise
   }
 }
 
-export async function login(page: Page, email: string): Promise<void> {
+/**
+ * 打开登录页并切到邮箱表单。
+ *
+ * 登录页默认展示 Google 登录，邮箱表单藏在一个切换按钮后面，
+ * 而那个按钮是 React 渲染的 —— goto() 返回时它还不一定在。
+ *
+ * 早先这里写的是 `if (await toggle.count()) await toggle.click()`：
+ * 计数为 0 时**静默跳过点击**，然后去等一个永远不会出现的 #email，
+ * 一直挂到测试超时。报错指向 `waitFor`，看上去像是登录页坏了，
+ * 实际原因是页面还没渲染完。
+ *
+ * 所以现在先等按钮，再点。等不到就直接说「切换按钮没出现」。
+ */
+export async function openEmailLoginForm(page: Page): Promise<void> {
   await page.goto('/login');
-
-  // 登录页默认展示的是 Google 登录，邮箱表单藏在一个切换后面。
-  // 不硬编码那个按钮的文案 —— 直接等 #email 可见，不可见才去找切换入口。
   const emailField = page.locator('#email');
-  if (!(await emailField.isVisible().catch(() => false))) {
-    const toggle = page.getByRole('button', { name: /邮箱登录|email/i });
-    if (await toggle.count()) await toggle.first().click();
-  }
-  await emailField.waitFor({ state: 'visible', timeout: 15_000 });
+  if (await emailField.isVisible().catch(() => false)) return;
 
-  await emailField.fill(email);
+  const toggle = page.getByRole('button', { name: '邮箱登录' });
+  await toggle.waitFor({ state: 'visible', timeout: 20_000 });
+  await toggle.click();
+  await emailField.waitFor({ state: 'visible', timeout: 20_000 });
+}
+
+/** Better Auth 限流时页面上出现的文案 */
+const RATE_LIMITED = /too many requests|请求过于频繁/i;
+
+/** 登录页把 `result.error.message` 渲染进 .text-destructive */
+async function loginErrorText(page: Page): Promise<string> {
+  return (
+    (await page
+      .locator('.text-destructive')
+      .first()
+      .innerText()
+      .catch(() => '')) || ''
+  );
+}
+
+async function submitLogin(page: Page, email: string): Promise<void> {
+  await openEmailLoginForm(page);
+  await page.fill('#email', email);
   await page.fill('#password', PASSWORD);
   await page.click('button[type="submit"]');
-  await expect(page).not.toHaveURL(/\/login/, { timeout: 25_000 });
+}
+
+/**
+ * 登录。被限流时等待后重试 —— 和 register 一样的理由：
+ * 一次 E2E run 会连续登录好几次，撞上限流是必然的，
+ * 而**关掉限流就等于不再测真实产品行为**。
+ */
+export async function login(page: Page, email: string): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    await submitLogin(page, email);
+    try {
+      await expect(page).not.toHaveURL(/\/login/, { timeout: 25_000 });
+      return;
+    } catch (err) {
+      const shown = await loginErrorText(page);
+      if (RATE_LIMITED.test(shown) && attempt < 3) {
+        await page.waitForTimeout(11_000);
+        continue;
+      }
+      throw new Error(
+        `登录没有成功。页面上的提示：「${shown || '（页面没有显示任何错误）'}」`,
+        { cause: err }
+      );
+    }
+  }
+}
+
+/**
+ * 用**正确的密码**登录，并断言进不去。
+ *
+ * 账号被停用或申请删除时用它。密码是对的 —— 这正是要点：
+ * 拦住登录的必须是账号状态，不是凭据校验。
+ *
+ * ## 这里有一个很容易写出来的假绿灯
+ *
+ * 被限流的时候，人**也**会留在登录页。只断言「URL 还是 /login」的话，
+ * 一次限流就能让这条测试通过，而账号状态检查根本没被执行到 ——
+ * 拦截逻辑整个删掉它照样是绿的。
+ *
+ * 所以这里显式把限流排除掉：先重试，再断言错误文案不是限流。
+ */
+export async function expectLoginRejected(
+  page: Page,
+  email: string,
+  expectedMessage?: RegExp
+): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    await submitLogin(page, email);
+    // 给跳转一点时间 —— 否则可能在页面还没来得及跳走时就通过了
+    await page.waitForTimeout(2_000);
+    const shown = await loginErrorText(page);
+
+    if (RATE_LIMITED.test(shown) && attempt < 3) {
+      await page.waitForTimeout(11_000);
+      continue;
+    }
+
+    expect(shown, '被限流挡住了，这一次并没有真的验证账号状态').not.toMatch(RATE_LIMITED);
+    await expect(page).toHaveURL(/\/login/);
+    if (expectedMessage) expect(shown).toMatch(expectedMessage);
+    return;
+  }
 }
