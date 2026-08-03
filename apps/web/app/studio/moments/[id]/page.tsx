@@ -20,7 +20,7 @@ import {
   MOMENT_ASSET_ROLES,
   NotFoundError,
 } from '@tc/domain';
-import { getCore, requireActor } from '@/lib/core/context';
+import { getCore, requirePageActor } from '@/lib/core/context';
 import {
   Banner,
   buttonClass,
@@ -55,7 +55,7 @@ export default async function MomentPage({
 }) {
   const { id } = await params;
   const { error, notice } = await searchParams;
-  const actor = await requireActor();
+  const actor = await requirePageActor();
 
   let detail: Awaited<ReturnType<typeof getMomentDetail>>;
   try {

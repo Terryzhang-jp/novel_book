@@ -10,6 +10,7 @@
 
 export * from './queryable';
 export * from './rows';
+export * from './account-repository';
 export * from './journey-repository';
 export * from './moment-repository';
 export * from './observation-repository';

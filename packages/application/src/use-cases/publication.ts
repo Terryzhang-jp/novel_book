@@ -20,6 +20,7 @@
 import {
   ConflictError,
   NotFoundError,
+  canServePublications,
   requireUser,
   slugify,
   defaultConfigFor,
@@ -361,6 +362,23 @@ export async function viewPublication(
 ): Promise<PublicationView> {
   const page = await uow.publications.findBySlug(actor, slug);
   if (!page) return { status: 'not_found' };
+
+  // ⚠️ 作者的账号状态决定这一页还能不能被送出去（ADR-007）。
+  //
+  // 停用、申请删除、已删除 —— 三种情况一律 not_found，**不是** withdrawn：
+  // 「已下架」这个页面会告诉访客「这里曾经有东西，是作者收起来了」，
+  // 而账号被停用是作者与平台之间的事，不该对着全世界公告。
+  //
+  // 这里多了一次查库。它换来的是「下架」立刻生效且不需要任何批处理：
+  // 没有一张表被改写，所以撤销停用之后所有页面自动恢复，
+  // 也不会把「作者自己撤回过的页面」误当成停用的一部分重新上线。
+  //
+  // 注意这不违反 ADR-006 的快照自洽：快照回答的是「这一页写了什么」，
+  // 这次查询回答的是「这一页现在还能不能给人看」。两个问题。
+  const authorStatus = await uow.accounts.findStatus(actor, page.publication.userId);
+  if (!authorStatus || !canServePublications(authorStatus)) {
+    return { status: 'not_found' };
+  }
 
   const isOwner =
     actor.type === 'user' ? actor.userId === page.publication.userId : actor.type === 'system';

@@ -33,7 +33,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { sql, getDsn } from '../db/setup';
+import { sql, getDsn, getPool } from '../db/setup';
 import type { Auth } from 'better-auth';
 
 /** Better Auth 实例。必须动态 import —— 见 test/db/setup.ts 的说明。 */
@@ -144,7 +144,23 @@ describe('注册即可用：新用户能立刻写业务数据', () => {
     expect(rows).toHaveLength(1);
   });
 
-  it('删除用户会级联清掉他的业务数据', async () => {
+  /**
+   * 这条测试在 Commit 14C 之前是「DELETE FROM "user" 会级联清空业务数据」。
+   *
+   * 级联本身没变，变的是**谁可以触发它**：ADR-007 要求 CASCADE 只能作为
+   * 永久删除那一步的执行手段，不能被任何常规路径调用。所以现在它分成两半 ——
+   * 上半证明普通删除被挡住，下半证明放行之后级联依然有效。
+   */
+  it('普通的 DELETE FROM "user" 被数据库直接挡住（ADR-007）', async () => {
+    const { user } = await signUp(freshEmail('guard'));
+    await expect(sql('DELETE FROM "user" WHERE id = $1', [user!.id])).rejects.toThrow(
+      /禁止直接删除 user 行/
+    );
+    // 挡住之后账号必须完好无损，而不是删了一半
+    expect(await sql('SELECT 1 FROM "user" WHERE id = $1', [user!.id])).toHaveLength(1);
+  });
+
+  it('删除流程放行之后，级联仍然清掉他的业务数据', async () => {
     const { user } = await signUp(freshEmail('cascade'));
     await sql(
       `INSERT INTO photos (id, user_id, file_name, original_name, file_url, metadata, category)
@@ -154,8 +170,40 @@ describe('注册即可用：新用户能立刻写业务数据', () => {
     );
     expect(await sql('SELECT 1 FROM photos WHERE user_id = $1', [user!.id])).toHaveLength(1);
 
-    await sql('DELETE FROM "user" WHERE id = $1', [user!.id]);
+    // 放行开关精确到一个 id，且只在这个事务里有效 —— 和 purge() 做的事一样
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`SELECT set_config('tc.allow_user_delete', $1, true)`, [user!.id]);
+      await client.query('DELETE FROM "user" WHERE id = $1', [user!.id]);
+      await client.query('COMMIT');
+    } finally {
+      client.release();
+    }
+
     expect(await sql('SELECT 1 FROM photos WHERE user_id = $1', [user!.id])).toHaveLength(0);
+  });
+
+  it('放行开关只对被点名的那个账号有效', async () => {
+    const victim = await signUp(freshEmail('victim'));
+    const bystander = await signUp(freshEmail('bystander'));
+
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      // 只给 victim 开了口子，却想顺手删掉所有人 —— 必须失败。
+      // 这正是当初把开关做成 user id 而不是布尔值的原因：
+      // 布尔开关下这条不带 WHERE 的语句会删光整张表。
+      await client.query(`SELECT set_config('tc.allow_user_delete', $1, true)`, [
+        victim.user!.id,
+      ]);
+      await expect(client.query('DELETE FROM "user"')).rejects.toThrow(/禁止直接删除 user 行/);
+      await client.query('ROLLBACK');
+    } finally {
+      client.release();
+    }
+
+    expect(await sql('SELECT 1 FROM "user" WHERE id = $1', [bystander.user!.id])).toHaveLength(1);
   });
 
   it('不存在的用户 id 仍然被外键拒绝（约束真的在）', async () => {

@@ -23,6 +23,10 @@
  */
 
 import type {
+  Account,
+  AccountEvent,
+  AccountEventType,
+  AccountStatus,
   Actor,
   Asset,
   AssetId,
@@ -44,6 +48,7 @@ import type {
   MomentTombstone,
   Observation,
   ObservationId,
+  PersistedAccountStatus,
   PresentationConfig,
   Publication,
   PublicationId,
@@ -369,4 +374,102 @@ export interface PublishedAsset extends CreatePublishedAssetInput {
 export interface PublishedAssetRepository {
   create(actor: Actor, input: CreatePublishedAssetInput): Promise<PublishedAsset>;
   listByVersion(actor: Actor, workVersionId: WorkVersionId): Promise<PublishedAsset[]>;
+}
+
+// ── Account ──────────────────────────────────────────────────────────────────
+
+/**
+ * 账号生命周期的读写 —— ADR-007
+ *
+ * ## 为什么它在这里，而不是塞进 Better Auth
+ *
+ * Better Auth 管的是「这个人是谁、密码对不对、session 有没有过期」。
+ * 它不该知道「这个账号申请了删除，所以他的公开页面要下架」——
+ * 那是产品语义，不是认证语义。
+ *
+ * 分开的实际好处：认证换实现（哪天不用 Better Auth 了）不会带走状态机。
+ *
+ * ## 唯一允许删 user 行的地方
+ *
+ * `purge` 是整个系统里唯一一处 `DELETE FROM "user"`，
+ * 数据库的 trg_guard_user_delete 触发器会确认这一点 ——
+ * 任何别处的删除语句都会直接报错。
+ */
+export interface AccountEventInput {
+  readonly userId: string;
+  readonly type: AccountEventType;
+  readonly fromStatus?: AccountStatus;
+  readonly toStatus?: AccountStatus;
+  readonly reason?: string;
+  readonly detail?: Readonly<Record<string, unknown>>;
+}
+
+export interface AccountTransition {
+  /** 期望的当前状态。写成条件而不是先读后写 —— 见下面的说明。 */
+  readonly from: PersistedAccountStatus;
+  readonly to: PersistedAccountStatus;
+  readonly at: Date;
+  /** to='deletion_requested' 时必填 */
+  readonly deletion?: {
+    readonly requestedAt: Date;
+    readonly effectiveAt: Date;
+    readonly cancelTokenHash: string;
+  };
+}
+
+export interface AccountRepository {
+  findById(actor: Actor, userId: string): Promise<Account | null>;
+
+  /**
+   * 只取状态。发布页每次访问都要问一次，所以单独开一个方法，
+   * 而不是取整行再丢掉大部分。
+   *
+   * 返回 null 表示这个 user 行不存在 —— 对调用方而言等同于
+   * `deleted`（账号已被永久删除），但这里如实返回 null，
+   * 由调用方决定这是不是错误。
+   */
+  findStatus(actor: Actor, userId: string): Promise<PersistedAccountStatus | null>;
+
+  /** 撤销令牌的持有者。找不到返回 null —— 不区分「令牌错」和「已经撤销过」。 */
+  findByCancelTokenHash(actor: Actor, tokenHash: string): Promise<Account | null>;
+
+  /**
+   * 状态迁移。**compare-and-set**：`from` 不匹配就抛 NotFoundError。
+   *
+   * 不做成「先 findById 再 update」是因为那之间有窗口：两个并发请求
+   * 都读到 active，都判断「可以申请删除」，然后都写入 ——
+   * 第二个会覆盖第一个的等待期，把冷静期悄悄重置。
+   */
+  transition(actor: Actor, userId: string, input: AccountTransition): Promise<Account>;
+
+  /** 到期可以永久删除的账号。定时任务用。 */
+  listDueForDeletion(actor: Actor, now: Date, limit?: number): Promise<Account[]>;
+
+  /**
+   * 撤销该用户的全部 session，返回撤销条数。
+   *
+   * ⚠️ 这**不足以**立刻挡住已经登录的人：Better Auth 的 cookieCache
+   * 让签名 cookie 在最长 5 分钟内不查库。真正的止血在每次读取 session 时
+   * 复查 status（见 apps/web/lib/core/context.ts）。
+   * 这里删行是为了让「重新打开页面」不会又变回登录态。
+   */
+  revokeSessions(actor: Actor, userId: string): Promise<number>;
+
+  recordEvent(actor: Actor, input: AccountEventInput): Promise<AccountEvent>;
+  listEvents(actor: Actor, userId: string, page?: Page): Promise<AccountEvent[]>;
+
+  /**
+   * 永久删除 user 行，靠外键 CASCADE 清空全部业务数据。
+   *
+   * **不可逆。** 调用前必须已经通过 assertDeletable，
+   * 并且已经把对象存储的 key 收集完毕 —— 行删掉之后就查不到该删哪些字节了。
+   */
+  purge(actor: Actor, userId: string): Promise<void>;
+
+  /**
+   * 该用户在对象存储里的全部 key（原始素材 + 发布派生副本）。
+   *
+   * 必须在 purge **之前**调用。
+   */
+  listStorageKeys(actor: Actor, userId: string): Promise<string[]>;
 }

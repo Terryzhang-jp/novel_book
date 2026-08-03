@@ -8,7 +8,7 @@
 
 import Link from 'next/link';
 import { listPublications, listWorks } from '@tc/application';
-import { getCore, requireActor } from '@/lib/core/context';
+import { getCore, requirePageActor } from '@/lib/core/context';
 import {
   Banner,
   buttonClass,
@@ -31,7 +31,7 @@ export default async function WorksPage({
   searchParams: Promise<{ error?: string; notice?: string }>;
 }) {
   const { error, notice } = await searchParams;
-  const actor = await requireActor();
+  const actor = await requirePageActor();
   const core = getCore();
   const [works, published] = await Promise.all([
     listWorks(core, actor),

@@ -13,6 +13,17 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  ACCOUNT_STATUSES,
+  assertDeletable,
+  assertTransitionAllowed,
+  canAuthenticate,
+  canCancelDeletion,
+  canServePublications,
+  canTransition,
+  deletionDeadline,
+  DELETION_GRACE_DAYS,
+  isDeletionDue,
+  type AccountStatus,
   assertSnapshotIsSelfContained,
   assertValidBlock,
   assertValidTimezone,
@@ -452,5 +463,105 @@ describe('时区的两种语义必须分开（schema hardening）', () => {
     });
     expect(shown.text).toBe('2026-08-03 14:35 · 相机本地时间，时区未知');
     expect(shown.text).not.toContain('UTC');
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 账号状态机（ADR-007）
+//
+// 这一组穷举的是**不该发生的迁移**。放在单元层是因为它是纯函数：
+// 集成测试只会走正常路径，而账号状态机出事的形状恰恰在正常路径之外 ——
+// 「已删除的账号被恢复了」「冷静期被重置了」这类问题不会在快乐路径上出现。
+// ════════════════════════════════════════════════════════════════════════════
+
+describe('账号状态机', () => {
+  it('允许的迁移正好是 ADR-007 画的那四条箭头', () => {
+    const allowed: [AccountStatus, AccountStatus][] = [
+      ['active', 'disabled'],
+      ['active', 'deletion_requested'],
+      ['disabled', 'active'],
+      ['deletion_requested', 'active'],
+      ['deletion_requested', 'deleted'],
+    ];
+    for (const [from, to] of allowed) {
+      expect(canTransition(from, to), `${from} → ${to} 应当允许`).toBe(true);
+    }
+
+    // 其余组合一律禁止。穷举而不是抽查 —— 新增状态时这条会立刻变红，
+    // 迫使作者显式决定新状态能去哪里，而不是默认放行。
+    for (const from of ACCOUNT_STATUSES) {
+      for (const to of ACCOUNT_STATUSES) {
+        const isListed = allowed.some(([f, t]) => f === from && t === to);
+        expect(canTransition(from, to), `${from} → ${to}`).toBe(isListed);
+      }
+    }
+  });
+
+  it('deleted 是终点：任何方向都出不来', () => {
+    for (const to of ACCOUNT_STATUSES) {
+      expect(canTransition('deleted', to)).toBe(false);
+    }
+  });
+
+  it('停用的账号不能自助申请删除 —— 他根本登录不进来', () => {
+    expect(canTransition('disabled', 'deletion_requested')).toBe(false);
+    expect(() => assertTransitionAllowed('disabled', 'deletion_requested')).toThrow(
+      InvariantViolation
+    );
+  });
+
+  it('原地不动也是错误，不是幂等成功', () => {
+    // 「已经是这个状态了」必须报错而不是静默通过：
+    // 静默通过意味着第二次申请删除会覆盖第一次的等待期。
+    for (const s of ACCOUNT_STATUSES) {
+      expect(() => assertTransitionAllowed(s, s)).toThrow(/已经是/);
+    }
+  });
+
+  it('只有 active 能登录、能对外提供内容', () => {
+    for (const s of ACCOUNT_STATUSES) {
+      expect(canAuthenticate(s)).toBe(s === 'active');
+      expect(canServePublications(s)).toBe(s === 'active');
+    }
+  });
+});
+
+describe('删除冷静期', () => {
+  const T0 = new Date('2026-08-03T00:00:00.000Z');
+  const DAY = 24 * 60 * 60 * 1000;
+  const window = { requestedAt: T0, effectiveAt: deletionDeadline(T0) };
+
+  it('等待期正好 30 天', () => {
+    expect(window.effectiveAt.getTime() - T0.getTime()).toBe(DELETION_GRACE_DAYS * DAY);
+  });
+
+  it('到期那一毫秒：不能再撤销，可以执行删除', () => {
+    const justBefore = new Date(window.effectiveAt.getTime() - 1);
+    const exactly = window.effectiveAt;
+
+    expect(canCancelDeletion(window, justBefore)).toBe(true);
+    expect(isDeletionDue(window, justBefore)).toBe(false);
+
+    // 边界上两者必须互斥 —— 同时成立就意味着存在「一边在删一边被撤销」的窗口
+    expect(canCancelDeletion(window, exactly)).toBe(false);
+    expect(isDeletionDue(window, exactly)).toBe(true);
+  });
+
+  it('差 1 毫秒的永久删除必须被拒绝', () => {
+    expect(() =>
+      assertDeletable('deletion_requested', window, new Date(window.effectiveAt.getTime() - 1))
+    ).toThrow(InvariantViolation);
+  });
+
+  it('状态不对时，错误说的是状态而不是时间', () => {
+    const late = new Date(window.effectiveAt.getTime() + DAY);
+    expect(() => assertDeletable('active', window, late)).toThrow(/deletion_requested/);
+    expect(() => assertDeletable('disabled', window, late)).toThrow(/deletion_requested/);
+  });
+
+  it('deletion_requested 但没有等待期字段 —— 宁可报错也不删', () => {
+    expect(() => assertDeletable('deletion_requested', undefined, new Date())).toThrow(
+      InvariantViolation
+    );
   });
 });

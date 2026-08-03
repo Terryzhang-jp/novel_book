@@ -11,10 +11,19 @@
  * 路由文件，就再也不可能整体迁移或整体测试。
  */
 
+import { redirect } from 'next/navigation';
 import { Pool } from 'pg';
 import { PostgresUnitOfWork } from '@tc/infrastructure-postgres';
-import { ANONYMOUS, userActor, type Actor } from '@tc/domain';
+import {
+  ANONYMOUS,
+  accountStatusExplanation,
+  canAuthenticate,
+  userActor,
+  type Actor,
+  type PersistedAccountStatus,
+} from '@tc/domain';
 import { AuthRequiredError, getServerSession } from '@/lib/auth/helpers';
+import { AccountNotActiveError } from '@/lib/core/errors';
 
 /**
  * 连接池挂在 globalThis 上。
@@ -45,20 +54,85 @@ export function getCore(): PostgresUnitOfWork {
 }
 
 /**
+ * session → Actor，**并且复查账号状态**。
+ *
+ * ## 为什么这里必须查一次库
+ *
+ * 停用账号时会把 session 行全部删掉，但那挡不住已经签发的 cookie：
+ * Better Auth 的 cookieCache 在最长 5 分钟内直接信任签名 cookie，根本不查库。
+ * 也就是说，只删 session 行的话，一个刚被停用的账号还能继续操作 5 分钟。
+ *
+ * 五分钟足够删掉一整个 Journey。所以每次解析身份都复查一次状态 ——
+ * 代价是一次主键查询，换来的是「停用」在下一次请求就生效。
+ *
+ * 建立 session 那一侧也有一道（lib/auth.ts 的 databaseHooks），
+ * 两道都要有：那一道防止重新登录，这一道处理已经在手上的凭据。
+ */
+async function resolveSession(): Promise<
+  { kind: 'anonymous' } | { kind: 'blocked'; status: PersistedAccountStatus } | {
+    kind: 'user';
+    actor: Actor;
+  }
+> {
+  const session = await getServerSession();
+  if (!session?.user?.id) return { kind: 'anonymous' };
+
+  const status = await getCore().accounts.findStatus(ANONYMOUS, session.user.id);
+  // status 为 null 表示 user 行已经不存在了 —— 账号已被永久删除，
+  // 而这个 cookie 还没过期。当成停用处理，不能放行。
+  if (!status) return { kind: 'blocked', status: 'disabled' };
+  if (!canAuthenticate(status)) return { kind: 'blocked', status };
+
+  return {
+    kind: 'user',
+    actor: userActor(session.user.id, session.session?.id ?? 'unknown'),
+  };
+}
+
+/**
  * 当前调用者。
  *
  * 没登录返回 anonymous 而不是抛错 —— 发布页要能被匿名访问，
  * 「未登录」在这个系统里是一种合法身份，不是错误状态（ADR-001）。
+ *
+ * 账号被停用时同样返回 anonymous：对**公开路径**而言，一个不能认证的身份
+ * 就是访客。这一点很重要 —— 否则被停用的作者还能看到自己的 private 发布页，
+ * 「下架」就有了一个例外。
  */
 export async function getActor(): Promise<Actor> {
-  const session = await getServerSession();
-  if (!session?.user?.id) return ANONYMOUS;
-  return userActor(session.user.id, session.session?.id ?? 'unknown');
+  const resolved = await resolveSession();
+  return resolved.kind === 'user' ? resolved.actor : ANONYMOUS;
 }
 
-/** 需要登录的页面用这个 */
+/**
+ * 需要登录的页面用这个。
+ *
+ * 停用状态抛 AccountNotActiveError 而不是 AuthRequiredError ——
+ * 这里是 /studio，用户有权知道自己的账号发生了什么。
+ */
 export async function requireActor(): Promise<Actor> {
-  const actor = await getActor();
-  if (actor.type !== 'user') throw new AuthRequiredError();
-  return actor;
+  const resolved = await resolveSession();
+  if (resolved.kind === 'blocked') throw new AccountNotActiveError(resolved.status);
+  if (resolved.kind === 'anonymous') throw new AuthRequiredError();
+  return resolved.actor;
+}
+
+/**
+ * 页面用的版本：认证失败时**跳转**而不是抛错。
+ *
+ * 为什么不让 requireActor 直接跳：Server Action 里那层 `run()` 包着
+ * try/catch，而 Next 的 redirect() 是靠抛异常实现的 —— 跳转会被自己的
+ * catch 吞掉，变成一条「操作没有成功」的错误提示。
+ *
+ * 所以分成两个：页面跳转，动作抛错（由 toUserMessage 翻译成人话）。
+ */
+export async function requirePageActor(): Promise<Actor> {
+  const resolved = await resolveSession();
+  if (resolved.kind === 'user') return resolved.actor;
+
+  const notice =
+    resolved.kind === 'blocked'
+      ? accountStatusExplanation(resolved.status)
+      : '请先登录。';
+  redirect(`/login?notice=${encodeURIComponent(notice)}`);
 }

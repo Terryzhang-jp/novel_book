@@ -18,6 +18,7 @@
  */
 
 import type {
+  AccountRepository,
   AssetRepository,
   InterpretationRepository,
   JourneyRepository,
@@ -37,6 +38,11 @@ export interface CoreRepositories {
   readonly publications: PublicationRepository;
   readonly assets: AssetRepository;
   readonly publishedAssets: PublishedAssetRepository;
+  /**
+   * 账号生命周期。它不属于「内容」，但**发布页的读取路径要用它** ——
+   * 停用或申请删除的账号，公开页面必须立刻取不到（ADR-007）。
+   */
+  readonly accounts: AccountRepository;
 }
 
 export interface UnitOfWork extends CoreRepositories {

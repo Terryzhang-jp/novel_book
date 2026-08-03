@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getJourney, listMoments } from '@tc/application';
 import { NotFoundError } from '@tc/domain';
-import { getCore, requireActor } from '@/lib/core/context';
+import { getCore, requirePageActor } from '@/lib/core/context';
 import {
   Banner,
   buttonClass,
@@ -35,7 +35,7 @@ export default async function JourneyPage({
 }) {
   const { id } = await params;
   const { error, notice } = await searchParams;
-  const actor = await requireActor();
+  const actor = await requirePageActor();
   const core = getCore();
 
   // 别人的 Journey 和不存在的 Journey 都走到这里 —— 统一 404，

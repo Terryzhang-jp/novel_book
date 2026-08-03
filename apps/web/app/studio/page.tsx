@@ -7,7 +7,7 @@
 
 import Link from 'next/link';
 import { listJourneys, listMoments } from '@tc/application';
-import { getCore, requireActor } from '@/lib/core/context';
+import { getCore, requirePageActor } from '@/lib/core/context';
 import {
   Banner,
   buttonClass,
@@ -30,7 +30,7 @@ export default async function StudioHome({
   searchParams: Promise<{ error?: string; notice?: string }>;
 }) {
   const { error, notice } = await searchParams;
-  const actor = await requireActor();
+  const actor = await requirePageActor();
   const core = getCore();
 
   const [journeys, unfiled] = await Promise.all([

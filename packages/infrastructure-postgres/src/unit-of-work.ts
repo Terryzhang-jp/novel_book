@@ -7,6 +7,7 @@
 
 import type { Pool, PoolClient } from 'pg';
 import type { CoreRepositories, UnitOfWork } from '@tc/application';
+import { PostgresAccountRepository } from './account-repository';
 import { PostgresAssetRepository } from './asset-repository';
 import { PostgresInterpretationRepository } from './interpretation-repository';
 import { PostgresJourneyRepository } from './journey-repository';
@@ -27,6 +28,7 @@ export function createRepositories(db: Queryable): CoreRepositories {
     publications: new PostgresPublicationRepository(db),
     assets: new PostgresAssetRepository(db),
     publishedAssets: new PostgresPublishedAssetRepository(db),
+    accounts: new PostgresAccountRepository(db),
   };
 }
 
@@ -39,6 +41,7 @@ export class PostgresUnitOfWork implements UnitOfWork {
   readonly publications: CoreRepositories['publications'];
   readonly assets: CoreRepositories['assets'];
   readonly publishedAssets: CoreRepositories['publishedAssets'];
+  readonly accounts: CoreRepositories['accounts'];
 
   constructor(private readonly pool: Pool) {
     const repos = createRepositories(pool);
@@ -50,6 +53,7 @@ export class PostgresUnitOfWork implements UnitOfWork {
     this.publications = repos.publications;
     this.assets = repos.assets;
     this.publishedAssets = repos.publishedAssets;
+    this.accounts = repos.accounts;
   }
 
   /**

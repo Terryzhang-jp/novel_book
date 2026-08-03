@@ -7,7 +7,7 @@
 
 import Link from 'next/link';
 import { listMoments } from '@tc/application';
-import { getCore, requireActor } from '@/lib/core/context';
+import { getCore, requirePageActor } from '@/lib/core/context';
 import { Banner, Card, fmtDate, H1, Muted, Shell } from '@/components/studio/chrome';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ export default async function MomentsPage({
   searchParams: Promise<{ error?: string; notice?: string }>;
 }) {
   const { error, notice } = await searchParams;
-  const actor = await requireActor();
+  const actor = await requirePageActor();
   const moments = await listMoments(getCore(), actor);
 
   return (
