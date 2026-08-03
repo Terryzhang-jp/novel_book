@@ -23,6 +23,11 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import {
   addMomentToWork,
+  applyMetadataCorrection,
+  attachAssetToMoment,
+  deleteAsset,
+  detachAssetFromMoment,
+  uploadAsset,
   addObservation,
   addTextBlock,
   createJourney,
@@ -36,8 +41,9 @@ import {
   reviseInterpretation,
   withdrawPublication,
 } from '@tc/application';
-import type { JourneyType } from '@tc/domain';
+import { InvariantViolation, isMomentAssetRole, type JourneyType } from '@tc/domain';
 import { getCore, requireActor } from '@/lib/core/context';
+import { getMediaProbe, getStorageKit } from '@/lib/core/storage';
 import { toUserMessage } from '@/lib/core/errors';
 
 /**
@@ -233,5 +239,84 @@ export async function withdrawPublicationAction(form: FormData) {
     const actor = await requireActor();
     await withdrawPublication(getCore(), actor, str(form, 'publicationId'));
     return `/studio/works/${workId}?notice=${encodeURIComponent('已下架。链接还在，访客会看到「作者已下架」而不是 404。')}`;
+  });
+}
+
+// ── 素材（Phase 2B）──────────────────────────────────────────────────────────
+
+/**
+ * 上传一份素材并把它挂到 Moment 上。
+ *
+ * 两步合成一个动作是为了界面朴素，但**用例层仍然是分开的两个** ——
+ * 上传出的 Asset 可以被别的 Moment 复用，这一点在模型里没有被牺牲。
+ */
+export async function uploadAssetAction(form: FormData) {
+  const momentId = str(form, 'momentId');
+  return run(`/studio/moments/${momentId}`, async () => {
+    const actor = await requireActor();
+    const file = form.get('file');
+    if (!(file instanceof File) || file.size === 0) {
+      throw new InvariantViolation('A-byte', '没有选择文件');
+    }
+    const bytes = new Uint8Array(await file.arrayBuffer());
+
+    const deps = { core: getCore(), storage: getStorageKit(), probe: getMediaProbe() };
+    const { asset, deduplicated } = await uploadAsset(deps, actor, {
+      bytes,
+      // 浏览器声明的类型只作参考，真实类型由魔术字节判定
+      declaredMimeType: file.type || 'application/octet-stream',
+    });
+
+    const role = str(form, 'role');
+    await attachAssetToMoment(getCore(), actor, momentId, asset.id, {
+      role: isMomentAssetRole(role) ? role : 'supporting',
+      ...(optStr(form, 'note') ? { note: optStr(form, 'note') } : {}),
+    });
+
+    const notice = deduplicated
+      ? '这份素材之前已经传过，直接引用了同一份，没有重复占用空间。'
+      : '已作为证据加入。';
+    return `/studio/moments/${momentId}?notice=${encodeURIComponent(notice)}`;
+  });
+}
+
+/** 从 Moment 移除。**不是删除素材** —— 两个动作，两处措辞（ADR-008 A7）。 */
+export async function detachAssetAction(form: FormData) {
+  const momentId = str(form, 'momentId');
+  return run(`/studio/moments/${momentId}`, async () => {
+    const actor = await requireActor();
+    await detachAssetFromMoment(getCore(), actor, momentId, str(form, 'assetId'));
+    return `/studio/moments/${momentId}?notice=${encodeURIComponent('已从这段记录里移除。素材本身还在。')}`;
+  });
+}
+
+/** 删除素材本身。引用它的地方会留下占位。 */
+export async function deleteAssetAction(form: FormData) {
+  const momentId = str(form, 'momentId');
+  return run(`/studio/moments/${momentId}`, async () => {
+    const actor = await requireActor();
+    await deleteAsset(getCore(), actor, str(form, 'assetId'));
+    return `/studio/moments/${momentId}?notice=${encodeURIComponent('素材已删除。引用它的地方会显示「原始素材已删除」，不会出现空洞。')}`;
+  });
+}
+
+/**
+ * 补一个时区。
+ *
+ * 这是 ADR-009 那句「『时区未知』应该是一个邀请」的落点：
+ * 用户知道自己那天在哪，补一次，这段记录就完整了。
+ *
+ * 走 append-only 的修正链 —— 原始 EXIF 一个字节都不动。
+ */
+export async function setAssetTimezoneAction(form: FormData) {
+  const momentId = str(form, 'momentId');
+  return run(`/studio/moments/${momentId}`, async () => {
+    const actor = await requireActor();
+    await applyMetadataCorrection(getCore(), actor, str(form, 'assetId'), {
+      field: 'timezone',
+      value: str(form, 'timezone'),
+      source: 'user',
+    });
+    return `/studio/moments/${momentId}?notice=${encodeURIComponent('时区已补上。原始 EXIF 没有被改动，这是一条修正记录。')}`;
   });
 }

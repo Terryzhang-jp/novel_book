@@ -13,8 +13,13 @@
 
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getMomentDetail } from '@tc/application';
-import { NotFoundError } from '@tc/domain';
+import { getAssetDetail, getMomentDetail, listMomentAssets, MOMENT_ASSET_ROLE_LABELS } from '@tc/application';
+import {
+  COMMON_UTC_OFFSETS,
+  formatCapturedTime,
+  MOMENT_ASSET_ROLES,
+  NotFoundError,
+} from '@tc/domain';
 import { getCore, requireActor } from '@/lib/core/context';
 import {
   Banner,
@@ -25,13 +30,18 @@ import {
   H1,
   H2,
   inputClass,
+  linkButtonClass,
   Muted,
   Shell,
 } from '@/components/studio/chrome';
 import {
   addObservationAction,
+  deleteAssetAction,
   deleteMomentAction,
+  detachAssetAction,
   reviseInterpretationAction,
+  setAssetTimezoneAction,
+  uploadAssetAction,
 } from '../../actions';
 
 export const dynamic = 'force-dynamic';
@@ -56,6 +66,16 @@ export default async function MomentPage({
   }
 
   const { moment, observations, interpretationChain, current } = detail;
+
+  // 证据。一个 Moment 上的素材是个位数，所以逐个取修正链是可以接受的 ——
+  // 真到了需要批量的规模，加一个 listCorrectionsByAssets 就行，
+  // 现在为它多写一个端口是过度设计。
+  const evidence = await Promise.all(
+    (await listMomentAssets(getCore(), actor, id)).map(async (v) => ({
+      ...v,
+      detail: await getAssetDetail(getCore(), actor, v.asset.id),
+    }))
+  );
   // 从最新往下读更符合直觉：先看「我现在怎么想」，再往下看它是怎么变过来的
   const historyNewestFirst = [...interpretationChain].reverse();
 
@@ -121,6 +141,156 @@ export default async function MomentPage({
         </Field>
         <button type="submit" className={buttonClass} data-testid="observation-submit">
           追加
+        </button>
+      </form>
+
+
+      {/* ── 证据 ─────────────────────────────────────────────────────────── */}
+      <H2>证据 —— 支持（或动摇）这些的东西</H2>
+      <Muted>
+        素材是证据，不是这段记录的主角。没有任何一张也完全成立。
+      </Muted>
+
+      <ul className="my-3" data-testid="evidence-list">
+        {evidence.map(({ link, asset, detail: ad }) => {
+          const time = formatCapturedTime(ad.effective);
+          return (
+            <li key={link.id} className="mb-3 rounded border border-neutral-200 p-3">
+              <div className="flex gap-3">
+                {asset.deletedAt ? (
+                  // 素材被删了，但关系行保留 —— 记录里不出现无法解释的空洞
+                  <div
+                    data-testid="evidence-tombstone"
+                    className="flex h-24 w-24 shrink-0 items-center justify-center rounded border border-dashed border-neutral-300 text-center text-xs text-neutral-400"
+                  >
+                    原始素材
+                    <br />
+                    已删除
+                  </div>
+                ) : asset.type === 'image' ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={`/api/studio/assets/${asset.id}/raw`}
+                    alt=""
+                    width={96}
+                    height={96}
+                    className="h-24 w-24 shrink-0 rounded object-cover"
+                    data-testid="evidence-thumb"
+                  />
+                ) : (
+                  <audio
+                    controls
+                    src={`/api/studio/assets/${asset.id}/raw`}
+                    className="w-56"
+                  >
+                    <track kind="captions" />
+                  </audio>
+                )}
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium" data-testid="evidence-role">
+                    {MOMENT_ASSET_ROLE_LABELS[link.role]}
+                  </p>
+                  {link.note ? (
+                    <p className="mt-1 text-sm text-neutral-600">{link.note}</p>
+                  ) : null}
+
+                  <p className="mt-2 text-xs text-neutral-400" data-testid="evidence-time">
+                    {time.text}
+                  </p>
+
+                  {/* ADR-009：「时区未知」是一个邀请，不是一个错误状态 */}
+                  {time.hasTime && !time.timezoneKnown ? (
+                    <form
+                      action={setAssetTimezoneAction}
+                      className="mt-2 flex items-center gap-2"
+                    >
+                      <input type="hidden" name="momentId" value={moment.id} />
+                      <input type="hidden" name="assetId" value={asset.id} />
+                      <select
+                        name="timezone"
+                        className="rounded border border-neutral-300 px-1 py-0.5 text-xs"
+                        defaultValue="+09:00"
+                        data-testid="timezone-select"
+                      >
+                        {COMMON_UTC_OFFSETS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button type="submit" className={linkButtonClass} data-testid="timezone-submit">
+                        我那天在这里
+                      </button>
+                    </form>
+                  ) : null}
+
+                  <div className="mt-2 flex gap-3 text-xs">
+                    <form action={detachAssetAction}>
+                      <input type="hidden" name="momentId" value={moment.id} />
+                      <input type="hidden" name="assetId" value={asset.id} />
+                      <button
+                        type="submit"
+                        className="text-neutral-400 hover:text-neutral-700"
+                        data-testid="detach-submit"
+                        title="只从这段记录里移除，素材本身保留"
+                      >
+                        从这段记录移除
+                      </button>
+                    </form>
+                    {asset.deletedAt ? null : (
+                      <form action={deleteAssetAction}>
+                        <input type="hidden" name="momentId" value={moment.id} />
+                        <input type="hidden" name="assetId" value={asset.id} />
+                        <button
+                          type="submit"
+                          className="text-neutral-400 hover:text-red-600"
+                          data-testid="delete-asset-submit"
+                          title="删除素材本身。引用它的地方会留下占位。"
+                        >
+                          删除这份素材
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </li>
+          );
+        })}
+        {evidence.length === 0 ? <Muted>还没有素材。这不影响这段记录成立。</Muted> : null}
+      </ul>
+
+      <form
+        action={uploadAssetAction}
+        encType="multipart/form-data"
+        className="rounded border border-neutral-200 p-4"
+      >
+        <input type="hidden" name="momentId" value={moment.id} />
+        <Field label="加一份证据">
+          <input
+            type="file"
+            name="file"
+            accept="image/*,audio/*"
+            required
+            className={inputClass}
+            data-testid="asset-file"
+          />
+        </Field>
+        <Field label="它在这里是什么">
+          <select name="role" className={inputClass} defaultValue="supporting" data-testid="asset-role">
+            {MOMENT_ASSET_ROLES.map((r) => (
+              <option key={r} value={r}>
+                {MOMENT_ASSET_ROLE_LABELS[r]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="为什么放这份（可以留空）">
+          <input name="note" className={inputClass} data-testid="asset-note" />
+        </Field>
+        <button type="submit" className={buttonClass} data-testid="asset-submit">
+          上传
         </button>
       </form>
 

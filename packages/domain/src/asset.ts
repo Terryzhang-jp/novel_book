@@ -315,6 +315,28 @@ export function assertCorrectionAllowed(
   }
 }
 
+/**
+ * `+09:00` / `-05:30` 这类固定偏移。
+ *
+ * EXIF 的 OffsetTimeOriginal 只给得出这个 —— 它不知道 `Asia/Tokyo`。
+ * 从偏移量推时区名是伪造（`+09:00` 也可能是首尔），所以两种都允许存进
+ * timezone 列，靠这个正则区分能不能算绝对时间。
+ */
+const FIXED_OFFSET_RE = /^[+-]\d{2}:\d{2}$/;
+
+/** 界面上可选的偏移量。第一版不接 IANA 时区库，只提供固定偏移。 */
+export const COMMON_UTC_OFFSETS: readonly { value: string; label: string }[] = [
+  { value: '+09:00', label: '+09:00 日本 / 韩国' },
+  { value: '+08:00', label: '+08:00 中国 / 新加坡' },
+  { value: '+07:00', label: '+07:00 泰国 / 越南' },
+  { value: '+05:30', label: '+05:30 印度' },
+  { value: '+02:00', label: '+02:00 中欧夏令时' },
+  { value: '+01:00', label: '+01:00 中欧' },
+  { value: '+00:00', label: '+00:00 英国 / UTC' },
+  { value: '-05:00', label: '-05:00 美东' },
+  { value: '-08:00', label: '-08:00 美西' },
+];
+
 /** 合成后的有效元数据。UI 和发布都读这个，不直接读 Asset 上的原始列。 */
 export interface EffectiveAssetMetadata {
   readonly capturedLocalAt?: string;
@@ -340,11 +362,24 @@ export function effectiveMetadata(
     (timeCorrection?.value as string | undefined) ?? asset.capturedLocalAt;
   const timezone = (tzCorrection?.value as string | undefined) ?? asset.timezone;
 
+  // 时区被修正过就要重算绝对时间。
+  //
+  // 固定偏移（`+09:00`）能算 —— 那是纯字符串运算，不需要任何时区数据库。
+  // IANA 名（`Asia/Tokyo`）**算不了**：夏令时规则不在这个包里，
+  // 而按「大概是这个偏移」硬算就是又一次伪造。所以那种情况 capturedAt
+  // 保持 undefined，直到有真正的 tz 数据可用。
+  const recomputed =
+    tzCorrection && capturedLocalAt && timezone && FIXED_OFFSET_RE.test(timezone)
+      ? new Date(`${capturedLocalAt}${timezone}`).toISOString()
+      : undefined;
+
   return {
     ...(capturedLocalAt ? { capturedLocalAt } : {}),
-    // 时区被修正过就要重算绝对时间；换算在 infrastructure 做（需要 tz 数据库），
-    // 这里只在时区没变时沿用原值 —— 绝不猜。
-    ...(timezone && !tzCorrection && asset.capturedAt ? { capturedAt: asset.capturedAt } : {}),
+    ...(recomputed
+      ? { capturedAt: recomputed }
+      : timezone && !tzCorrection && asset.capturedAt
+        ? { capturedAt: asset.capturedAt }
+        : {}),
     ...(timezone ? { timezone } : {}),
     timezoneSource: tzCorrection
       ? (tzCorrection.source as TimezoneSource)

@@ -12,7 +12,10 @@ const nextConfig = {
   },
   experimental: {
     serverActions: {
-      bodySizeLimit: '10mb',
+      // 与 @tc/application 的 MAX_UPLOAD_BYTES（25 MB）对齐并留出表单开销。
+      // 两处不一致的话，超限会表现成一个没有任何提示的 413，
+      // 而不是用例层那句「文件超过 25 MB」。
+      bodySizeLimit: '30mb',
     },
   },
   headers: async () => {
