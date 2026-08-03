@@ -38,7 +38,10 @@
       "impact": "删除 \"user\" 行会物理删除该用户的全部业务数据。但系统无法区分「退出登录 / 禁用账号 / 申请删除 / 最终删除」四种操作 —— 目前只有「删 user 行」这一个动作。",
       "mitigation": "ADR-007 已定义 active → disabled → deletion_requested → deleted 状态机，以及四种操作各自的语义。",
       "closeWhen": "实现 user.status 字段与删除流程，并补齐 ADR-007 列的 4 条集成测试。",
-      "owner": "product"
+      "owner": "product",
+      "status": "closed",
+      "closedAt": "2026-08-03",
+      "closedBy": "Commit 14C–14E：migration 20260807000000 加 user.status 状态机、account_events 审计表、trg_guard_user_delete 触发器（CASCADE 只能由删除流程触发）；AccountRepository + 五个用例；20 条集成灵魂测试覆盖 ADR-007 列出的四条边界，30 天等待期用注入的 Clock 推进；E2E 在真实浏览器里走完申请删除 → 立刻下架 → 令牌撤销 → 完全恢复 → 到期永久删除。"
     },
     {
       "id": "rls-not-a-security-layer",
@@ -92,12 +95,12 @@
     },
     {
       "id": "published-asset-gc-not-implemented",
-      "title": "派生副本与孤儿对象没有回收",
+      "title": "撤回后的派生副本与孤儿对象没有回收",
       "severity": "low",
       "area": "published_assets / ObjectStorage",
-      "impact": "published_assets 记录了每份派生副本的 object_key，但还没有清理任务。撤回或删除账号之后，字节仍留在存储里（虽然任何 URL 都取不到）。上传时若数据库写失败，也会留下没有引用的对象。",
-      "mitigation": "撤回后资源路由立即 404，所以这是**存储成本问题，不是泄露问题**。published_assets 这张表存在的理由就是让清理任务将来能一次查到该删什么。",
-      "closeWhen": "实现 storage:audit 命令（ADR-002 第 5 节）并接入账号删除流程。",
+      "impact": "两种字节会留在存储里：① 作者撤回 Publication 后，那一版的派生副本；② 上传时对象已落盘但数据库写失败留下的孤儿。两者都没有清理任务。（账号永久删除**不在此列** —— finalizeAccountDeletion 会逐个删 assets 和 published_assets 的 key，并扫一遍 users/{userId}/ 前缀兜底孤儿。）",
+      "mitigation": "撤回后资源路由立即 404，孤儿对象在任何表里都查不到 —— 所以这是**存储成本问题，不是泄露问题**。published_assets 这张表存在的理由就是让清理任务能一次查到该删什么。",
+      "closeWhen": "实现 storage:audit 命令（ADR-002 第 5 节）：对比 ObjectStorage 里的 key 与 assets/published_assets 的引用，清理无引用的那些。",
       "owner": "engineering"
     },
     {
@@ -106,7 +109,7 @@
       "severity": "low",
       "area": "app/p/[slug]/a/[file]/route.ts",
       "impact": "派生副本不放公开桶，而是走一条只看 Publication 状态的路由（这样撤回才是真的）。代价是每张图都占用一次应用请求。",
-      "mitigation": "响应带 immutable 缓存头，浏览器和任何中间缓存只会取一次。ADR-008 A8 把这条记为已知代价。",
+      "mitigation": "响应是 `no-cache, must-revalidate` + ETag：字节可以被缓存，但每次使用前要回来验证一次，命中时回 304 不重传。所以重复访问的成本是一次条件请求，不是一次完整下载。不用 immutable 是刻意的 —— 那会让撤回在已缓存的客户端上根本不发生（见 ADR-008 A8 的更正）。",
       "closeWhen": "有真实流量压力时，在路由前加一层带鉴权回源的 CDN；不能简单换成公开桶——那会让撤回失效。",
       "owner": "engineering"
     },
@@ -131,6 +134,26 @@
       "impact": "原图带 GPS 和相机序列号，所以响应头是 `private, no-store` —— 连落盘都不许。代价是 Moment 页面上的缩略图不会被缓存，每次渲染都要重新传输整张原图。",
       "mitigation": "当前规模下可接受（一个 Moment 的素材是个位数）。",
       "closeWhen": "成为问题时，解法是**服务端生成受控尺寸的预览副本**（复用发布派生那套机制，同样剥离元数据），而不是放松这里的缓存策略。",
+      "owner": "engineering"
+    },
+    {
+      "id": "account-cancel-token-not-emailed",
+      "title": "撤销删除的令牌只显示一次，没有邮件兜底",
+      "severity": "medium",
+      "area": "app/account/deletion-requested/page.tsx · use-cases/account.ts",
+      "impact": "申请删除后 session 全部失效且无法再登录（ADR-007），所以撤销只能靠那串一次性令牌。用户没保存就自己撤销不了 —— 30 天后账号被永久删除。",
+      "mitigation": "运维路径可以恢复：`pnpm account restore <email> --reason ...`，状态机允许 deletion_requested → active，且会进审计表。页面上用红框明确写了「只显示这一次」。",
+      "closeWhen": "接入邮件发送后，申请删除时把撤销链接同时发到注册邮箱；那之后这个页面上的令牌变成便利项而不是唯一凭据。",
+      "owner": "product"
+    },
+    {
+      "id": "legacy-storage-not-cleaned-on-deletion",
+      "title": "永久删除清不掉遗留系统的文件",
+      "severity": "medium",
+      "area": "use-cases/account.ts · finalizeAccountDeletion",
+      "impact": "删除会清空新核心的对象存储（users/{userId}/ 前缀下的原图与发布派生副本，逐个删 + 扫前缀兜底）。但遗留的 photos / 文档图片走的是 Supabase Storage 和 public/images/，那些字节不在清理范围里 —— 数据库行被 CASCADE 删了，文件还在。",
+      "mitigation": "数据库行没了之后，遗留应用的所有读取路径都查不到这些文件（URL 是从 photos 行里取的）。所以这是**残留问题，不是公开泄露**。清理失败会写 storage_cleanup_incomplete 审计。",
+      "closeWhen": "遗留页面按 Strangler 计划迁到新核心后自然消失；在那之前若要提前关闭，需要在 finalizeAccountDeletion 里加一个遗留存储的清理器（先收集 photos.file_url，再删 Supabase 对象）。",
       "owner": "engineering"
     }
   ]

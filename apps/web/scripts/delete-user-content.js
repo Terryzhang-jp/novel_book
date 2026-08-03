@@ -2,6 +2,19 @@
 
 /**
  * 删除指定用户的所有内容（文档和照片）
+ *
+ * ⚠️ 这是**运维脚本，不是产品功能**（ADR-007 实现要求 5）。
+ *
+ * 它删的是遗留表里的内容行，**不碰账号本身**：不改 user.status、
+ * 不撤销 session、不写 account_events 审计、不清对象存储。
+ *
+ * 用户发起的「删除我的账号」走的是完全另一条路径 ——
+ * 状态机 + 30 天冷静期 + 审计 + 级联，入口是：
+ *
+ *     pnpm account <status|disable|restore|finalize|run-due>
+ *
+ * 想删 user 行的话这个脚本也做不到：数据库的 trg_guard_user_delete
+ * 会拒绝任何没有经过删除流程的 DELETE。
  */
 
 const { createClient } = require('@supabase/supabase-js');

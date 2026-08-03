@@ -25,7 +25,9 @@ export function Shell({ children }: { children: ReactNode }) {
         <Link href="/studio/works" className="hover:underline">
           作品
         </Link>
-        <span className="ml-auto text-neutral-400">Phase 2A 最小链路</span>
+        <Link href="/studio/account" className="ml-auto hover:underline" data-testid="nav-account">
+          账号
+        </Link>
       </nav>
       {children}
     </div>

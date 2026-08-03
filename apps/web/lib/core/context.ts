@@ -14,6 +14,7 @@
 import { redirect } from 'next/navigation';
 import { Pool } from 'pg';
 import { PostgresUnitOfWork } from '@tc/infrastructure-postgres';
+import { systemClock, type AccountDeps, type FinalizeDeps } from '@tc/application';
 import {
   ANONYMOUS,
   accountStatusExplanation,
@@ -24,6 +25,8 @@ import {
 } from '@tc/domain';
 import { AuthRequiredError, getServerSession } from '@/lib/auth/helpers';
 import { AccountNotActiveError } from '@/lib/core/errors';
+import { getObjectStorage } from '@/lib/core/storage';
+import { tokenIssuer } from '@/lib/core/tokens';
 
 /**
  * 连接池挂在 globalThis 上。
@@ -135,4 +138,19 @@ export async function requirePageActor(): Promise<Actor> {
       ? accountStatusExplanation(resolved.status)
       : '请先登录。';
   redirect(`/login?notice=${encodeURIComponent(notice)}`);
+}
+
+// ── 账号生命周期的依赖装配 ───────────────────────────────────────────────────
+
+/** 申请 / 撤销删除用。不含 storage —— 那两步不碰对象存储。 */
+export function getAccountDeps(): AccountDeps {
+  return { core: getCore(), clock: systemClock, tokens: tokenIssuer };
+}
+
+/**
+ * 永久删除用。storage 是必填的 —— 少了它，行删了字节还在。
+ * 运维脚本走的是同一个装配函数，不存在「脚本用了另一套依赖」。
+ */
+export function getFinalizeDeps(): FinalizeDeps {
+  return { ...getAccountDeps(), storage: getObjectStorage() };
 }

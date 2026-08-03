@@ -24,7 +24,18 @@ export async function middleware(request: NextRequest) {
   // /p/* 是发布页 —— 必须允许匿名访问，否则「分享给别人看」根本不成立。
   // 可见性（public / unlisted / private）和撤回状态由用例层判断，
   // 不在 middleware 里做 —— middleware 只看 cookie，看不到 Publication。
-  const publicRoutes = ["/login", "/register", "/chichibu", "/forgot-password", "/p/"];
+  // /account/ 是账号删除的申请回执页和撤销页。它们**必须**公开：
+  // 申请删除的同一个事务里 session 就被全部撤销了，此后这个人无法登录
+  // （ADR-007）。要求登录的话，令牌永远显示不出来，撤销也永远走不通。
+  const publicRoutes = [
+    "/login",
+    "/register",
+    "/chichibu",
+    "/forgot-password",
+    "/p/",
+    "/account/restore",
+    "/account/deletion-requested",
+  ];
   const isPublicRoute = publicRoutes.some((route) =>
     pathname.startsWith(route)
   );
