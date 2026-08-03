@@ -146,10 +146,10 @@ test.describe('Phase 2A 纵向链路', () => {
     await expect(page.locator('[data-testid="block-list"]')).toContainText(V1);
 
     // ── 6. 发布 ─────────────────────────────────────────────────────────
-    await page.click('[data-testid="publish-submit"]');
-    await expect(page.locator('[data-testid="publication-box"]')).toBeVisible();
+    await page.click('[data-testid="publish-narrative"]');
+    await expect(page.locator('[data-testid="publication-narrative"]')).toBeVisible();
     const pubHref = await page
-      .locator('[data-testid="publication-box"] a')
+      .locator('[data-testid="publication-narrative"] a')
       .first()
       .getAttribute('href');
     expect(pubHref).toMatch(/^\/p\//);
@@ -218,10 +218,10 @@ test.describe('Phase 2A 纵向链路', () => {
 
     // ── 10. 再次发布 → 同一个链接，新内容 ───────────────────────────────
     await page.goto(workUrl);
-    await page.click('[data-testid="publish-submit"]');
-    await expect(page.locator('[data-testid="publication-box"]')).toContainText('第 2 版');
+    await page.click('[data-testid="publish-narrative"]');
+    await expect(page.locator('[data-testid="publication-narrative"]')).toContainText('第 2 版');
     const pubHref2 = await page
-      .locator('[data-testid="publication-box"] a')
+      .locator('[data-testid="publication-narrative"] a')
       .first()
       .getAttribute('href');
     // 链接不变 —— 已经分享出去的 URL 不该因为作者改了一次想法就失效
@@ -231,9 +231,38 @@ test.describe('Phase 2A 纵向链路', () => {
     await expect(third.page.locator('[data-testid="pub-interpretation"]')).toHaveText(V2);
     await third.context.close();
 
+    // ── 10.5 同一份内容的第二种表现（Phase 2C）────────────────────────────
+    await page.goto(workUrl);
+    await page.selectOption('[data-testid="gallery-columns"]', '3');
+    await page.click('[data-testid="save-gallery"]');
+    await page.click('[data-testid="publish-gallery"]');
+    await expect(page.locator('[data-testid="publication-gallery"]')).toBeVisible();
+
+    const galleryHref = await page
+      .locator('[data-testid="publication-gallery"] a')
+      .first()
+      .getAttribute('href');
+    // 两个独立的链接
+    expect(galleryHref).not.toBe(pubHref);
+
+    const g = await visitAnonymously(browser, galleryHref!);
+    // 两个页面用不同的渲染器
+    await expect(g.page.locator('[data-testid="renderer-gallery"]')).toBeVisible();
+    await expect(g.page.locator('[data-testid="renderer-narrative"]')).toHaveCount(0);
+    // 但语义内容完全相同 —— 表现不能隐藏或改写任何内容
+    await expect(g.page.locator('[data-testid="pub-title"]')).toHaveText('秩父三日');
+    await expect(g.page.locator('[data-testid="pub-interpretation"]')).toHaveText(V2);
+    await expect(g.page.locator('[data-testid="pub-asset"]')).toHaveCount(1);
+    await g.context.close();
+
+    // narrative 那一篇没有因此改变
+    const n = await visitAnonymously(browser, pubHref!);
+    await expect(n.page.locator('[data-testid="renderer-narrative"]')).toBeVisible();
+    await n.context.close();
+
     // ── 11. 下架不是删除 ────────────────────────────────────────────────
     await page.goto(workUrl);
-    await page.click('[data-testid="withdraw-submit"]');
+    await page.click('[data-testid="withdraw-narrative"]');
     // 同上：等服务端处理完再让匿名访客去看，否则是在和重定向赛跑
     await expect(page.locator('[data-testid="notice-banner"]')).toContainText('已下架');
 

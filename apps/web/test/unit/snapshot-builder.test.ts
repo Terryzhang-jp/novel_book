@@ -12,7 +12,15 @@
 
 import { describe, expect, it } from 'vitest';
 import { buildWorkSnapshot, type SnapshotSources } from '@tc/application';
-import type { InterpretationRevision, Moment, Observation, Work, WorkBlock } from '@tc/domain';
+import {
+  DEFAULT_NARRATIVE_CONFIG,
+  freezePresentation,
+  type InterpretationRevision,
+  type Moment,
+  type Observation,
+  type Work,
+  type WorkBlock,
+} from '@tc/domain';
 
 const NOW = '2026-08-03T00:00:00.000Z';
 
@@ -70,7 +78,7 @@ function sources(over: Partial<SnapshotSources> = {}): SnapshotSources {
   return {
     work,
     blocks: [],
-    presentation: { rendererType: 'web', config: { _v: 1, theme: 'plain' } },
+    presentation: freezePresentation('narrative', DEFAULT_NARRATIVE_CONFIG),
     moments: new Map(),
     observations: new Map(),
     interpretations: new Map(),
@@ -174,9 +182,22 @@ describe('buildWorkSnapshot', () => {
 
   it('presentation 被完整冻进快照 —— 换主题不影响已发布的页面', () => {
     const snap = buildWorkSnapshot(
-      sources({ presentation: { rendererType: 'web', config: { _v: 1, theme: 'serif' } } })
+      sources({
+        presentation: freezePresentation('narrative', {
+          ...DEFAULT_NARRATIVE_CONFIG,
+          theme: 'paper',
+        }),
+      })
     );
-    expect(snap.presentation).toEqual({ rendererType: 'web', config: { _v: 1, theme: 'serif' } });
+    expect(snap.presentation.config).toMatchObject({ theme: 'paper' });
+  });
+
+  it('快照带 rendererVersion —— 否则改一次渲染代码，旧发布的外观就变了', () => {
+    const snap = buildWorkSnapshot(sources());
+    expect(snap._v).toBe(2);
+    expect(snap.presentation.rendererType).toBe('narrative');
+    expect(snap.presentation.rendererVersion).toBe(1);
+    expect(snap.presentation.presentationSchemaVersion).toBe(1);
   });
 
   it('产出的快照一定通过自洽性检查', () => {
@@ -191,7 +212,7 @@ describe('buildWorkSnapshot', () => {
         moments: new Map([['m1', moment]]),
       })
     );
-    expect(snap._v).toBe(1);
+    expect(snap._v).toBe(2);
     expect(snap.blocks).toHaveLength(2);
   });
 });

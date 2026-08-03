@@ -23,6 +23,10 @@ import {
   InvariantViolation,
   isPubliclyVisible,
   isWithdrawn,
+  DEFAULT_NARRATIVE_CONFIG,
+  freezePresentation,
+  normalizeSnapshot,
+  parsePresentationConfig,
   renumber,
   slugify,
   userProvenance,
@@ -226,9 +230,9 @@ describe('墓碑', () => {
 
 describe('快照自洽性', () => {
   const base: WorkSnapshot = {
-    _v: 1,
+    _v: 2,
     work: { id: 'w1', title: '作品' },
-    presentation: { rendererType: 'web', config: { _v: 1 } },
+    presentation: freezePresentation('narrative', DEFAULT_NARRATIVE_CONFIG),
     blocks: [],
   };
 
@@ -281,8 +285,17 @@ describe('快照自洽性', () => {
 
   it('未知的 _v 要报错', () => {
     expect(() =>
-      assertSnapshotIsSelfContained({ ...base, _v: 2 as unknown as 1 })
+      assertSnapshotIsSelfContained({ ...base, _v: 99 as unknown as 2 })
     ).toThrow(/P-1/);
+  });
+
+  it('缺少 rendererVersion 要报错 —— 那意味着视觉表达没有被冻结', () => {
+    expect(() =>
+      assertSnapshotIsSelfContained({
+        ...base,
+        presentation: { ...base.presentation, rendererVersion: 0 },
+      })
+    ).toThrow(/rendererVersion/);
   });
 });
 
@@ -309,5 +322,86 @@ describe('Publication 可见性', () => {
 
   it('unlisted 对拿到链接的人可见', () => {
     expect(isPubliclyVisible(pub({ visibility: 'unlisted' }))).toBe(true);
+  });
+});
+
+describe('Presentation 的边界（ADR-010）', () => {
+  it('未知字段被丢弃 —— 想加 hiddenBlockIds 得先改类型定义', () => {
+    const config = parsePresentationConfig('narrative', {
+      theme: 'paper',
+      hiddenBlockIds: ['a', 'b'],
+      blockOrder: [2, 1, 0],
+    });
+    expect(config).not.toHaveProperty('hiddenBlockIds');
+    expect(config).not.toHaveProperty('blockOrder');
+    expect(config.renderer).toBe('narrative');
+  });
+
+  it('缺失字段补默认，非法枚举值报错', () => {
+    expect(parsePresentationConfig('gallery', {})).toEqual({
+      _v: 1,
+      renderer: 'gallery',
+      columns: 2,
+      imageFit: 'cover',
+      captionMode: 'below',
+      textDensity: 'compact',
+    });
+    // 报错而不是静默用默认值：静默会让用户以为自己的设置生效了
+    expect(() => parsePresentationConfig('gallery', { columns: 7 })).toThrow(/PR-1/);
+    expect(() => parsePresentationConfig('narrative', { theme: 'neon' })).toThrow(/PR-1/);
+  });
+
+  it('columns 是数字不是字符串 —— 表单来的值要转回去', () => {
+    const config = parsePresentationConfig('gallery', { columns: '3' });
+    expect(config).toMatchObject({ columns: 3 });
+  });
+});
+
+describe('快照版本迁移（ADR-010 R6）', () => {
+  const v1 = {
+    _v: 1,
+    work: { id: 'w1', title: '旧作品' },
+    presentation: { rendererType: 'web', config: { _v: 1, theme: 'plain' } },
+    blocks: [{ type: 'text', position: 0, text: '一段话' }],
+  };
+
+  it('v1 读到时升级成 v2，web 变成 narrative@1', () => {
+    const up = normalizeSnapshot(v1);
+    expect(up._v).toBe(2);
+    expect(up.presentation.rendererType).toBe('narrative');
+    expect(up.presentation.rendererVersion).toBe(1);
+    // v1 的 config 是开放结构（theme:'plain' 在 v2 的枚举里不存在），
+    // 和 v2 没有忠实对应关系。所以用默认配置而不是猜 ——
+    // 报错会让所有旧发布页打不开，硬映射是在替用户决定他当时想要什么。
+    expect(up.presentation.config).toEqual(DEFAULT_NARRATIVE_CONFIG);
+    expect(up.blocks).toHaveLength(1);
+  });
+
+  it('升级是纯函数：不修改传进来的对象', () => {
+    const before = JSON.stringify(v1);
+    normalizeSnapshot(v1);
+    expect(JSON.stringify(v1)).toBe(before);
+  });
+
+  it('v2 原样返回，但仍然过一次 config 校验', () => {
+    const v2 = {
+      _v: 2,
+      work: { id: 'w1', title: '新作品' },
+      presentation: {
+        rendererType: 'gallery',
+        rendererVersion: 1,
+        presentationSchemaVersion: 1,
+        config: { _v: 1, renderer: 'gallery', columns: 3, sneaky: 'x' },
+      },
+      blocks: [],
+    };
+    const out = normalizeSnapshot(v2);
+    expect(out.presentation.config).not.toHaveProperty('sneaky');
+    expect(out.presentation.config).toMatchObject({ columns: 3 });
+  });
+
+  it('无法识别的版本要报错，不猜', () => {
+    expect(() => normalizeSnapshot({ _v: 99 })).toThrow(/P-1/);
+    expect(() => normalizeSnapshot(null)).toThrow(/P-1/);
   });
 });

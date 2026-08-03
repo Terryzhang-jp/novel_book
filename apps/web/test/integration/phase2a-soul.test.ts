@@ -256,7 +256,7 @@ describe('灵魂 3：发布之后，改变理解不会改写已经发出去的�
     );
 
     // 第 1 版没有被覆盖，它仍然在版本历史里
-    const versions = await core.publications.listVersions(ALICE, work.id);
+    const versions = await core.publications.listVersions(ALICE, work.id, 'narrative');
     expect(versions.map((v) => v.versionNumber)).toEqual([2, 1]);
   });
 
