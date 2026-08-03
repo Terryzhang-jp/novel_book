@@ -302,3 +302,66 @@ describe('检查器自身行为', () => {
     expect(v!.adr).toBe('ADR-000');
   });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+describe('Phase 3A · 遗留写入冻结', () => {
+  it('豁免清单之外新增 photos 表写入 → 违规', () => {
+    write(
+      'apps/web/app/api/new-upload/route.ts',
+      `import { supabaseAdmin } from '@/lib/supabase/admin';
+       export async function POST(u: string) {
+         await supabaseAdmin.from('photos').insert({ user_id: u });
+       }`
+    );
+    expect(rulesHit()).toContain('no-new-legacy-writes');
+  });
+
+  it('新增 Supabase Storage 上传 → 违规', () => {
+    write(
+      'apps/web/lib/新上传.ts',
+      `import { supabaseAdmin } from './supabase/admin';
+       export const put = (b: Buffer) =>
+         supabaseAdmin.storage.from('photos').upload('a/b.jpg', b);`
+    );
+    expect(rulesHit()).toContain('no-new-legacy-writes');
+  });
+
+  it('调用旧的 uploadFile 封装 → 违规', () => {
+    write(
+      'apps/web/app/api/x/route.ts',
+      `import { uploadFile } from '@/lib/supabase/storage';
+       export const POST = () => uploadFile('photos', 'a.jpg', Buffer.from(''));`
+    );
+    expect(rulesHit()).toContain('no-new-legacy-writes');
+  });
+
+  it('豁免清单里的遗留 adapter 不违规', () => {
+    // 旧文件继续存在是允许的 —— 要挡的是**新增**入口。
+    write(
+      'apps/web/lib/storage/photo-storage.ts',
+      `import { supabaseAdmin } from '../supabase/admin';
+       export const create = (u: string) => supabaseAdmin.from('photos').insert({ user_id: u });`
+    );
+    expect(rulesHit()).not.toContain('no-new-legacy-writes');
+  });
+
+  it('注释和字符串里提到这些形状 → 不应误报', () => {
+    // 门禁只看调用表达式。纯正则会把解释性注释也算违规，
+    // 于是后来的人为了让 CI 变绿就得删注释 —— 那是在惩罚写文档的人。
+    write(
+      'apps/web/lib/notes.ts',
+      `// 历史上这里是 supabaseAdmin.from('photos').insert({...})，现在走 uploadAsset
+       export const NOTE = "以前用 storage.from('photos').upload(path, buf)";`
+    );
+    expect(rulesHit()).not.toContain('no-new-legacy-writes');
+  });
+
+  it('读取旧表不算违规 —— Phase 3A 只冻结写入', () => {
+    write(
+      'apps/web/app/api/gallery/route.ts',
+      `import { supabaseAdmin } from '@/lib/supabase/admin';
+       export const GET = () => supabaseAdmin.from('photos').select('*');`
+    );
+    expect(rulesHit()).not.toContain('no-new-legacy-writes');
+  });
+});

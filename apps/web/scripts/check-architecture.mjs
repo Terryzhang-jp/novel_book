@@ -104,6 +104,41 @@ const FORBIDDEN_IDENTIFIERS = [
 ];
 
 /**
+ * Phase 3A：不允许新增遗留写入。
+ *
+ * 目标是一句可判定的话 —— **从这个 commit 起，系统不再产生新的 Legacy
+ * Photo 和 Legacy Storage 数据**。旧数据可以读，旧页面可以在，但旧写入停止。
+ *
+ * 清单与关闭进度见 docs/LEGACY-WRITE-INVENTORY.md。
+ *
+ * ## 豁免是**逐个文件**列出的，不是目录通配
+ *
+ * 通配会让某天新增的文件自动获得豁免 —— 而那正是要挡住的东西。
+ * 每关闭一个入口就从这里删掉一行；**清单变空的那一刻，Phase 3A 完成**。
+ */
+const LEGACY_WRITE_ROOTS = ['apps/web/app', 'apps/web/lib', 'apps/web/components'];
+
+const LEGACY_WRITE_ALLOWLIST = new Set([
+  // L1/L2/L5/L6：旧 Photo 的全部读写都在这一个文件里。
+  // 16B 之后它只保留读，写入方法逐个删掉。
+  'apps/web/lib/storage/photo-storage.ts',
+  // L3：通用上传封装。16B 之后由 uploadAsset 取代。
+  'apps/web/lib/supabase/storage.ts',
+  'apps/web/app/api/upload/route.ts',
+  // L4：画布，Phase 3D 再定去向
+  'apps/web/lib/storage/canvas-storage.ts',
+  // L9：AI 生成图。**这一条是门禁自己找出来的** —— 手工清点漏掉了它。
+  'apps/web/lib/storage/ai-magic-storage.ts',
+]);
+
+/** 认得出「这是一次遗留写入」的形状 */
+const LEGACY_WRITE_PATTERNS = [
+  { id: 'photos-table-write', re: /\.from\(\s*['"`]photos['"`]\s*\)[\s\S]{0,80}?\.(insert|update|upsert)\s*\(/ },
+  { id: 'supabase-storage-upload', re: /storage\s*\.from\([^)]*\)[\s\S]{0,80}?\.upload\s*\(/ },
+  { id: 'legacy-upload-helper', re: /\buploadFile\s*\(/ },
+];
+
+/**
  * Repository 方法必须以 actor 作为第一个参数。
  *
  * 这里列的是**目录**，规则只对其中名字以 Repository 结尾的 class/interface
@@ -115,6 +150,43 @@ const REPOSITORY_ROOTS = [
   'packages/application/src',
   'packages/db/src',
 ];
+
+/**
+ * 扫遗留写入。
+ *
+ * 只看**调用表达式**，用 AST 定位后再对它的源文本做形状匹配 ——
+ * 纯正则会把注释和文档里提到的 `.from('photos').insert` 也算成违规，
+ * 那会逼着后来的人为了让门禁变绿而删掉解释性注释。
+ */
+function checkLegacyWrites(sourceFile, filePath, violations, rel) {
+  const relPath = rel(filePath);
+  if (LEGACY_WRITE_ALLOWLIST.has(relPath)) return;
+
+  const visit = (node) => {
+    if (ts.isCallExpression(node)) {
+      const text = node.getText(sourceFile);
+      for (const p of LEGACY_WRITE_PATTERNS) {
+        if (p.re.test(text)) {
+          violations.push({
+            rule: 'no-new-legacy-writes',
+            adr: 'Phase 3A',
+            reason:
+              '不得新增遗留写入（photos 表 / Supabase Storage）。' +
+              '新素材一律走 uploadAsset → ObjectStorage。' +
+              '确实要动旧系统时，把文件加进 check-architecture 的 ' +
+              'LEGACY_WRITE_ALLOWLIST 并在 docs/LEGACY-WRITE-INVENTORY.md 里说明。',
+            file: relPath,
+            line: lineOf(sourceFile, node),
+            text: text.replace(/\s+/g, ' ').slice(0, 80),
+          });
+          break;
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 // 工具
@@ -344,6 +416,17 @@ export function runChecks(monorepoRoot = MONOREPO) {
           }
         }
       }
+    }
+  }
+
+  // Phase 3A：遗留写入冻结
+  for (const root of LEGACY_WRITE_ROOTS) {
+    const dir = resolveRoot(root);
+    if (!existsSync(dir)) continue;
+    scanned.add(root);
+    for (const file of collectSourceFiles(dir)) {
+      const src = readFileSync(file, 'utf8');
+      checkLegacyWrites(parse(file, src), file, violations, rel);
     }
   }
 
