@@ -20,6 +20,19 @@
 import { expect, test, type Browser } from '@playwright/test';
 import { freshEmail, register } from './helpers';
 
+/**
+ * 一张 4×4 的真 PNG。
+ *
+ * 用真字节而不是随便一个 buffer —— 上传路径会按魔术字节判定类型，
+ * 假字节会在探测那一步就被挡下，测不到后面的任何东西。
+ */
+const TINY_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAFUlEQVR42mP8z8BQz0AEYBxVSF+FABJADveWkH6oAAAAAElFTkSuQmCC',
+  'base64'
+);
+
+const BASE = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${process.env.E2E_PORT ?? 3210}`;
+
 /** 匿名访客：全新的浏览器上下文，没有任何 cookie */
 async function visitAnonymously(browser: Browser, url: string) {
   const context = await browser.newContext();
@@ -74,6 +87,31 @@ test.describe('Phase 2A 纵向链路', () => {
     // 第一条一个字都没被改写
     await expect(page.locator('[data-testid="observation-list"]')).toContainText('走到一半');
 
+    // ── 3.5 加一份证据 ──────────────────────────────────────────────────
+    // 角色选 contradicting —— 那是这个产品和相册的分界线，
+    // 「什么让我改变了理解」必须能被表达出来。
+    await page.setInputFiles('[data-testid="asset-file"]', {
+      name: 'evidence.png',
+      mimeType: 'image/png',
+      buffer: TINY_PNG,
+    });
+    await page.selectOption('[data-testid="asset-role"]', 'contradicting');
+    await page.fill('[data-testid="asset-note"]', '扫落叶的人其实在笑');
+    await page.click('[data-testid="asset-submit"]');
+
+    await expect(page.locator('[data-testid="evidence-list"] > li')).toHaveCount(1);
+    await expect(page.locator('[data-testid="evidence-role"]')).toHaveText('但这张让我不确定');
+
+    // 原图能被作者本人读到
+    const thumbSrc = await page.locator('[data-testid="evidence-thumb"]').getAttribute('src');
+    expect(thumbSrc).toMatch(/^\/api\/studio\/assets\/[0-9a-f-]{36}\/raw$/);
+    expect((await page.request.get(thumbSrc!)).status()).toBe(200);
+
+    // ⭐ 匿名读不到原图
+    const anonProbe = await browser.newContext();
+    expect((await anonProbe.request.get(`${BASE}${thumbSrc}`)).status()).toBe(404);
+    await anonProbe.close();
+
     // ── 4. 写下理解 v1 ──────────────────────────────────────────────────
     const V1 = '这里的人对公共空间有种默认的责任感。';
     await page.fill('[data-testid="interpretation-input"]', V1);
@@ -120,6 +158,15 @@ test.describe('Phase 2A 纵向链路', () => {
     const first = await visitAnonymously(browser, pubHref!);
     await expect(first.page.locator('[data-testid="pub-title"]')).toHaveText('秩父三日');
     await expect(first.page.locator('[data-testid="pub-interpretation"]')).toHaveText(V1);
+    // 发布页里有派生副本，而且 URL 里只有 hash —— 不含 userId、不含 objectKey
+    const pubImg = first.page.locator('[data-testid="pub-asset"] img');
+    await expect(pubImg).toBeVisible();
+    const pubImgSrc = (await pubImg.getAttribute('src'))!;
+    expect(pubImgSrc).toMatch(/^\/p\/.+\/a\/[0-9a-f]{64}\.webp$/);
+    expect(pubImgSrc).not.toContain('users/');
+    // 匿名能取到它（这是安全副本，不是原图）
+    expect((await first.page.request.get(pubImgSrc)).status()).toBe(200);
+
     const firstRender = await first.page.locator('article').innerText();
     await first.context.close();
 
@@ -168,6 +215,10 @@ test.describe('Phase 2A 纵向链路', () => {
     const fourth = await visitAnonymously(browser, pubHref!);
     // 访客看到的是「作者已下架」，不是 404 —— 链接没坏，只是不再公开
     await expect(fourth.page.locator('[data-testid="pub-withdrawn"]')).toBeVisible();
+    // ⭐ 图片也跟着立刻不可访问。
+    // 这就是不用公开桶的理由：公开桶要么删文件（撤回不可逆），
+    // 要么留着（撤回是假的）。走路由则撤回当下就 404，字节还在。
+    expect((await fourth.page.request.get(pubImgSrc)).status()).toBe(404);
     await fourth.context.close();
   });
 

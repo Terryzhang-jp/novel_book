@@ -69,6 +69,46 @@
       "mitigation": "两者都不在用户为 Phase 2A 划定的范围内（明确要求暂不接复杂模板与编辑器）。reorderBlocks 的排列校验有单元级断言，upsertPresentation 在每次发布时被真实调用。",
       "closeWhen": "Phase 2B 接入编辑器与版式系统时一并补 UI 和 E2E。",
       "owner": "product"
+    },
+    {
+      "id": "audio-derivation-not-implemented",
+      "title": "音频没有安全派生，因此不进入发布页",
+      "severity": "medium",
+      "area": "packages/application/src/use-cases/publication.ts · deriveEvidence",
+      "impact": "图片在发布时会被缩放并剥离 EXIF/GPS，音频没有对应实现。把原音频字节直接公开会连带公开录制设备信息，所以目前**跳过**——挂了音频证据的 Moment，发布页上看不到它。",
+      "mitigation": "不是静默跳过：publishWork 返回 skippedAssets，发布后的提示里明说「有 N 份音频证据没有进入发布页」。集成测试断言了这个计数。",
+      "closeWhen": "接入音频转码（重编码即可剥离元数据）后打开，并补一条与图片同款的「派生副本不含元数据」测试。",
+      "owner": "engineering"
+    },
+    {
+      "id": "gps-timezone-inference-absent",
+      "title": "有 GPS 也推不出时区",
+      "severity": "low",
+      "area": "apps/web/lib/core/media-probe.ts",
+      "impact": "带 GPS 但没有 OffsetTimeOriginal 的照片，时区仍然是 unknown，用户要手动补。理论上可以由坐标反查时区。",
+      "mitigation": "ADR-009 已经为它留好了 timezone_source='gps_inferred' 和 confidence 两个字段，以及 C-5「推断不覆盖用户修正」的保护。缺的只是 tz 边界数据。",
+      "closeWhen": "引入时区边界数据集后实现反查；必须带 confidence，且不得覆盖 source='user' 的修正。",
+      "owner": "engineering"
+    },
+    {
+      "id": "published-asset-gc-not-implemented",
+      "title": "派生副本与孤儿对象没有回收",
+      "severity": "low",
+      "area": "published_assets / ObjectStorage",
+      "impact": "published_assets 记录了每份派生副本的 object_key，但还没有清理任务。撤回或删除账号之后，字节仍留在存储里（虽然任何 URL 都取不到）。上传时若数据库写失败，也会留下没有引用的对象。",
+      "mitigation": "撤回后资源路由立即 404，所以这是**存储成本问题，不是泄露问题**。published_assets 这张表存在的理由就是让清理任务将来能一次查到该删什么。",
+      "closeWhen": "实现 storage:audit 命令（ADR-002 第 5 节）并接入账号删除流程。",
+      "owner": "engineering"
+    },
+    {
+      "id": "derived-assets-not-on-cdn",
+      "title": "发布页的图片字节流经应用进程",
+      "severity": "low",
+      "area": "app/p/[slug]/a/[file]/route.ts",
+      "impact": "派生副本不放公开桶，而是走一条只看 Publication 状态的路由（这样撤回才是真的）。代价是每张图都占用一次应用请求。",
+      "mitigation": "响应带 immutable 缓存头，浏览器和任何中间缓存只会取一次。ADR-008 A8 把这条记为已知代价。",
+      "closeWhen": "有真实流量压力时，在路由前加一层带鉴权回源的 CDN；不能简单换成公开桶——那会让撤回失效。",
+      "owner": "engineering"
     }
   ]
 }
