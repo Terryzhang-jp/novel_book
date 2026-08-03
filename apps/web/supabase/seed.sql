@@ -341,7 +341,8 @@ ON CONFLICT (id) DO NOTHING;
 -- 每种输出各一套配置，互不覆盖（ADR-005 修正）
 INSERT INTO work_presentations (id, work_id, renderer_type, config) VALUES
   ('80000000-0000-0000-0000-000000000001', '60000000-0000-0000-0000-000000000001',
-   'web', '{"_v":1,"theme":"plain"}'::jsonb)
+   'narrative',
+   '{"_v":1,"renderer":"narrative","contentWidth":"reading","theme":"paper","imageTreatment":"inline","momentStyle":"seamless"}'::jsonb)
 ON CONFLICT (id) DO NOTHING;
 
 -- ── 发布快照 ────────────────────────────────────────────────────────────────
@@ -351,13 +352,19 @@ ON CONFLICT (id) DO NOTHING;
 --
 -- 快照里没有任何一个「只有 id 没有内容」的引用 ——
 -- 渲染它不需要碰 moments / observations / interpretation_revisions。
-INSERT INTO work_versions (id, work_id, user_id, version_number, snapshot) VALUES
+INSERT INTO work_versions (id, work_id, user_id, renderer_type, version_number, snapshot) VALUES
   ('90000000-0000-0000-0000-000000000001', '60000000-0000-0000-0000-000000000001',
-   '11111111-1111-1111-1111-111111111111', 1,
+   '11111111-1111-1111-1111-111111111111', 'narrative', 1,
    '{
-      "_v": 1,
+      "_v": 2,
       "work": { "id": "60000000-0000-0000-0000-000000000001", "title": "秩父三日" },
-      "presentation": { "rendererType": "web", "config": { "_v": 1, "theme": "plain" } },
+      "presentation": {
+        "rendererType": "narrative",
+        "rendererVersion": 1,
+        "presentationSchemaVersion": 1,
+        "config": { "_v": 1, "renderer": "narrative", "contentWidth": "reading",
+                    "theme": "paper", "imageTreatment": "inline", "momentStyle": "seamless" }
+      },
       "blocks": [
         { "type": "text", "position": 0, "text": "三天，两个地方，一个没想明白的问题。" },
         { "type": "moment_ref", "position": 1,

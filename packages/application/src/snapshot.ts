@@ -17,12 +17,12 @@ import {
   buildMomentTombstone,
   currentInterpretation,
   renumber,
+  SNAPSHOT_VERSION,
   type InterpretationRevision,
   type Moment,
   type MomentId,
   type Observation,
-  type PresentationConfig,
-  type RendererType,
+  type FrozenPresentation,
   type SnapshotBlock,
   type SnapshotAsset,
   type SnapshotMoment,
@@ -34,7 +34,8 @@ import {
 export interface SnapshotSources {
   readonly work: Work;
   readonly blocks: readonly WorkBlock[];
-  readonly presentation: { readonly rendererType: RendererType; readonly config: PresentationConfig };
+  /** 已经冻结好的表现信息（含 rendererVersion）。由 publishWork 调 freezePresentation 产出。 */
+  readonly presentation: FrozenPresentation;
   /** 被引用到的 Moment，按 id 索引 */
   readonly moments: ReadonlyMap<MomentId, Moment>;
   /** 每个 Moment 的观察，按 id 索引 */
@@ -127,9 +128,9 @@ export function buildWorkSnapshot(src: SnapshotSources): WorkSnapshot {
   });
 
   const snapshot: WorkSnapshot = {
-    _v: 1,
+    _v: SNAPSHOT_VERSION,
     work: { id: src.work.id, title: src.work.title },
-    presentation: { rendererType: src.presentation.rendererType, config: src.presentation.config },
+    presentation: src.presentation,
     blocks,
   };
 

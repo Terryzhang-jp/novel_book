@@ -15,4 +15,5 @@ export * from './storage';
 export * from './journey';
 export * from './moment';
 export * from './asset';
+export * from './presentation';
 export * from './work';

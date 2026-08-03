@@ -16,6 +16,7 @@
  * 不可能再发生：要么都有，要么都没有。
  */
 
+import { normalizeSnapshot } from '@tc/domain';
 import type { PublishedAsset } from '@tc/application';
 import type {
   Asset,
@@ -330,14 +331,15 @@ export function mapWorkPresentation(row: WorkPresentationRow): WorkPresentation 
 // ════════════════════════════════════════════════════════════════════════════
 
 export const WORK_VERSION_COLUMNS =
-  'id, work_id, user_id, version_number, snapshot, created_at';
+  'id, work_id, user_id, renderer_type, version_number, snapshot, created_at';
 
 export interface WorkVersionRow {
   id: string;
   work_id: string | null;
   user_id: string;
+  renderer_type: string;
   version_number: number;
-  snapshot: WorkSnapshot;
+  snapshot: unknown;
   created_at: Date | string;
 }
 
@@ -347,8 +349,11 @@ export function mapWorkVersion(row: WorkVersionRow): WorkVersion {
     id: required(t, 'id', row.id),
     ...optionalField('workId', opt(present(t, 'work_id', row.work_id))),
     userId: required(t, 'user_id', row.user_id),
+    rendererType: required(t, 'renderer_type', row.renderer_type) as RendererType,
     versionNumber: required(t, 'version_number', row.version_number),
-    snapshot: required(t, 'snapshot', row.snapshot),
+    // 读取时升级到当前快照版本。**不改写数据库里的行** ——
+    // 已发布的快照是不可变的，改写它就违背了它存在的理由（ADR-010 R6）。
+    snapshot: normalizeSnapshot(required(t, 'snapshot', row.snapshot)),
     createdAt: toIso(required(t, 'created_at', row.created_at)),
   };
 }

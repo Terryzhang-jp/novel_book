@@ -11,6 +11,16 @@
  */
 
 import type { MomentAssetRole } from './asset';
+import {
+  assertRendererAvailable,
+  defaultConfigFor,
+  freezePresentation,
+  isRendererType,
+  parsePresentationConfig,
+  type FrozenPresentation,
+  type PresentationConfig,
+  type RendererType,
+} from './presentation';
 import type {
   InterpretationRevision,
   InterpretationRevisionId,
@@ -74,9 +84,6 @@ export interface WorkBlock {
 
 // ── Presentation ─────────────────────────────────────────────────────────────
 
-export const RENDERER_TYPES = ['web', 'magazine', 'poster', 'map'] as const;
-export type RendererType = (typeof RENDERER_TYPES)[number];
-
 /**
  * 一个 Work 对每种输出各有一套配置。
  *
@@ -92,15 +99,6 @@ export interface WorkPresentation {
   readonly updatedAt: string;
 }
 
-export interface PresentationConfig {
-  readonly _v: 1;
-  readonly theme?: string;
-  readonly layout?: string;
-  readonly typography?: Record<string, string>;
-}
-
-export const DEFAULT_PRESENTATION_CONFIG: PresentationConfig = { _v: 1, theme: 'plain' };
-
 // ── Version / Snapshot ───────────────────────────────────────────────────────
 
 /**
@@ -115,13 +113,17 @@ export const DEFAULT_PRESENTATION_CONFIG: PresentationConfig = { _v: 1, theme: '
  * 只存外键是不够的：Moment 或 Interpretation 一改，旧 Publication 跟着变，
  * 那就等于没有快照。
  */
+export const SNAPSHOT_VERSION = 2;
+
 export interface WorkSnapshot {
-  readonly _v: 1;
+  readonly _v: 2;
   readonly work: { readonly id: WorkId; readonly title: string };
-  readonly presentation: {
-    readonly rendererType: RendererType;
-    readonly config: PresentationConfig;
-  };
+  /**
+   * 表现。四个字段缺一不可（ADR-010 R2）——
+   * 少了 rendererVersion，半年后改一次渲染代码，旧 Publication 的外观
+   * 就跟着变了，而 JSON 一个字节都没动。
+   */
+  readonly presentation: FrozenPresentation;
   readonly blocks: readonly SnapshotBlock[];
 }
 
@@ -193,6 +195,8 @@ export interface WorkVersion {
   /** 可空 —— 删 Work 不删已发布版本（ADR-005/006） */
   readonly workId?: WorkId;
   readonly userId: UserId;
+  /** 这条版本线属于哪种表现。snapshot.presentation.rendererType 的投影。 */
+  readonly rendererType: RendererType;
   readonly versionNumber: number;
   readonly snapshot: WorkSnapshot;
   readonly createdAt: string;
@@ -305,7 +309,7 @@ export function slugify(title: string): string {
  * 保证我们没有存下一个「只有 id 没有内容」的假快照。
  */
 export function assertSnapshotIsSelfContained(snapshot: WorkSnapshot): void {
-  if (snapshot._v !== 1) {
+  if (snapshot._v !== SNAPSHOT_VERSION) {
     throw new InvariantViolation('P-1', `未知的 snapshot 版本 ${String(snapshot._v)}`);
   }
   if (!snapshot.work?.title) {
@@ -314,6 +318,11 @@ export function assertSnapshotIsSelfContained(snapshot: WorkSnapshot): void {
   if (!snapshot.presentation?.rendererType) {
     throw new InvariantViolation('P-1', 'snapshot 缺少 presentation');
   }
+  if (!snapshot.presentation.rendererVersion) {
+    // 没有它，「保留当时的表达」就只覆盖文字，不覆盖视觉
+    throw new InvariantViolation('P-1', 'snapshot 缺少 rendererVersion');
+  }
+  assertRendererAvailable(snapshot.presentation);
   snapshot.blocks.forEach((b, i) => {
     if (b.position !== i) {
       throw new InvariantViolation('P-1', `snapshot blocks 顺序不连续（第 ${i} 项 position=${b.position}）`);
@@ -344,4 +353,68 @@ export function assertSnapshotIsSelfContained(snapshot: WorkSnapshot): void {
       }
     });
   });
+}
+
+// ── 快照版本迁移 ─────────────────────────────────────────────────────────────
+
+/** v1 的形状。留着只为读旧数据，不再产出。 */
+interface SnapshotV1 {
+  _v: 1;
+  work: { id: WorkId; title: string };
+  presentation?: { rendererType?: string; config?: unknown };
+  blocks: readonly SnapshotBlock[];
+}
+
+/**
+ * 读取时把快照升到当前版本。
+ *
+ * ## 只在读取时升级，**不改写数据库里的行**
+ *
+ * 已发布的快照是不可变的 —— 改写它就违背了它存在的理由。
+ * 所以这是一个纯函数，每次读都跑一遍，数据库里那行永远是当初写下的样子。
+ *
+ * `chk_snapshot_versioned` 那个 `_v` 从建库第一天就在。这是它第一次派上用场：
+ * v1 的 `rendererType: 'web'` 在 v2 里对应 `narrative@1`。
+ */
+export function normalizeSnapshot(raw: unknown): WorkSnapshot {
+  if (!raw || typeof raw !== 'object') {
+    throw new InvariantViolation('P-1', 'snapshot 不是对象');
+  }
+  const v = (raw as { _v?: unknown })._v;
+
+  if (v === SNAPSHOT_VERSION) {
+    const snap = raw as WorkSnapshot;
+    // 就算是当前版本也要过一次 config 校验：数据库里可能有迁移脚本
+    // 或历史代码写进去的形状（ADR-010 R4）
+    return {
+      ...snap,
+      presentation: {
+        ...snap.presentation,
+        config: parsePresentationConfig(snap.presentation.rendererType, snap.presentation.config),
+      },
+    };
+  }
+
+  if (v === 1) {
+    const old = raw as unknown as SnapshotV1;
+    // v1 只有一种 renderer，叫 'web'。它就是今天的 narrative。
+    const renderer: RendererType = isRendererType(old.presentation?.rendererType)
+      ? old.presentation.rendererType
+      : 'narrative';
+    // v1 的 config 是一个开放的 `{theme?, layout?, typography?}`，
+    // 和 v2 的封闭枚举**没有忠实的对应关系**（v1 的 theme:'plain' 在 v2 里
+    // 不存在）。所以不翻译，直接用默认配置。
+    //
+    // 硬要映射就是在猜用户当时想要什么；而报错会让所有旧发布页打不开。
+    // 用默认值是唯一诚实的选择 —— 视觉可能变了，但页面还在，
+    // 而且 v1 时期根本没有真正的版式可言。
+    return {
+      _v: SNAPSHOT_VERSION,
+      work: old.work,
+      presentation: freezePresentation(renderer, defaultConfigFor(renderer)),
+      blocks: old.blocks ?? [],
+    };
+  }
+
+  throw new InvariantViolation('P-1', `无法识别的 snapshot 版本 ${String(v)}`);
 }

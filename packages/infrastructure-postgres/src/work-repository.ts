@@ -229,6 +229,26 @@ export class PostgresWorkRepository implements WorkRepository {
   }
 
   /**
+   * 删除一种表现方式。已发布的 Publication 不受影响 ——
+   * 它引用的是 work_versions.snapshot，那里已经冻了完整的 presentation。
+   */
+  async deletePresentation(
+    actor: Actor,
+    workId: WorkId,
+    rendererType: RendererType
+  ): Promise<void> {
+    const { userId } = requireUser(actor);
+    const res = await this.db.query(
+      `DELETE FROM work_presentations p
+        USING works w
+        WHERE p.work_id = $1 AND p.renderer_type = $2
+          AND w.id = p.work_id AND w.user_id = $3`,
+      [workId, rendererType, userId]
+    );
+    assertAffected(res.rowCount, 'WorkPresentation');
+  }
+
+  /**
    * 每种输出各一套配置，互不覆盖（ADR-005 修正）。
    *
    * 原方案把 presentation 做成 Work 上的一个字段，后果是调完杂志排版，

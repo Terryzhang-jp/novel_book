@@ -23,6 +23,9 @@ import {
   type WorkBlockId,
   type WorkId,
   type WorkPresentation,
+  parsePresentationConfig,
+  type PresentationConfig,
+  type RendererType,
 } from '@tc/domain';
 import type { Page } from '../ports/repositories';
 import type { CoreRepositories, UnitOfWork } from '../ports/unit-of-work';
@@ -188,4 +191,39 @@ export async function reorderBlocks(
 export async function deleteWork(uow: UnitOfWork, actor: Actor, workId: WorkId): Promise<void> {
   requireUser(actor);
   await uow.works.delete(actor, workId);
+}
+
+/**
+ * 保存一种表现方式的配置。
+ *
+ * ## 这个用例**不碰任何内容**
+ *
+ * 它只写 work_presentations。看一眼函数体就能确认：没有 blocks，
+ * 没有 moments，没有 observations。
+ *
+ * ADR-010 R3 禁止 Presentation 隐藏、重排或修改 Block。执行方式不是靠自觉：
+ * `PresentationConfig` 是封闭的判别联合，`parsePresentationConfig` 会拒绝
+ * 任何不在枚举里的值 —— 想加 `hiddenBlockIds` 得先改类型定义。
+ */
+export async function savePresentation(
+  uow: UnitOfWork,
+  actor: Actor,
+  workId: WorkId,
+  renderer: RendererType,
+  config: PresentationConfig
+): Promise<WorkPresentation> {
+  requireUser(actor);
+  // 写入处校验（三处之一，另两处在发布和渲染）
+  return uow.works.upsertPresentation(actor, workId, renderer, parsePresentationConfig(renderer, config));
+}
+
+/** 删除一种表现方式。已发布的 Publication 不受影响（ADR-010 R5）。 */
+export async function deletePresentation(
+  uow: UnitOfWork,
+  actor: Actor,
+  workId: WorkId,
+  renderer: RendererType
+): Promise<void> {
+  requireUser(actor);
+  await uow.works.deletePresentation(actor, workId, renderer);
 }

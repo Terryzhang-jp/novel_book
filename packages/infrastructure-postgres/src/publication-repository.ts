@@ -4,6 +4,7 @@ import {
   type Actor,
   type Publication,
   type PublicationId,
+  type RendererType,
   type Visibility,
   type WorkId,
   type WorkSnapshot,
@@ -53,15 +54,19 @@ export class PostgresPublicationRepository implements PublicationRepository {
    * 从 works 起手 JOIN 而不是直接查 work_versions —— 后者在 Work 不属于
    * actor（或不存在）时会返回 1，让调用方以为「这是第一次发布」。
    */
-  async nextVersionNumber(actor: Actor, workId: WorkId): Promise<number> {
+  async nextVersionNumber(
+    actor: Actor,
+    workId: WorkId,
+    renderer: RendererType
+  ): Promise<number> {
     const { userId } = requireUser(actor);
     const { rows } = await this.db.query<{ next: string }>(
       `SELECT COALESCE(MAX(v.version_number), 0) + 1 AS next
          FROM works w
-         LEFT JOIN work_versions v ON v.work_id = w.id
+         LEFT JOIN work_versions v ON v.work_id = w.id AND v.renderer_type = $3
         WHERE w.id = $1 AND w.user_id = $2
         GROUP BY w.id`,
-      [workId, userId]
+      [workId, userId, renderer]
     );
     if (!rows[0]) throw new NotFoundError('Work', 'forbidden');
     return Number(rows[0].next);
@@ -69,29 +74,45 @@ export class PostgresPublicationRepository implements PublicationRepository {
 
   async createVersion(
     actor: Actor,
-    input: { workId: WorkId; versionNumber: number; snapshot: WorkSnapshot }
+    input: {
+      workId: WorkId;
+      rendererType: RendererType;
+      versionNumber: number;
+      snapshot: WorkSnapshot;
+    }
   ): Promise<WorkVersion> {
     const { userId } = requireUser(actor);
     return translating(async () => {
       const { rows } = await this.db.query<WorkVersionRow>(
-        `INSERT INTO work_versions (work_id, user_id, version_number, snapshot)
-         SELECT w.id, w.user_id, $3, $4::jsonb
+        `INSERT INTO work_versions (work_id, user_id, renderer_type, version_number, snapshot)
+         SELECT w.id, w.user_id, $3, $4, $5::jsonb
            FROM works w WHERE w.id = $1 AND w.user_id = $2
          RETURNING ${WORK_VERSION_COLUMNS}`,
-        [input.workId, userId, input.versionNumber, JSON.stringify(input.snapshot)]
+        [
+          input.workId,
+          userId,
+          input.rendererType,
+          input.versionNumber,
+          JSON.stringify(input.snapshot),
+        ]
       );
       if (!rows[0]) throw new NotFoundError('Work', 'forbidden');
       return mapWorkVersion(rows[0]);
     });
   }
 
-  async listVersions(actor: Actor, workId: WorkId): Promise<WorkVersion[]> {
+  async listVersions(
+    actor: Actor,
+    workId: WorkId,
+    renderer?: RendererType
+  ): Promise<WorkVersion[]> {
     const { userId } = requireUser(actor);
     const { rows } = await this.db.query<WorkVersionRow>(
       `SELECT ${WORK_VERSION_COLUMNS} FROM work_versions
         WHERE work_id = $1 AND user_id = $2
-        ORDER BY version_number DESC`,
-      [workId, userId]
+          AND ($3::text IS NULL OR renderer_type = $3)
+        ORDER BY renderer_type, version_number DESC`,
+      [workId, userId, renderer ?? null]
     );
     return rows.map(mapWorkVersion);
   }
@@ -160,16 +181,20 @@ export class PostgresPublicationRepository implements PublicationRepository {
     return mapPublication(rows[0]!);
   }
 
-  async findByWork(actor: Actor, workId: WorkId): Promise<PublishedPage | null> {
+  async findByWork(
+    actor: Actor,
+    workId: WorkId,
+    renderer: RendererType
+  ): Promise<PublishedPage | null> {
     const { userId } = requireUser(actor);
     const { rows } = await this.db.query<JoinedRow>(
       `SELECT ${JOINED_SELECT}
          FROM publications p
          JOIN work_versions v ON v.id = p.work_version_id
-        WHERE v.work_id = $1 AND p.user_id = $2
+        WHERE v.work_id = $1 AND p.user_id = $2 AND v.renderer_type = $3
         ORDER BY p.published_at ASC
         LIMIT 1`,
-      [workId, userId]
+      [workId, userId, renderer]
     );
     return rows[0] ? mapJoined(rows[0]) : null;
   }

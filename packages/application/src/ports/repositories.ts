@@ -204,6 +204,18 @@ export interface WorkRepository {
     rendererType: RendererType,
     config: PresentationConfig
   ): Promise<WorkPresentation>;
+  /**
+   * 删除一种表现方式。
+   *
+   * **已发布的 Publication 不受影响** —— 它引用的是快照，
+   * 快照里已经冻了完整的 presentation。两者之间没有外键，
+   * 这是设计使然而不是遗漏。
+   */
+  deletePresentation(
+    actor: Actor,
+    workId: WorkId,
+    rendererType: RendererType
+  ): Promise<void>;
 }
 
 // ── Publication ──────────────────────────────────────────────────────────────
@@ -220,13 +232,23 @@ export interface PublishedPage {
 }
 
 export interface PublicationRepository {
-  /** 该 Work 的下一个版本号。没有历史版本时返回 1。 */
-  nextVersionNumber(actor: Actor, workId: WorkId): Promise<number>;
+  /**
+   * 该 Work 在**某个 renderer 上**的下一个版本号。没有历史版本时返回 1。
+   *
+   * 版本线按 renderer 分开 —— narrative 发到第 3 版时 gallery 可能还在
+   * 第 1 版，那是正常的，不该互相挤占号段（ADR-010 R5）。
+   */
+  nextVersionNumber(actor: Actor, workId: WorkId, renderer: RendererType): Promise<number>;
   createVersion(
     actor: Actor,
-    input: { workId: WorkId; versionNumber: number; snapshot: WorkSnapshot }
+    input: {
+      workId: WorkId;
+      rendererType: RendererType;
+      versionNumber: number;
+      snapshot: WorkSnapshot;
+    }
   ): Promise<WorkVersion>;
-  listVersions(actor: Actor, workId: WorkId): Promise<WorkVersion[]>;
+  listVersions(actor: Actor, workId: WorkId, renderer?: RendererType): Promise<WorkVersion[]>;
 
   create(
     actor: Actor,
@@ -237,7 +259,12 @@ export interface PublicationRepository {
   /** P-4：撤回**不删记录**，只写 withdrawn_at */
   withdraw(actor: Actor, id: PublicationId): Promise<Publication>;
 
-  findByWork(actor: Actor, workId: WorkId): Promise<PublishedPage | null>;
+  /** 某个 Work 在某个 renderer 上的 Publication。每种 renderer 各一个。 */
+  findByWork(
+    actor: Actor,
+    workId: WorkId,
+    renderer: RendererType
+  ): Promise<PublishedPage | null>;
   listByUser(actor: Actor, page?: Page): Promise<PublishedPage[]>;
   /**
    * 按 slug 读取，**允许 anonymous**。

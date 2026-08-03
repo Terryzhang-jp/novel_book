@@ -39,9 +39,18 @@ import {
   publishWork,
   removeBlock,
   reviseInterpretation,
+  savePresentation,
   withdrawPublication,
 } from '@tc/application';
-import { InvariantViolation, isMomentAssetRole, type JourneyType } from '@tc/domain';
+import {
+  InvariantViolation,
+  isMomentAssetRole,
+  isRendererType,
+  parsePresentationConfig,
+  PRESENTATION_FIELDS,
+  type JourneyType,
+  type RendererType,
+} from '@tc/domain';
 import { getCore, requireActor } from '@/lib/core/context';
 import { getImageDeriver, getMediaProbe, getStorageKit } from '@/lib/core/storage';
 import { toUserMessage } from '@/lib/core/errors';
@@ -228,6 +237,7 @@ export async function publishWorkAction(form: FormData) {
       actor,
       {
         workId,
+        rendererType: isRendererType(str(form, 'renderer')) ? (str(form, 'renderer') as RendererType) : 'narrative',
         visibility: str(form, 'visibility') === 'public' ? 'public' : 'unlisted',
         now: new Date().toISOString(),
       }
@@ -242,6 +252,31 @@ export async function publishWorkAction(form: FormData) {
     ].filter(Boolean).join('；');
     const notice = `${what}：/p/${result.publication.slug}${extra ? ` · ${extra}` : ''}`;
     return `/studio/works/${workId}?notice=${encodeURIComponent(notice)}`;
+  });
+}
+
+/**
+ * 保存一种表现方式的配置。
+ *
+ * 这里**只写 work_presentations**，一行 work_blocks 都不碰 ——
+ * Presentation 不能修改内容（ADR-010 R3）。
+ */
+export async function savePresentationAction(form: FormData) {
+  const workId = str(form, 'workId');
+  return run(`/studio/works/${workId}`, async () => {
+    const actor = await requireActor();
+    const renderer = str(form, 'renderer');
+    if (!isRendererType(renderer)) {
+      throw new InvariantViolation('PR-2', `未知的表现方式 ${renderer}`);
+    }
+    const raw: Record<string, string> = {};
+    for (const field of PRESENTATION_FIELDS[renderer]) {
+      raw[field.key] = str(form, field.key);
+    }
+    // 运行时校验：非法枚举值在这里就被拒，不会写进数据库
+    const config = parsePresentationConfig(renderer, raw);
+    await savePresentation(getCore(), actor, workId, renderer, config);
+    return `/studio/works/${workId}?notice=${encodeURIComponent(`${renderer} 的表现方式已保存。内容一个字都没动 —— 要让读者看到，需要重新发布。`)}`;
   });
 }
 

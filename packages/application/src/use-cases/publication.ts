@@ -22,7 +22,8 @@ import {
   NotFoundError,
   requireUser,
   slugify,
-  DEFAULT_PRESENTATION_CONFIG,
+  defaultConfigFor,
+  freezePresentation,
   type Actor,
   parseObjectKey,
   type Publication,
@@ -61,7 +62,7 @@ const WEB_PRESET = { name: 'web1600' as const, maxEdge: 1600 };
 
 export interface PublishCommand {
   readonly workId: WorkId;
-  /** 第一版只有 web。参数留着是为了让「加一种输出」不需要改签名。 */
+  /** 默认 narrative。gallery 是同一份内容的另一种表现（ADR-010 R5）。 */
   readonly rendererType?: RendererType;
   /**
    * 默认 unlisted（知道链接才能看），不是 public。
@@ -101,7 +102,7 @@ export async function publishWork(
   command: PublishCommand
 ): Promise<PublishResult> {
   requireUser(actor);
-  const rendererType: RendererType = command.rendererType ?? 'web';
+  const rendererType: RendererType = command.rendererType ?? 'narrative';
   const visibility: Visibility = command.visibility ?? 'unlisted';
 
   return deps.core.transaction(async (r) => {
@@ -115,7 +116,7 @@ export async function publishWork(
         actor,
         command.workId,
         rendererType,
-        DEFAULT_PRESENTATION_CONFIG
+        defaultConfigFor(rendererType)
       ));
 
     // ── 派生安全副本 ────────────────────────────────────────────────────
@@ -130,7 +131,9 @@ export async function publishWork(
     const snapshot = buildWorkSnapshot({
       work: detail.work,
       blocks: detail.blocks,
-      presentation: { rendererType, config: presentation.config },
+      // 冻结的不只是 config，还有 rendererVersion —— 否则半年后改一次
+      // 渲染代码，旧 Publication 的外观就跟着变了（ADR-010 R2）
+      presentation: freezePresentation(rendererType, presentation.config),
       moments: detail.moments,
       observations: detail.observations,
       interpretations: detail.interpretations,
@@ -138,9 +141,14 @@ export async function publishWork(
       now: command.now,
     });
 
-    const versionNumber = await r.publications.nextVersionNumber(actor, command.workId);
+    const versionNumber = await r.publications.nextVersionNumber(
+      actor,
+      command.workId,
+      rendererType
+    );
     const version = await r.publications.createVersion(actor, {
       workId: command.workId,
+      rendererType,
       versionNumber,
       snapshot,
     });
@@ -151,7 +159,10 @@ export async function publishWork(
       await r.publishedAssets.create(actor, { ...entry, workVersionId: version.id });
     }
 
-    const existing = await r.publications.findByWork(actor, command.workId);
+    // 只看**这个 renderer** 的 Publication。
+    // 发布 narrative 不该动 gallery 的链接 —— 它们是两次独立的
+    // 「我决定把这一版给别人看」（ADR-010 R5）。
+    const existing = await r.publications.findByWork(actor, command.workId, rendererType);
     if (existing) {
       const publication = await r.publications.repoint(actor, existing.publication.id, version.id);
       return {
@@ -169,7 +180,8 @@ export async function publishWork(
       detail.work.title,
       command.workId,
       version.id,
-      visibility
+      visibility,
+      rendererType
     );
     return {
       publication,
@@ -281,9 +293,12 @@ async function createWithUniqueSlug(
   title: string,
   workId: WorkId,
   workVersionId: string,
-  visibility: Visibility
+  visibility: Visibility,
+  renderer: RendererType
 ): Promise<Publication> {
-  const base = slugify(title);
+  // narrative 用干净的 slug，其他 renderer 带后缀 —— 同一个 Work 的两种表现
+  // 是两个链接，读者从 URL 就能看出自己在看哪一种
+  const base = renderer === 'narrative' ? slugify(title) : `${slugify(title)}-${renderer}`;
   const candidates = [base, ...[2, 3, 4, 5].map((n) => `${base}-${n}`), `${base}-${workId.slice(0, 8)}`];
 
   let lastError: unknown;
@@ -317,10 +332,11 @@ export function listPublications(uow: UnitOfWork, actor: Actor): Promise<Publish
 export function listWorkVersions(
   uow: UnitOfWork,
   actor: Actor,
-  workId: WorkId
+  workId: WorkId,
+  renderer?: RendererType
 ): Promise<WorkVersion[]> {
   requireUser(actor);
-  return uow.publications.listVersions(actor, workId);
+  return uow.publications.listVersions(actor, workId, renderer);
 }
 
 // ── 访客视角 ─────────────────────────────────────────────────────────────────

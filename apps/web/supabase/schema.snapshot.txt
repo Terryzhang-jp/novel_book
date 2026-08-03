@@ -224,6 +224,7 @@ column	work_presentations.updated_at	timestamp with time zone NOT NULL DEFAULT n
 column	work_presentations.work_id	uuid NOT NULL
 column	work_versions.created_at	timestamp with time zone NOT NULL DEFAULT now()
 column	work_versions.id	uuid NOT NULL DEFAULT gen_random_uuid()
+column	work_versions.renderer_type	text NOT NULL DEFAULT 'narrative'::text
 column	work_versions.snapshot	jsonb NOT NULL
 column	work_versions.user_id	text NOT NULL
 column	work_versions.version_number	integer NOT NULL
@@ -335,11 +336,12 @@ constraint	work_blocks.work_blocks_type_check	CHECK ((type = ANY (ARRAY['text'::
 constraint	work_blocks.work_blocks_work_id_fkey	FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
 constraint	work_presentations.uq_work_presentation	UNIQUE (work_id, renderer_type)
 constraint	work_presentations.work_presentations_pkey	PRIMARY KEY (id)
-constraint	work_presentations.work_presentations_renderer_type_check	CHECK ((renderer_type = ANY (ARRAY['web'::text, 'magazine'::text, 'poster'::text, 'map'::text])))
+constraint	work_presentations.work_presentations_renderer_type_check	CHECK ((renderer_type = ANY (ARRAY['narrative'::text, 'gallery'::text])))
 constraint	work_presentations.work_presentations_work_id_fkey	FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
 constraint	work_versions.chk_snapshot_versioned	CHECK ((snapshot ? '_v'::text))
-constraint	work_versions.uq_work_version	UNIQUE (work_id, version_number)
+constraint	work_versions.uq_work_version	UNIQUE (work_id, renderer_type, version_number)
 constraint	work_versions.work_versions_pkey	PRIMARY KEY (id)
+constraint	work_versions.work_versions_renderer_type_check	CHECK ((renderer_type = ANY (ARRAY['narrative'::text, 'gallery'::text])))
 constraint	work_versions.work_versions_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
 constraint	work_versions.work_versions_version_number_check	CHECK ((version_number >= 1))
 constraint	work_versions.work_versions_work_id_fkey	FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE SET NULL
@@ -351,6 +353,7 @@ function	assert_correction_same_target()	RETURNS trigger LANGUAGE plpgsql |  DEC
 function	assert_moment_asset_same_owner()	RETURNS trigger LANGUAGE plpgsql |  DECLARE moment_owner text; asset_owner text; BEGIN SELECT user_id INTO moment_owner FROM moments WHERE id = NEW.moment_id; SELECT user_id INTO asset_owner FROM assets WHERE id = NEW.asset_id; IF moment_owner IS DISTINCT FROM asset_owner THEN RAISE EXCEPTION '违反不变量 MA-3：Moment 与 Asset 不属于同一个用户（% vs %）', moment_owner, asset_owner; END IF; RETURN NEW; END; 
 function	assert_moment_journey_same_owner()	RETURNS trigger LANGUAGE plpgsql |  DECLARE journey_owner text; BEGIN IF NEW.journey_id IS NULL THEN RETURN NEW; END IF; SELECT user_id INTO journey_owner FROM journeys WHERE id = NEW.journey_id; IF journey_owner IS DISTINCT FROM NEW.user_id THEN RAISE EXCEPTION '违反不变量 J-3：Moment 与 Journey 不属于同一个用户（% vs %）', NEW.user_id, journey_owner; END IF; RETURN NEW; END; 
 function	assert_object_key_namespace()	RETURNS trigger LANGUAGE plpgsql |  DECLARE expected text; BEGIN expected := 'users/' || NEW.user_id || '/sha256/'; IF position(expected in NEW.object_key) <> 1 THEN RAISE EXCEPTION '违反不变量 A-2：object_key 不在该用户的命名空间内（期望前缀 %，实际 %）', expected, NEW.object_key; END IF; RETURN NEW; END; 
+function	assert_version_renderer_matches()	RETURNS trigger LANGUAGE plpgsql |  DECLARE in_snapshot text; BEGIN in_snapshot := NEW.snapshot -> 'presentation' ->> 'rendererType'; -- v1 快照没有这个结构，读取时才升级（ADR-010 R6），所以允许为空 IF in_snapshot IS NULL THEN RETURN NEW; END IF; IF in_snapshot IS DISTINCT FROM NEW.renderer_type THEN RAISE EXCEPTION '违反不变量 PR-3：renderer_type 列（%）与快照里的（%）不一致', NEW.renderer_type, in_snapshot; END IF; RETURN NEW; END; 
 function	assert_work_block_same_owner()	RETURNS trigger LANGUAGE plpgsql |  DECLARE work_owner text; moment_owner text; BEGIN IF NEW.moment_id IS NULL THEN RETURN NEW; END IF; SELECT user_id INTO work_owner FROM works WHERE id = NEW.work_id; SELECT user_id INTO moment_owner FROM moments WHERE id = NEW.moment_id; IF work_owner IS DISTINCT FROM moment_owner THEN RAISE EXCEPTION '违反不变量 W-2：Work 与被引用的 Moment 不属于同一个用户（% vs %）', work_owner, moment_owner; END IF; RETURN NEW; END; 
 function	check_interpretation_same_moment()	RETURNS trigger LANGUAGE plpgsql |  DECLARE target_moment uuid; BEGIN IF NEW.supersedes_id IS NULL THEN RETURN NEW; END IF; SELECT moment_id INTO target_moment FROM interpretation_revisions WHERE id = NEW.supersedes_id; IF target_moment IS NULL THEN RAISE EXCEPTION 'supersedes_id % 不存在', NEW.supersedes_id; END IF; IF target_moment <> NEW.moment_id THEN RAISE EXCEPTION '违反不变量 I-4：不能 supersede 另一个 Moment 的 revision（% vs %）', target_moment, NEW.moment_id; END IF; RETURN NEW; END 
 function	update_canvas_updated_at()	RETURNS trigger LANGUAGE plpgsql |  BEGIN NEW.updated_at = NOW(); RETURN NEW; END; 
@@ -450,8 +453,8 @@ index	work_blocks.uq_work_block_position	CREATE UNIQUE INDEX uq_work_block_posit
 index	work_blocks.work_blocks_pkey	CREATE UNIQUE INDEX work_blocks_pkey ON public.work_blocks USING btree (id)
 index	work_presentations.uq_work_presentation	CREATE UNIQUE INDEX uq_work_presentation ON public.work_presentations USING btree (work_id, renderer_type)
 index	work_presentations.work_presentations_pkey	CREATE UNIQUE INDEX work_presentations_pkey ON public.work_presentations USING btree (id)
-index	work_versions.idx_work_versions_work	CREATE INDEX idx_work_versions_work ON public.work_versions USING btree (work_id, version_number DESC)
-index	work_versions.uq_work_version	CREATE UNIQUE INDEX uq_work_version ON public.work_versions USING btree (work_id, version_number)
+index	work_versions.idx_work_versions_work	CREATE INDEX idx_work_versions_work ON public.work_versions USING btree (work_id, renderer_type, version_number DESC)
+index	work_versions.uq_work_version	CREATE UNIQUE INDEX uq_work_version ON public.work_versions USING btree (work_id, renderer_type, version_number)
 index	work_versions.work_versions_pkey	CREATE UNIQUE INDEX work_versions_pkey ON public.work_versions USING btree (id)
 index	works.idx_works_user_updated	CREATE INDEX idx_works_user_updated ON public.works USING btree (user_id, updated_at DESC)
 index	works.works_pkey	CREATE UNIQUE INDEX works_pkey ON public.works USING btree (id)
@@ -526,4 +529,5 @@ trigger	verification.update_verification_updated_at	CREATE TRIGGER update_verifi
 trigger	work_blocks.trg_work_block_same_owner	CREATE TRIGGER trg_work_block_same_owner BEFORE INSERT OR UPDATE OF moment_id, work_id ON public.work_blocks FOR EACH ROW EXECUTE FUNCTION assert_work_block_same_owner()
 trigger	work_blocks.trg_work_blocks_updated_at	CREATE TRIGGER trg_work_blocks_updated_at BEFORE UPDATE ON public.work_blocks FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
 trigger	work_presentations.trg_work_presentations_updated_at	CREATE TRIGGER trg_work_presentations_updated_at BEFORE UPDATE ON public.work_presentations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+trigger	work_versions.trg_version_renderer_matches	CREATE TRIGGER trg_version_renderer_matches BEFORE INSERT OR UPDATE OF renderer_type, snapshot ON public.work_versions FOR EACH ROW EXECUTE FUNCTION assert_version_renderer_matches()
 trigger	works.trg_works_updated_at	CREATE TRIGGER trg_works_updated_at BEFORE UPDATE ON public.works FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()

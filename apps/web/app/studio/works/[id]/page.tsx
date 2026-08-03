@@ -17,13 +17,19 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getWorkDetail, listWorkVersions } from '@tc/application';
-import { currentInterpretation, NotFoundError } from '@tc/domain';
+import {
+  currentInterpretation,
+  NotFoundError,
+  parsePresentationConfig,
+  PRESENTATION_FIELDS,
+  RENDERER_TYPES,
+  RENDERER_VERSIONS,
+} from '@tc/domain';
 import { getCore, requireActor } from '@/lib/core/context';
 import {
   Banner,
   buttonClass,
   Field,
-  fmtDateTime,
   H1,
   H2,
   inputClass,
@@ -37,6 +43,7 @@ import {
   deleteWorkAction,
   publishWorkAction,
   removeBlockAction,
+  savePresentationAction,
   withdrawPublicationAction,
 } from '../../actions';
 
@@ -62,10 +69,20 @@ export default async function WorkPage({
     throw e;
   }
 
-  const [versions, published] = await Promise.all([
-    listWorkVersions(core, actor, id),
-    core.publications.findByWork(actor, id),
-  ]);
+  // 每种表现各自一条版本线、各自一个 Publication（ADR-010 R5）
+  const renderers = [...RENDERER_TYPES];
+  const perRenderer = await Promise.all(
+    renderers.map(async (renderer) => ({
+      renderer,
+      config: parsePresentationConfig(
+        renderer,
+        detail.presentations.find((p) => p.rendererType === renderer)?.config
+      ),
+      saved: detail.presentations.some((p) => p.rendererType === renderer),
+      published: await core.publications.findByWork(actor, id, renderer),
+      versions: await listWorkVersions(core, actor, id, renderer),
+    }))
+  );
 
   return (
     <Shell>
@@ -166,70 +183,107 @@ export default async function WorkPage({
         </form>
       </div>
 
-      {/* ── 发布 ─────────────────────────────────────────────────────────── */}
-      <H2>发布</H2>
-      {published ? (
-        <div className="mb-3 rounded border border-neutral-300 bg-neutral-50 p-4" data-testid="publication-box">
-          <p className="text-sm">
-            当前公开的是{' '}
-            <Link href={`/p/${published.publication.slug}`} className="font-medium underline">
-              /p/{published.publication.slug}
-            </Link>{' '}
-            的<strong>第 {published.version.versionNumber} 版</strong>
-            {published.publication.withdrawnAt ? '（已下架）' : ''}
-          </p>
-          <p className="mt-2 text-xs text-neutral-500">
-            发布于 {fmtDateTime(published.publication.publishedAt)} ·{' '}
-            {published.publication.visibility}
-          </p>
-          <p className="mt-2 text-xs text-neutral-500">
-            上面的草稿改了多少次，这个链接都不会变。要让访客看到新内容，得再点一次发布。
-          </p>
-          <form action={withdrawPublicationAction} className="mt-3">
+      {/* ── 表现方式与发布 ───────────────────────────────────────────────── */}
+      <H2>表现方式</H2>
+      <Muted>
+        同一份内容，不同的看法。表现只决定「看起来怎么样」——
+        它不能隐藏、重排或改写上面任何一段内容。
+      </Muted>
+
+      {perRenderer.map(({ renderer, config, saved, published, versions }) => (
+        <div
+          key={renderer}
+          className="mb-4 mt-3 rounded border border-neutral-200 p-4"
+          data-testid={`presentation-${renderer}`}
+        >
+          <div className="mb-3 flex items-baseline justify-between">
+            <h3 className="font-medium">
+              {renderer === 'narrative' ? 'Narrative —— 文字与理解主导' : 'Gallery —— 图片主导'}
+            </h3>
+            <span className="text-xs text-neutral-400">
+              {renderer}@{RENDERER_VERSIONS[renderer]}
+              {saved ? '' : ' · 未保存过，用的是默认值'}
+            </span>
+          </div>
+
+          <form action={savePresentationAction} className="mb-3">
             <input type="hidden" name="workId" value={detail.work.id} />
-            <input type="hidden" name="publicationId" value={published.publication.id} />
-            <button type="submit" className={linkButtonClass} data-testid="withdraw-submit">
-              下架
+            <input type="hidden" name="renderer" value={renderer} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              {PRESENTATION_FIELDS[renderer].map((field) => (
+                <Field key={field.key} label={field.label}>
+                  <select
+                    name={field.key}
+                    className={inputClass}
+                    defaultValue={String((config as unknown as Record<string, unknown>)[field.key])}
+                    data-testid={`${renderer}-${field.key}`}
+                  >
+                    {field.options.map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              ))}
+            </div>
+            <button type="submit" className={linkButtonClass} data-testid={`save-${renderer}`}>
+              保存表现方式
             </button>
           </form>
+
+          {published ? (
+            <div className="rounded bg-neutral-50 p-3 text-sm" data-testid={`publication-${renderer}`}>
+              <Link href={`/p/${published.publication.slug}`} className="font-medium underline">
+                /p/{published.publication.slug}
+              </Link>
+              <span className="ml-2 text-xs text-neutral-500">
+                第 {published.version.versionNumber} 版 ·{' '}
+                {published.version.snapshot.presentation.rendererType}@
+                {published.version.snapshot.presentation.rendererVersion}
+                {published.publication.withdrawnAt ? ' · 已下架' : ''}
+              </span>
+              <p className="mt-1 text-xs text-neutral-500">
+                改了上面的配置之后，这个链接不会变 —— 要让读者看到，得再发布一次。
+              </p>
+              <form action={withdrawPublicationAction} className="mt-2">
+                <input type="hidden" name="workId" value={detail.work.id} />
+                <input type="hidden" name="publicationId" value={published.publication.id} />
+                <button type="submit" className={linkButtonClass} data-testid={`withdraw-${renderer}`}>
+                  下架
+                </button>
+              </form>
+            </div>
+          ) : (
+            <Muted>这种表现还没有发布过。</Muted>
+          )}
+
+          <form action={publishWorkAction} className="mt-3 flex items-end gap-3">
+            <input type="hidden" name="workId" value={detail.work.id} />
+            <input type="hidden" name="renderer" value={renderer} />
+            <label className="text-sm">
+              <span className="mr-2 text-neutral-600">谁能看到</span>
+              <select name="visibility" className="rounded border border-neutral-300 px-2 py-1 text-sm" defaultValue="unlisted">
+                <option value="unlisted">unlisted</option>
+                <option value="public">public</option>
+              </select>
+            </label>
+            <button type="submit" className={buttonClass} data-testid={`publish-${renderer}`}>
+              {published ? '重新发布这一种' : '发布这一种'}
+            </button>
+            {versions.length > 0 ? (
+              <span className="text-xs text-neutral-400" data-testid={`versions-${renderer}`}>
+                已有 {versions.length} 个版本
+              </span>
+            ) : null}
+          </form>
         </div>
-      ) : (
-        <Muted>还没有发布过。</Muted>
-      )}
+      ))}
 
-      <form action={publishWorkAction} className="rounded border border-neutral-200 p-4">
-        <input type="hidden" name="workId" value={detail.work.id} />
-        <Field label="谁能看到">
-          <select name="visibility" className={inputClass} defaultValue="unlisted">
-            <option value="unlisted">unlisted —— 知道链接的人才能看</option>
-            <option value="public">public —— 公开</option>
-          </select>
-        </Field>
-        <button type="submit" className={buttonClass} data-testid="publish-submit">
-          {published ? '重新发布（生成新版本）' : '发布'}
-        </button>
-        <p className="mt-2 text-xs text-neutral-400">
-          发布会把此刻的内容整份冻结存下来。默认是 unlisted 而不是 public ——
-          「点了发布 = 全网可搜」不该是默认值。
-        </p>
-      </form>
-
-      {versions.length > 0 ? (
-        <>
-          <H2>版本历史（{versions.length}）</H2>
-          <ul className="text-sm" data-testid="version-list">
-            {versions.map((v) => (
-              <li key={v.id} className="mb-1 flex gap-3 text-neutral-600">
-                <span className="w-16 shrink-0">第 {v.versionNumber} 版</span>
-                <span className="text-xs text-neutral-400">{fmtDateTime(v.createdAt)}</span>
-                <span className="text-xs text-neutral-400">
-                  {v.snapshot.blocks.length} 段已冻结
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
+      <Muted>
+        发布 Narrative 不会更新 Gallery 的链接 —— 它们是两次独立的
+        「我决定把这一版给别人看」。
+      </Muted>
 
       <div className="mt-10 flex items-center justify-between border-t border-neutral-200 pt-4">
         <Link href="/studio/works" className="text-sm text-neutral-500 hover:underline">

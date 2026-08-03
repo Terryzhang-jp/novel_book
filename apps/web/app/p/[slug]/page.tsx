@@ -21,7 +21,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { viewPublication } from '@tc/application';
 import { getActor, getCore } from '@/lib/core/context';
-import { SnapshotView } from '@/components/studio/snapshot-view';
+import { SnapshotView } from '@/components/studio/renderers';
 
 export const dynamic = 'force-dynamic';
 
