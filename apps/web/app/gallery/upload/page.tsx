@@ -144,8 +144,23 @@ export default function UploadPage() {
     }
   };
 
-  // Process files in batches: compress + generate preview
-  const processBatch = async (batch: UploadingFile[]) => {
+  /**
+   * Process files in batches: compress + generate preview.
+   *
+   * 返回**压缩后的文件**，而不是只更新 state。
+   *
+   * 原来这里只调 setSelectedFiles，然后 handleStartUpload 接着调
+   * uploadAllFiles() —— 而那个函数从闭包里读 selectedFiles，读到的是
+   * 这一轮 render 的旧值，里面每个文件都还是 "queued"。结果是：
+   *
+   *     点一次「Process & Upload」→ 只压缩，不上传
+   *     必须再点一次（此时按钮文案已变成「Upload N Photos」）才真的传
+   *
+   * 用户看到的是「点了没反应」。这个 bug 由 Phase 3A 的旧入口 E2E 抓出来 ——
+   * 它是这条链路上第一条真的从旧页面点下去的测试。
+   */
+  const processBatch = async (batch: UploadingFile[]): Promise<UploadingFile[]> => {
+    const compressed: UploadingFile[] = [];
     for (const uploadingFile of batch) {
       if (paused || abortControllerRef.current?.signal.aborted) {
         break;
@@ -180,6 +195,13 @@ export default function UploadPage() {
           )
         );
 
+        compressed.push({
+          ...uploadingFile,
+          file: compressedFile,
+          preview: previewUrl,
+          status: "compressed",
+          compressedSize: compressedFile.size,
+        });
         setProgress(prev => ({ ...prev, compressed: prev.compressed + 1 }));
       } catch (error) {
         console.error("Processing error:", error);
@@ -196,16 +218,18 @@ export default function UploadPage() {
         );
       }
     }
+    return compressed;
   };
 
   // Process all queued files
-  const processAllFiles = async () => {
+  const processAllFiles = async (): Promise<UploadingFile[]> => {
     const queuedFiles = selectedFiles.filter(f => f.status === "queued");
-    if (queuedFiles.length === 0) return;
+    if (queuedFiles.length === 0) return [];
 
     setProcessing(true);
     abortControllerRef.current = new AbortController();
 
+    const compressed: UploadingFile[] = [];
     try {
       // Process in batches
       for (let i = 0; i < queuedFiles.length; i += BATCH_SIZE_COMPRESS) {
@@ -214,11 +238,12 @@ export default function UploadPage() {
         }
 
         const batch = queuedFiles.slice(i, i + BATCH_SIZE_COMPRESS);
-        await processBatch(batch);
+        compressed.push(...(await processBatch(batch)));
       }
     } finally {
       setProcessing(false);
     }
+    return compressed;
   };
 
   // Upload files in batches
@@ -280,9 +305,18 @@ export default function UploadPage() {
     await Promise.all(uploadPromises);
   };
 
-  // Upload all compressed files
-  const uploadAllFiles = async () => {
-    const readyFiles = selectedFiles.filter(f => f.status === "compressed");
+  /**
+   * Upload all compressed files.
+   *
+   * `justCompressed` 是**同一次点击里刚压缩出来的那批**。传它进来是必须的：
+   * 从 selectedFiles 里筛的话读到的是上一轮 render 的旧值（见 processBatch
+   * 的注释）。没有它就要点两次才能上传。
+   */
+  const uploadAllFiles = async (justCompressed: UploadingFile[] = []) => {
+    const readyFiles =
+      justCompressed.length > 0
+        ? justCompressed
+        : selectedFiles.filter(f => f.status === "compressed");
     if (readyFiles.length === 0) return;
 
     setUploading(true);
@@ -316,11 +350,12 @@ export default function UploadPage() {
   // Start processing and uploading
   const handleStartUpload = async () => {
     // First, process (compress) all queued files
-    await processAllFiles();
+    const justCompressed = await processAllFiles();
 
-    // Then, upload all compressed files
+    // Then, upload them —— 把刚压缩出来的那批直接传进去，
+    // 不要让 uploadAllFiles 去读闭包里那份已经过时的 selectedFiles
     if (!paused && !abortControllerRef.current?.signal.aborted) {
-      await uploadAllFiles();
+      await uploadAllFiles(justCompressed);
     }
   };
 

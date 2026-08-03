@@ -64,9 +64,26 @@ ON CONFLICT (id) DO NOTHING;
 -- ── 照片：覆盖四分类 + 边界情况 ──────────────────────────────────────────────
 -- 注意 is_public 全部为 false —— migration 009 之后的正确默认行为。
 -- 测试应断言「新建照片默认 private」。
+--
+-- ⚠️ Phase 3A / 16D 之后，photos 表被 trg_guard_legacy_photo_write 冻结。
+--    这些行是**历史数据的固定装置**（遗留 PhotoRepository 的读取契约测试
+--    需要真实形状的旧行），不是新产生的遗留数据 —— 所以它们走那条明确的
+--    逃生口：在同一个事务里逐行点名授权。
+--
+--    这里刻意用逐行循环而不是「先禁用触发器再启用」：
+--
+--      · 禁用触发器是一个**开关**，开着的那段时间里任何写入都能进去
+--      · 逐行点名一次只放行一行，而且这段代码本身就是那个机制的
+--        可执行说明 —— 有人将来真的需要修一行旧数据时，照着抄就行
+--
+--    换句话说：seed 不是这条规则的例外，它是这条规则的第一个用户。
 
-INSERT INTO photos (id, user_id, file_name, original_name, file_url, thumbnail_url,
-                    location_id, metadata, category, is_public, trashed, created_at, updated_at) VALUES
+DO $seed_photos$
+DECLARE
+  r record;
+BEGIN
+  CREATE TEMP TABLE _seed_photos ON COMMIT DROP AS
+  SELECT * FROM (VALUES
 
   -- ① time-location：有时间 + 有 GPS（最常见）
   ('a0000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111',
@@ -151,18 +168,39 @@ INSERT INTO photos (id, user_id, file_name, original_name, file_url, thumbnail_u
    '20000000-0000-0000-0000-000000000001',
    '{"dateTime":"2025-10-01T09:00:00.000Z","location":{"latitude":35.6812,"longitude":139.7671,"source":"exif"},"fileSize":2000000,"mimeType":"image/jpeg"}'::jsonb,
    'time-location', false, false, now(), now())
-ON CONFLICT (id) DO NOTHING;
+  ) AS t(id, user_id, file_name, original_name, file_url, thumbnail_url,
+         location_id, metadata, category, is_public, trashed, created_at, updated_at);
 
--- ⑧ 的编辑前版本（单独 UPDATE，因为 INSERT 里列太多不好读）
-UPDATE photos SET
-  original_file_url = 'http://127.0.0.1:54321/storage/v1/object/public/photos/11111111-1111-1111-1111-111111111111/gallery/seed-08.jpg',
-  edited = true,
-  edited_at = now()
-WHERE id = 'a0000000-0000-0000-0000-000000000008';
+  FOR r IN SELECT * FROM _seed_photos ORDER BY id LOOP
+    -- 第三个参数 true = 事务本地。授权随事务结束消失，
+    -- 不会残留在连接上被下一条语句捡到。
+    PERFORM set_config('tc.allow_legacy_photo_write', r.id::text, true);
+    INSERT INTO photos (id, user_id, file_name, original_name, file_url, thumbnail_url,
+                        location_id, metadata, category, is_public, trashed,
+                        created_at, updated_at)
+    -- VALUES 里的字面量是 text，photos 的三个 id 列是 uuid。
+    -- 显式转，不指望隐式赋值转换 —— 那条路在 uuid 上并不存在。
+    VALUES (r.id::uuid, r.user_id::uuid, r.file_name, r.original_name, r.file_url,
+            r.thumbnail_url, r.location_id::uuid, r.metadata, r.category,
+            r.is_public, r.trashed, r.created_at, r.updated_at)
+    ON CONFLICT (id) DO NOTHING;
+  END LOOP;
 
--- ⑨ 的回收站时间
-UPDATE photos SET trashed_at = now() - interval '2 days'
-WHERE id = 'a0000000-0000-0000-0000-000000000009';
+  -- ⑧ 的编辑前版本（单独 UPDATE，因为 INSERT 里列太多不好读）
+  PERFORM set_config('tc.allow_legacy_photo_write',
+                     'a0000000-0000-0000-0000-000000000008', true);
+  UPDATE photos SET
+    original_file_url = 'http://127.0.0.1:54321/storage/v1/object/public/photos/11111111-1111-1111-1111-111111111111/gallery/seed-08.jpg',
+    edited = true,
+    edited_at = now()
+  WHERE id = 'a0000000-0000-0000-0000-000000000008';
+
+  -- ⑨ 的回收站时间
+  PERFORM set_config('tc.allow_legacy_photo_write',
+                     'a0000000-0000-0000-0000-000000000009', true);
+  UPDATE photos SET trashed_at = now() - interval '2 days'
+  WHERE id = 'a0000000-0000-0000-0000-000000000009';
+END $seed_photos$;
 
 -- ── 文档 ────────────────────────────────────────────────────────────────────
 INSERT INTO documents (id, user_id, title, content, images, tags, preview, is_public, created_at, updated_at) VALUES

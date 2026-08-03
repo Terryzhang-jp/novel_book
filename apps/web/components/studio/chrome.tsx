@@ -25,6 +25,9 @@ export function Shell({ children }: { children: ReactNode }) {
         <Link href="/studio/works" className="hover:underline">
           作品
         </Link>
+        <Link href="/studio/assets" className="hover:underline" data-testid="nav-assets">
+          素材
+        </Link>
         <Link href="/studio/account" className="ml-auto hover:underline" data-testid="nav-account">
           账号
         </Link>

@@ -11,7 +11,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/session";
 import { locationStorage } from "@/lib/storage/location-storage";
-import { photoStorage } from "@/lib/storage/photo-storage";
+
 import { NotFoundError, UnauthorizedError } from "@/lib/storage/errors";
 import { isAuthRequiredError } from "@/lib/auth/helpers";
 
@@ -127,15 +127,18 @@ export async function PUT(
       updates
     );
 
-    // 如果坐标发生了变化，同步到所有关联的照片
-    if (coordinates) {
-      const updatedPhotoCount = await photoStorage.syncLocationCoordinatesToPhotos(
-        locationId,
-        coordinates
-      );
-
-      console.log(`[Location Update] Synced coordinates to ${updatedPhotoCount} photos`);
-    }
+    // 改地点坐标后**不再**把新坐标回写进照片。
+    //
+    // 旧行为是 syncLocationCoordinatesToPhotos()：把地点的新坐标覆盖到
+    // 每一张关联照片的 metadata.location 上。两个问题，都不是小问题：
+    //
+    //   1. 它覆盖的是**相机记下的原始坐标**。改一次地点，那些照片当初
+    //      真正拍摄的位置就永久消失了 —— 而且用户看不出发生过这件事。
+    //   2. photos 表已冻结为只读（Phase 3A / 16D），这条 UPDATE 会被
+    //      触发器直接拒绝。
+    //
+    // 新模型里这件事的正确形状是一条**修正**（append-only，带 source，
+    // 原值永远还在），而不是一次覆盖 —— 等 Phase 3B 的 Place 一起做。
 
     return NextResponse.json({
       location,

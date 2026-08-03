@@ -10,12 +10,8 @@
  */
 
 import type { Pool } from 'pg';
-import { type Actor, NotFoundError, requireUser } from '@tc/domain';
-import type {
-  CreatePhotoInput,
-  ListPhotosOptions,
-  PhotoRepository,
-} from './repository';
+import { type Actor, requireUser } from '@tc/domain';
+import type { ListPhotosOptions, PhotoRepository } from './repository';
 import { mapPhotoRow, type Photo, type PhotoRow } from './types';
 
 /**
@@ -96,91 +92,18 @@ export class PostgresPhotoRepository implements PhotoRepository {
     return rows.map(mapPhotoRow);
   }
 
-  // ── 写 ─────────────────────────────────────────────────────────────────────
-
-  async create(actor: Actor, input: CreatePhotoInput): Promise<Photo> {
-    const { userId } = requireUser(actor);
-    // is_public 不出现在 INSERT 里 —— 走数据库默认值 false。
-    // 显式写 false 也可以，但让默认值生效能顺便验证 migration 009 没被改掉。
-    const { rows } = await this.pool.query<PhotoRow>(
-      `INSERT INTO photos
-         (id, user_id, file_name, original_name, file_url, thumbnail_url,
-          location_id, metadata, category)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::jsonb, $8)
-       RETURNING ${COLUMNS}`,
-      [
-        userId,
-        input.fileName,
-        input.originalName,
-        input.fileUrl,
-        input.thumbnailUrl ?? null,
-        input.locationId ?? null,
-        JSON.stringify(input.metadata),
-        input.category,
-      ]
-    );
-    return mapPhotoRow(rows[0]!);
-  }
-
-  /**
-   * 所有写操作共用的形状：UPDATE ... WHERE id AND user_id RETURNING。
-   *
-   * 关键在于**没有影响行数就抛 NotFound** —— 不去先查再判断。
-   * 「先 SELECT 确认所有权、再 UPDATE」有 TOCTOU 窗口，而且多一次往返。
-   */
-  private async updateOwned(
-    actor: Actor,
-    id: string,
-    setClause: string,
-    extraParams: unknown[]
-  ): Promise<Photo> {
-    const { userId } = requireUser(actor);
-    const { rows } = await this.pool.query<PhotoRow>(
-      `UPDATE photos SET ${setClause}, updated_at = now()
-        WHERE id = $1 AND user_id = $2
-        RETURNING ${COLUMNS}`,
-      [id, userId, ...extraParams]
-    );
-    const row = rows[0];
-    if (!row) {
-      // 分不清「不存在」还是「别人的」—— 这正是我们想要的。
-      // internalReason 记 forbidden 只为服务端日志，不进响应体。
-      throw new NotFoundError('Photo', 'forbidden');
-    }
-    return mapPhotoRow(row);
-  }
-
-  setLocation(actor: Actor, id: string, locationId: string | null): Promise<Photo> {
-    return this.updateOwned(actor, id, 'location_id = $3', [locationId]);
-  }
-
-  /** 幂等：已在回收站里再调一次不报错，trashed_at 保持首次的时间 */
-  trash(actor: Actor, id: string): Promise<Photo> {
-    return this.updateOwned(
-      actor,
-      id,
-      'trashed = TRUE, trashed_at = COALESCE(trashed_at, now())',
-      []
-    );
-  }
-
-  /** 幂等 */
-  restore(actor: Actor, id: string): Promise<Photo> {
-    return this.updateOwned(actor, id, 'trashed = FALSE, trashed_at = NULL', []);
-  }
-
-  setPublic(actor: Actor, id: string, isPublic: boolean): Promise<Photo> {
-    return this.updateOwned(actor, id, 'is_public = $3', [isPublic]);
-  }
-
-  async purge(actor: Actor, id: string): Promise<void> {
-    const { userId } = requireUser(actor);
-    const res = await this.pool.query(
-      'DELETE FROM photos WHERE id = $1 AND user_id = $2',
-      [id, userId]
-    );
-    if (res.rowCount === 0) {
-      throw new NotFoundError('Photo', 'forbidden');
-    }
-  }
+  // ── 写 ──────────────────────────────────────────────────────────────────────
+  //
+  // **没有了。** Phase 3A / 16D：photos 表已冻结为只读。
+  //
+  // 这里原来有 create / setLocation / trash / restore / setPublic / purge。
+  // 全部删除，不是注释掉、不是抛 not-implemented ——
+  //
+  //   留着一个不能用的写入方法，等于留着一个将来会有人再调用的入口。
+  //
+  // 数据库触发器 trg_guard_legacy_photo_write 会拦住它，
+  // 但那时候拦下来的是一个已经进了生产的 bug。
+  //
+  // 新素材：uploadAsset → assets + ObjectStorage
+  // 旧形状：mapAssetToLegacyPhotoDto（只读投影，同一个包里）
 }

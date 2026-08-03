@@ -119,17 +119,20 @@ const FORBIDDEN_IDENTIFIERS = [
 const LEGACY_WRITE_ROOTS = ['apps/web/app', 'apps/web/lib', 'apps/web/components'];
 
 const LEGACY_WRITE_ALLOWLIST = new Set([
-  // L1/L2/L5/L6：旧 Photo 的全部读写都在这一个文件里。
-  // 16B 之后它只保留读，写入方法逐个删掉。
-  'apps/web/lib/storage/photo-storage.ts',
-  // L3：通用上传封装。16B 之后由 uploadAsset 取代。
+  // L3 的**实现文件本身**：uploadFile / deleteFile 的定义在这里。
+  // 它的最后两个调用方是下面的 L4 和 L9，那两条关掉之后这个文件整体删除。
   'apps/web/lib/supabase/storage.ts',
-  'apps/web/app/api/upload/route.ts',
-  // L4：画布，Phase 3D 再定去向
+  // L4：画布。canvas_projects + canvas bucket，Phase 3D 再定去向。
   'apps/web/lib/storage/canvas-storage.ts',
   // L9：AI 生成图。**这一条是门禁自己找出来的** —— 手工清点漏掉了它。
   'apps/web/lib/storage/ai-magic-storage.ts',
 ]);
+
+// 16B/16D 已关闭并从上面移除的：
+//   apps/web/lib/storage/photo-storage.ts   写入方法全部删除，只剩读
+//   apps/web/app/api/upload/route.ts        改调 uploadAsset
+//
+// **删掉一行就是关闭一个入口。清单变空的那一刻，Phase 3A 完成。**
 
 /** 认得出「这是一次遗留写入」的形状 */
 const LEGACY_WRITE_PATTERNS = [

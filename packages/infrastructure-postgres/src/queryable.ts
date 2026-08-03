@@ -80,6 +80,19 @@ const CONSTRAINT_MAP: Record<
     code: 'AC-5',
     hint: '这个账号已被停用或正在等待删除，系统不再为它写入新内容',
   },
+
+  // Phase 3A / 16D（20260811000000）。photos 表已冻结为只读。
+  //
+  // 走到这里说明有代码绕过了 check-architecture 的静态门禁 —— 提示语要
+  // 直接说出替代路径，否则接到这个错误的人第一反应会是「去申请一次授权」，
+  // 而正确的反应是「这条路已经关了，走 uploadAsset」。
+  legacy_photo_write_frozen: {
+    kind: 'forbidden',
+    code: 'L-1',
+    hint:
+      '遗留 photos 表已冻结为只读（Phase 3A）。新素材走 uploadAsset → ' +
+      'assets + ObjectStorage，旧 Gallery 通过只读投影显示它们',
+  },
 };
 
 /** 把一次 pg 调用包起来，出错时翻译成领域错误 */

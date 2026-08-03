@@ -9,3 +9,8 @@
 export * from './photo/types';
 export * from './photo/repository';
 export * from './photo/postgres-photo-repository';
+/**
+ * Asset → 旧 Photo 的**单向**投影（Phase 3A / 16C）。
+ * 这里只有读的方向 —— 反向映射一旦出现，「Asset 是唯一写入事实」就没了。
+ */
+export * from './photo/asset-projection';

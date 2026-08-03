@@ -1,33 +1,42 @@
-import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth/session";
-import { photoStorage } from "@/lib/storage/photo-storage";
-import { isAuthRequiredError } from "@/lib/auth/helpers";
-
-export const runtime = "nodejs";
-
 /**
- * DELETE /api/photos/trash/empty - 清空回收站（永久删除所有回收站照片）
+ * 清空回收站 —— **这个动作在新模型里不存在**（Phase 3A / 16D）
+ *
+ * 旧实现做的是：把 photos 行硬删掉，顺手删对象存储里的文件。
+ *
+ * 新模型里没有对应物，而且这不是「还没做」，是**刻意不做**：
+ *
+ *   1. 素材是证据。引用它的 Moment 保留关系行，界面显示「这里原本有
+ *      一份素材」（ADR-008 A7）—— 记录里不出现无法解释的空洞。
+ *      硬删掉那一行，历史里就会凭空少一块。
+ *   2. 字节的删除是**可重试的工作**，不是一次 HTTP 请求能保证的事。
+ *      系统里删字节只有一条路：storage_cleanup_jobs（15A）。
+ *      让一个按钮直接调 storage.delete()，失败时就只剩一条日志。
+ *   3. 真正要「什么都不剩」的那个动作是**删除账号**（ADR-007），
+ *      它有 30 天冷静期、有审计、有清理队列。用一个相册页上的按钮
+ *      提供同等的不可逆性，是把最重的操作放在了最轻的位置。
+ *
+ * 所以这里返回 410 并说清楚去哪：
+ *
+ *   想让素材从界面上消失      移入回收站（软删除）就已经做到了
+ *   想让字节真的不存在        删除账号，或者等对账任务清理孤儿对象
+ *
+ * 410 而不是 404：这个端点**曾经存在过**，客户端有权知道它是被撤销的，
+ * 不是拼错了地址。
  */
-export async function DELETE(req: Request) {
-  try {
-    const session = await requireAuth(req);
 
-    await photoStorage.emptyTrash(session.userId);
+import { NextResponse } from 'next/server';
 
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Empty trash error:", error);
+export const runtime = 'nodejs';
 
-    if (isAuthRequiredError(error)) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: "Failed to empty trash" },
-      { status: 500 }
-    );
-  }
+export function DELETE() {
+  return NextResponse.json(
+    {
+      error:
+        '素材不会被硬删除。移入回收站已经让它从所有列表里消失，' +
+        '而引用过它的记录会保留一处占位——那是为了不在你的历史里留下空洞。' +
+        '要让数据真的一点不剩，只有「删除账号」那一条路（有 30 天冷静期）。',
+      code: 'CAPABILITY_REMOVED',
+    },
+    { status: 410 }
+  );
 }

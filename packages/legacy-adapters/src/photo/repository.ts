@@ -24,22 +24,21 @@ export interface ListPhotosOptions {
   readonly includeTrashed?: boolean;
 }
 
-export interface CreatePhotoInput {
-  readonly fileName: string;
-  readonly originalName: string;
-  readonly fileUrl: string;
-  readonly thumbnailUrl?: string;
-  readonly locationId?: string;
-  readonly metadata: Photo['metadata'];
-  readonly category: PhotoCategory;
-  /**
-   * 有意**不提供** isPublic。
-   *
-   * 素材默认私有，公开性由发布动作管理（ADR-002 / DOMAIN-MODEL-REVIEW P6）。
-   * 把它放进创建入参会让「不小心传了 true」变成一次隐私事故。
-   */
-}
-
+/**
+ * ⚠️ 这是一个**只读**契约（Phase 3A / 16D 起）。
+ *
+ * 原来它还有 create / setLocation / trash / restore / setPublic / purge。
+ * photos 表在数据库层面被 `trg_guard_legacy_photo_write` 冻结之后，
+ * 那些方法就成了谎话 —— 一个声称能写、实际写不进去的接口，
+ * 比没有这个接口更糟：它会一直吸引新的调用方。
+ *
+ * 对应的新能力：
+ *
+ *   新增素材        uploadAsset（@tc/application）
+ *   软删除 / 恢复   deleteAsset / restoreAsset
+ *   公开            Publication —— 素材本身没有「公开」这个状态
+ *   旧形状          mapAssetToLegacyPhotoDto（同一个包里的只读投影）
+ */
 export interface PhotoRepository {
   /** 列出 actor 自己的照片。**只返回自己的**，不做跨用户回退。 */
   list(actor: Actor, options?: ListPhotosOptions): Promise<Photo[]>;
@@ -49,23 +48,6 @@ export interface PhotoRepository {
    * 上层据此返回 404。
    */
   findById(actor: Actor, id: string): Promise<Photo | null>;
-
-  create(actor: Actor, input: CreatePhotoInput): Promise<Photo>;
-
-  /** 不属于 actor 时抛 NotFoundError（internalReason='forbidden'） */
-  setLocation(actor: Actor, id: string, locationId: string | null): Promise<Photo>;
-
-  /** 软删除。幂等：已在回收站里再调一次不报错。 */
-  trash(actor: Actor, id: string): Promise<Photo>;
-
-  /** 从回收站恢复。幂等。 */
-  restore(actor: Actor, id: string): Promise<Photo>;
-
-  /** 硬删除。只能删自己的。 */
-  purge(actor: Actor, id: string): Promise<void>;
-
-  /** 设置公开状态。遗留能力 —— 新架构里由 Publication 接管。 */
-  setPublic(actor: Actor, id: string, isPublic: boolean): Promise<Photo>;
 
   /**
    * 公开照片列表。**这是唯一接受 anonymous actor 的方法。**

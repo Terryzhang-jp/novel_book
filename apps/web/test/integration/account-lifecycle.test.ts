@@ -795,15 +795,15 @@ describe('灵魂 10：停用之后，连后台任务也不能再写内容', () =
         [u],
       ],
     },
-    {
-      table: 'photos',
-      sql: (u) => [
-        `INSERT INTO photos (id, user_id, file_name, original_name, file_url, metadata, category)
-         VALUES (gen_random_uuid(), $1, 'x.jpg', 'x.jpg', 'http://example/x.jpg',
-                 '{"fileSize":1,"mimeType":"image/jpeg"}'::jsonb, 'neither')`,
-        [u],
-      ],
-    },
+    // photos 不在这张表里了。
+    //
+    // 它现在被一条**更强**的规则挡着：Phase 3A / 16D 之后
+    // trg_guard_legacy_photo_write 拒绝一切未点名的写入，不管账号是不是
+    // active。放在这里会让「active 账号写得进去」那条前置断言失败，
+    // 而那条前置断言的作用是证明这组 SQL 本身是对的 —— 不能为了让它变绿
+    // 而把 photos 的冻结当成 active-owner 保护的一部分。
+    //
+    // photos 的冻结由 legacy-write-freeze.test.ts 单独验证。
     {
       table: 'documents',
       sql: (u) => [

@@ -337,12 +337,41 @@ describe('Phase 3A · 遗留写入冻结', () => {
 
   it('豁免清单里的遗留 adapter 不违规', () => {
     // 旧文件继续存在是允许的 —— 要挡的是**新增**入口。
+    // canvas 是 L4，去向留到 Phase 3D，所以它还在清单里。
+    write(
+      'apps/web/lib/storage/canvas-storage.ts',
+      `import { supabaseAdmin } from '../supabase/admin';
+       export const put = (b: Buffer) =>
+         supabaseAdmin.storage.from('canvas').upload('a/b.png', b);`
+    );
+    expect(rulesHit()).not.toContain('no-new-legacy-writes');
+  });
+
+  /**
+   * ⭐ 这条测试锁的是**已经关闭的入口不能被重新打开**。
+   *
+   * 16B/16D 之后 photo-storage.ts 的写入方法全部删除，它从豁免清单里
+   * 被移走了。如果哪天有人为了「先让它跑起来」把这一行加回去，
+   * 这条测试会红 —— 而不是等到生产库里又长出新的遗留数据才发现。
+   *
+   * 换句话说：豁免清单只能变短，不能变长。
+   */
+  it('photo-storage.ts 已经不在豁免清单里 —— 关闭的入口不能重开', () => {
     write(
       'apps/web/lib/storage/photo-storage.ts',
       `import { supabaseAdmin } from '../supabase/admin';
        export const create = (u: string) => supabaseAdmin.from('photos').insert({ user_id: u });`
     );
-    expect(rulesHit()).not.toContain('no-new-legacy-writes');
+    expect(rulesHit()).toContain('no-new-legacy-writes');
+  });
+
+  it('/api/upload 已经切到 uploadAsset —— 它也不再豁免', () => {
+    write(
+      'apps/web/app/api/upload/route.ts',
+      `import { uploadFile } from '@/lib/supabase/storage';
+       export const POST = () => uploadFile('documents', 'a.jpg', Buffer.from(''));`
+    );
+    expect(rulesHit()).toContain('no-new-legacy-writes');
   });
 
   it('注释和字符串里提到这些形状 → 不应误报', () => {

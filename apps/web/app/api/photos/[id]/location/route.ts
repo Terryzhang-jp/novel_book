@@ -1,148 +1,47 @@
 /**
- * API Route: /api/photos/[id]/location
+ * 给素材关联地点 —— **暂时关闭**（Phase 3A / 16D，等 Phase 3B）
  *
- * Manages the location association for a single photo
+ * 旧实现写的是 `photos.location_id`，而 photos 表已经冻结为只读（16D），
+ * 而且旧 Gallery 现在显示的是 Asset —— 这里收到的 id 根本不在 photos 表里。
  *
- * PUT    - Set/update photo location (associate with location library)
- * DELETE - Remove photo location association
+ * ## 为什么不顺手接到 Asset 上
+ *
+ * 因为「地点」在新模型里还不存在，而它**不是**一个可以顺手补的字段：
+ *
+ *   原始 GPS 不可覆盖        相机记的坐标是原始元数据的一部分（T-4 不可变）
+ *   用户修正单独存           走 asset_metadata_corrections 的 gps 字段，
+ *                            append-only，能说清「这个值是谁定的」
+ *   地点库是另一个概念       「东京站」是一个有名字、可复用的实体，
+ *                            和「35.68, 139.76」不是一回事
+ *
+ * 现在给 Asset 加一个 `locationId` 外键，等于在 Place 的语义定下来之前
+ * 先把它的形状钉死 —— 那正是 ADR-000 要避免的「让旧产品结构反向决定
+ * 新核心设计」。这件事是 Phase 3B。
+ *
+ * ## 已经能用的那一半
+ *
+ * 单纯改坐标不用等 Place：`PUT /api/photos/[id]` 走的是元数据修正链，
+ * 用户改过的值不会被后续推断覆盖（C-5）。缺的是「地点库」，不是「坐标」。
+ *
+ * 410 而不是 404：这个端点曾经存在过，客户端有权知道它是被撤销的。
  */
 
-import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth/session";
-import { photoStorage } from "@/lib/storage/photo-storage";
-import { NotFoundError, UnauthorizedError } from "@/lib/storage/errors";
-import { isAuthRequiredError } from "@/lib/auth/helpers";
+import { NextResponse } from 'next/server';
 
-export const runtime = "nodejs";
+export const runtime = 'nodejs';
 
-/**
- * PUT /api/photos/[id]/location
- * Associate a photo with a location from the location library
- *
- * Body: {
- *   locationId: string
- * }
- */
-export async function PUT(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    // 验证用户身份
-    const session = await requireAuth(req);
+const GONE = {
+  error:
+    '地点库还没有迁到新核心（Phase 3B）。' +
+    '原始 GPS 是素材的不可变元数据，用户修正走单独的修正链——' +
+    '在这两件事的语义定下来之前，不给素材接一个临时的 locationId。',
+  code: 'CAPABILITY_PENDING',
+} as const;
 
-    const { id: photoId } = await params;
-
-    // 解析请求体
-    const body = await req.json();
-    const { locationId } = body;
-
-    if (!locationId || typeof locationId !== "string") {
-      return NextResponse.json(
-        { error: "locationId is required and must be a string" },
-        { status: 400 }
-      );
-    }
-
-    // 设置照片地点
-    const photo = await photoStorage.setLocation(
-      photoId,
-      session.userId,
-      locationId
-    );
-
-    return NextResponse.json({
-      photo,
-      message: "Location set successfully",
-    });
-  } catch (error) {
-    console.error("Set photo location error:", error);
-
-    if (error instanceof NotFoundError) {
-      return NextResponse.json(
-        { error: error.message.includes("Photo") ? "Photo not found" : "Location not found" },
-        { status: 404 }
-      );
-    }
-
-    if (error instanceof UnauthorizedError) {
-      return NextResponse.json(
-        { error: "You don't have permission to update this photo" },
-        { status: 403 }
-      );
-    }
-
-    if (isAuthRequiredError(error)) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
-
-    return NextResponse.json(
-      {
-        error: "Failed to set photo location",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
-  }
+export function PUT() {
+  return NextResponse.json(GONE, { status: 410 });
 }
 
-/**
- * DELETE /api/photos/[id]/location
- * Remove location association from a photo
- *
- * This removes the locationId reference and resets the location source.
- * If the photo has EXIF location data, it will revert to that.
- */
-export async function DELETE(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    // 验证用户身份
-    const session = await requireAuth(req);
-
-    const { id: photoId } = await params;
-
-    // 移除照片地点
-    const photo = await photoStorage.removeLocation(photoId, session.userId);
-
-    return NextResponse.json({
-      photo,
-      message: "Location removed successfully",
-    });
-  } catch (error) {
-    console.error("Remove photo location error:", error);
-
-    if (error instanceof NotFoundError) {
-      return NextResponse.json(
-        { error: "Photo not found" },
-        { status: 404 }
-      );
-    }
-
-    if (error instanceof UnauthorizedError) {
-      return NextResponse.json(
-        { error: "You don't have permission to update this photo" },
-        { status: 403 }
-      );
-    }
-
-    if (isAuthRequiredError(error)) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
-
-    return NextResponse.json(
-      {
-        error: "Failed to remove photo location",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
-  }
+export function DELETE() {
+  return NextResponse.json(GONE, { status: 410 });
 }

@@ -33,7 +33,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { sql, getDsn, getPool } from '../db/setup';
+import { randomUUID } from 'node:crypto';
+import { sql, getDsn, getPool, withLegacyPhotoWrite } from '../db/setup';
 import type { Auth } from 'better-auth';
 
 /** Better Auth 实例。必须动态 import —— 见 test/db/setup.ts 的说明。 */
@@ -98,13 +99,22 @@ describe('Better Auth 注册链路', () => {
 });
 
 describe('注册即可用：新用户能立刻写业务数据', () => {
-  it('新注册用户可以创建照片', async () => {
-    const { user } = await signUp(freshEmail('photo'));
+  /**
+   * 照片那一条搬到了 assets。
+   *
+   * photos 表在 Phase 3A / 16D 之后冻结为只读 —— 「新注册用户能不能立刻
+   * 写素材」这个问题现在问的是 assets，因为那才是新素材真正落的地方。
+   * 继续拿 photos 问，验证的就只是一个没人再写的表。
+   */
+  it('新注册用户可以创建素材（assets）', async () => {
+    const { user } = await signUp(freshEmail('asset'));
 
     const rows = await sql<{ id: string }>(
-      `INSERT INTO photos (id, user_id, file_name, original_name, file_url, metadata, category)
-       VALUES (gen_random_uuid(), $1, 'x.jpg', 'x.jpg', 'http://example/x.jpg',
-               '{"fileSize":1,"mimeType":"image/jpeg"}'::jsonb, 'neither')
+      `INSERT INTO assets (id, user_id, type, object_key, sha256, mime_type,
+                           byte_size, width, height, timezone_kind, timezone_source)
+       VALUES (gen_random_uuid(), $1, 'image',
+               'users/' || $1 || '/sha256/aa/' || repeat('a', 64) || '.jpg',
+               repeat('a', 64), 'image/jpeg', 1, 10, 10, 'unknown', 'unknown')
        RETURNING id`,
       [user!.id]
     );
@@ -162,11 +172,17 @@ describe('注册即可用：新用户能立刻写业务数据', () => {
 
   it('删除流程放行之后，级联仍然清掉他的业务数据', async () => {
     const { user } = await signUp(freshEmail('cascade'));
-    await sql(
-      `INSERT INTO photos (id, user_id, file_name, original_name, file_url, metadata, category)
-       VALUES (gen_random_uuid(), $1, 'c.jpg', 'c.jpg', 'http://example/c.jpg',
-               '{"fileSize":1,"mimeType":"image/jpeg"}'::jsonb, 'neither')`,
-      [user!.id]
+    // 这里刻意仍然用 photos：要验证的是**旧数据也会被级联清掉**。
+    // photos 已冻结为只读，所以写它要走点名授权 —— 这段代码同时也是
+    // 那个逃生口的可执行说明（见 withLegacyPhotoWrite 的注释）。
+    const photoId = randomUUID();
+    await withLegacyPhotoWrite(photoId, (c) =>
+      c.query(
+        `INSERT INTO photos (id, user_id, file_name, original_name, file_url, metadata, category)
+         VALUES ($2, $1, 'c.jpg', 'c.jpg', 'http://example/c.jpg',
+                 '{"fileSize":1,"mimeType":"image/jpeg"}'::jsonb, 'neither')`,
+        [user!.id, photoId]
+      )
     );
     expect(await sql('SELECT 1 FROM photos WHERE user_id = $1', [user!.id])).toHaveLength(1);
 
@@ -207,11 +223,18 @@ describe('注册即可用：新用户能立刻写业务数据', () => {
   });
 
   it('不存在的用户 id 仍然被外键拒绝（约束真的在）', async () => {
+    // 先拿授权再验证外键：BEFORE INSERT 触发器跑在外键之前，
+    // 不授权的话这条会因为「写入被冻结」而通过 —— 那种绿灯在外键
+    // 真的掉了的时候也不会红。
+    const probeId = randomUUID();
     await expect(
-      sql(
-        `INSERT INTO photos (id, user_id, file_name, original_name, file_url, metadata, category)
-         VALUES (gen_random_uuid(), 'no-such-user', 'x.jpg', 'x.jpg', 'http://example/x.jpg',
-                 '{"fileSize":1,"mimeType":"image/jpeg"}'::jsonb, 'neither')`
+      withLegacyPhotoWrite(probeId, (c) =>
+        c.query(
+          `INSERT INTO photos (id, user_id, file_name, original_name, file_url, metadata, category)
+           VALUES ($1, 'no-such-user', 'x.jpg', 'x.jpg', 'http://example/x.jpg',
+                   '{"fileSize":1,"mimeType":"image/jpeg"}'::jsonb, 'neither')`,
+          [probeId]
+        )
       )
     ).rejects.toThrow(/foreign key|violates/i);
   });

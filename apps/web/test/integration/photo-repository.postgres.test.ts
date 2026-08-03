@@ -29,41 +29,28 @@ beforeAll(() => {
 });
 
 /**
- * 每个测试前把 photos 表恢复成 seed 状态。
+ * 契约现在**只读**，所以不需要重置。
  *
- * 契约里有大量写操作（trash / purge / setPublic），不重置会产生顺序依赖 ——
- * 那正是我在 identity.test.ts 里踩过的坑。
+ * 原来这里有一段 `DELETE FROM photos` + `UPDATE photos SET ...`：契约里
+ * 有大量写操作（trash / purge / setPublic），不重置就会产生顺序依赖。
  *
- * 做法：删掉不属于 seed 的行，再把 seed 行的可变字段复位。
- * 比整库重建快得多（毫秒级 vs 数百毫秒），且不影响其他测试文件。
+ * Phase 3A / 16D 把 photos 表冻结为只读之后，那些写操作和它们的测试
+ * 一起删掉了 —— 于是重置也没有了对象。
+ *
+ * 保留这个函数（而不是把参数从契约里去掉）是因为契约是一份**可复用规格**：
+ * 将来接一个走 PostgREST 的实现时，它仍然需要一个「回到已知状态」的钩子。
+ * 这里断言 seed 还在，比返回一个空 Promise 多做一件事：
+ * **如果别的测试文件污染了 photos，这里会立刻红，而不是让契约的断言
+ * 以一种难以解释的方式失败。**
  */
-const SEED_PHOTO_PREFIXES = ['a0000000-', 'b0000000-'];
-
 async function resetSeed(): Promise<void> {
-  await sql(
-    `DELETE FROM photos
-      WHERE NOT (${SEED_PHOTO_PREFIXES.map((_, i) => `id::text LIKE $${i + 1}`).join(' OR ')})`,
-    SEED_PHOTO_PREFIXES.map((p) => `${p}%`)
-  );
-  // 复位 seed 行被测试改过的字段
-  await sql(`
-    UPDATE photos SET
-      is_public = false,
-      trashed   = (id = 'a0000000-0000-0000-0000-000000000009'),
-      trashed_at = CASE WHEN id = 'a0000000-0000-0000-0000-000000000009'
-                        THEN now() - interval '2 days' ELSE NULL END,
-      -- location_id 仍是 uuid 列（只有 user_id 在 migration 里改成了 text），
-      -- 所以字面量要显式转型
-      location_id = CASE
-        WHEN id IN ('a0000000-0000-0000-0000-000000000001',
-                    'a0000000-0000-0000-0000-000000000002')
-          THEN '10000000-0000-0000-0000-000000000001'::uuid
-        WHEN id = 'a0000000-0000-0000-0000-000000000003'
-          THEN '10000000-0000-0000-0000-000000000002'::uuid
-        WHEN id = 'b0000000-0000-0000-0000-000000000001'
-          THEN '20000000-0000-0000-0000-000000000001'::uuid
-        ELSE NULL END
-  `);
+  const [row] = await sql<{ n: string }>(`SELECT count(*)::text AS n FROM photos`);
+  if (row?.n !== '10') {
+    throw new Error(
+      `photos 应该有 10 行 seed 数据，实际 ${row?.n}。` +
+        'photos 表已冻结为只读（Phase 3A / 16D）—— 有行数变化说明某处仍在写它。'
+    );
+  }
 }
 
 runPhotoRepositoryContract('PostgresPhotoRepository', () => repo, resetSeed);

@@ -314,6 +314,14 @@ export interface AssetRepository {
   findBySha256(actor: Actor, sha256: string): Promise<Asset | null>;
   listByUser(actor: Actor, page?: Page): Promise<Asset[]>;
   /**
+   * 已软删除的素材 —— 旧 Gallery 的「回收站」就是这一批。
+   *
+   * 单独一个方法而不是给 listByUser 加参数：一个布尔参数意味着**默认值**，
+   * 而这个默认值一旦被某个调用点漏掉，已删除的素材就会出现在正常列表里。
+   * 分成两个方法之后，「要不要包含已删除的」必须在调用处显式选一次。
+   */
+  listTrashed(actor: Actor, page?: Page): Promise<Asset[]>;
+  /**
    * 软删除。**不物理删对象**（ADR-008 A7）——
    * 引用它的 Moment 要留下占位，作品里不出现无法解释的空洞。
    */
@@ -339,6 +347,18 @@ export interface AssetRepository {
   ): Promise<MomentAsset[]>;
 
   listCorrections(actor: Actor, assetId: AssetId): Promise<AssetMetadataCorrection[]>;
+  /**
+   * 批量版本，给列表页用 —— 和 listByMoments 同一个理由。
+   *
+   * 逐个查的话，一页 50 张素材就是 50 次往返。而「合成后的元数据」是
+   * 列表**必须**用的东西（地点筛选、时间分类都读它），不能为了省事就
+   * 在列表里跳过修正 —— 那会让用户手动改好的地点在网格里看不见，
+   * 点进详情又出现，表现成一个查不明白的「有时候不生效」。
+   */
+  listCorrectionsFor(
+    actor: Actor,
+    assetIds: readonly AssetId[]
+  ): Promise<Map<AssetId, AssetMetadataCorrection[]>>;
   appendCorrection(
     actor: Actor,
     assetId: AssetId,

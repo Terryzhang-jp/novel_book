@@ -1,49 +1,31 @@
-import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth/session";
-import { photoStorage } from "@/lib/storage/photo-storage";
-import { NotFoundError, UnauthorizedError } from "@/lib/storage/errors";
-import { isAuthRequiredError } from "@/lib/auth/helpers";
-
-export const runtime = "nodejs";
-
 /**
- * POST /api/photos/trash/[id] - 从回收站恢复照片
+ * 从回收站取回 —— 已经完全走新路径（Phase 3A / 16B）
+ *
+ * 和「重传一份已删除的素材」是同一个 `restore`：清 `deleted_at`，不新建行。
+ * 两个入口一个语义 —— 各写一份实现的话，其中一条路迟早会忘记清某个字段。
  */
+
+import { NextResponse } from 'next/server';
+import { restoreAsset } from '@tc/application';
+import { apiError, requireApiActor } from '@/lib/core/api';
+import { getCore } from '@/lib/core/context';
+import { projectAsset } from '@/lib/legacy/photo-compat';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function POST(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const guard = await requireApiActor();
+  if (guard.response) return guard.response;
+
   try {
-    const session = await requireAuth(req);
-    const { id: photoId } = await params;
-
-    await photoStorage.restore(photoId, session.userId);
-
-    return NextResponse.json({ success: true });
+    const { id } = await params;
+    const asset = await restoreAsset(getCore(), guard.actor, id);
+    return NextResponse.json({ success: true, photo: projectAsset(asset) });
   } catch (error) {
-    console.error("Restore photo error:", error);
-
-    if (error instanceof NotFoundError) {
-      return NextResponse.json({ error: "Photo not found" }, { status: 404 });
-    }
-
-    if (error instanceof UnauthorizedError) {
-      return NextResponse.json(
-        { error: "You don't have permission to restore this photo" },
-        { status: 403 }
-      );
-    }
-
-    if (isAuthRequiredError(error)) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: "Failed to restore photo" },
-      { status: 500 }
-    );
+    return apiError(error);
   }
 }

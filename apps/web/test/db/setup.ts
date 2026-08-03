@@ -77,6 +77,44 @@ export async function inRollback<T>(fn: (client: pg.PoolClient) => Promise<T>): 
   }
 }
 
+/**
+ * 在 photos 表被冻结之后写它 —— 唯一合法的方式。
+ *
+ * Phase 3A / 16D 之后 `trg_guard_legacy_photo_write` 会拒绝一切未点名的
+ * INSERT / UPDATE。放行的条件是：**在同一个事务里**声明要动哪一行。
+ *
+ *     SELECT set_config('tc.allow_legacy_photo_write', '<那一行的 id>', true);
+ *
+ * 第三个参数 `true` = 事务本地。事务一结束授权就消失，不会残留在连接池的
+ * 连接上被下一个测试捡到 —— 那种残留会让「写入被冻结」这件事在某些执行
+ * 顺序下静默失效，而 CI 依然全绿。
+ *
+ * 还留在测试里的 photos 写入只有两类：
+ *   · 遗留 baseline schema 的约束验证（外键、CHECK 真的在）
+ *   · 账号删除时 CASCADE 真的清掉旧数据
+ * 两类都是**验证旧数据的行为**，不是产生新的旧数据。
+ */
+export async function withLegacyPhotoWrite<T>(
+  photoId: string,
+  fn: (client: pg.PoolClient) => Promise<T>
+): Promise<T> {
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT set_config('tc.allow_legacy_photo_write', $1, true)`, [
+      photoId,
+    ]);
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 beforeAll(async () => {
   const probe = await probePostgres();
 

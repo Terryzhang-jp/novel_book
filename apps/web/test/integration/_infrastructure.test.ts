@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { sql, getDbName, getPool, inRollback } from '../db/setup';
+import { sql, getDbName, getPool, inRollback, withLegacyPhotoWrite } from '../db/setup';
 import { schemaFingerprint, templateDbName } from '../db/template';
 
 describe('测试数据库生命周期', () => {
@@ -125,23 +125,52 @@ describe('测试隔离机制', () => {
 });
 
 describe('外键约束真的生效', () => {
+  /**
+   * ⚠️ 这两条要**先拿到写入授权**再验证约束。
+   *
+   * Phase 3A / 16D 之后 photos 上有一个 BEFORE INSERT 触发器，而触发器
+   * 跑在外键和 CHECK 之前。不点名授权的话，这两条测试会因为「写入被冻结」
+   * 而通过 —— 通过的原因和它们想验证的东西完全无关。
+   *
+   * 那正是最坏的一种绿灯：外键哪天真的掉了，这里也不会红。
+   */
+  const PROBE_ID = 'ffffffff-0000-0000-0000-0000000000f1';
+
   it('插入指向不存在用户的照片 → 被拒绝', async () => {
     await expect(
-      sql(
-        `INSERT INTO photos (id, user_id, file_name, original_name, file_url, metadata, category)
-         VALUES (gen_random_uuid(), '00000000-0000-0000-0000-000000000000',
-                 'x.jpg', 'x.jpg', 'http://example/x.jpg', '{}'::jsonb, 'neither')`
+      withLegacyPhotoWrite(PROBE_ID, (c) =>
+        c.query(
+          `INSERT INTO photos (id, user_id, file_name, original_name, file_url, metadata, category)
+           VALUES ($1, '00000000-0000-0000-0000-000000000000',
+                   'x.jpg', 'x.jpg', 'http://example/x.jpg', '{}'::jsonb, 'neither')`,
+          [PROBE_ID]
+        )
       )
     ).rejects.toThrow(/foreign key|violates/i);
   });
 
   it('category 的 CHECK 约束生效', async () => {
     await expect(
-      sql(
-        `INSERT INTO photos (id, user_id, file_name, original_name, file_url, metadata, category)
-         VALUES (gen_random_uuid(), '11111111-1111-1111-1111-111111111111',
-                 'x.jpg', 'x.jpg', 'http://example/x.jpg', '{}'::jsonb, 'not-a-valid-category')`
+      withLegacyPhotoWrite(PROBE_ID, (c) =>
+        c.query(
+          `INSERT INTO photos (id, user_id, file_name, original_name, file_url, metadata, category)
+           VALUES ($1, '11111111-1111-1111-1111-111111111111',
+                   'x.jpg', 'x.jpg', 'http://example/x.jpg', '{}'::jsonb, 'not-a-valid-category')`,
+          [PROBE_ID]
+        )
       )
     ).rejects.toThrow(/check constraint|violates/i);
+  });
+
+  it('没有授权时，同一条 INSERT 连约束都走不到（16D）', async () => {
+    // 和上面两条互为对照：证明上面的 rejects 不是「被冻结挡住了」。
+    await expect(
+      sql(
+        `INSERT INTO photos (id, user_id, file_name, original_name, file_url, metadata, category)
+         VALUES ($1, '11111111-1111-1111-1111-111111111111',
+                 'x.jpg', 'x.jpg', 'http://example/x.jpg', '{}'::jsonb, 'neither')`,
+        [PROBE_ID]
+      )
+    ).rejects.toThrow(/禁止写入遗留 photos 表/);
   });
 });

@@ -16,9 +16,10 @@
       "severity": "medium",
       "area": "apps/web/lib/storage/photo-storage.ts",
       "impact": "PhotoRepository 契约跑的是 PostgresPhotoRepository。旧实现走 supabase-js → PostgREST，这条链路的 URL 构造、查询参数序列化、错误处理没有测试。",
-      "mitigation": "字段映射这一段已经提取成纯函数 mapSupabasePhotoRow 并有回归测试（test/unit/supabase-photo-mapper.test.ts）—— 那正是两个已知 Gallery bug 的发生位置。剩下未覆盖的是 PostgREST 传输层。",
-      "closeWhen": "完整 Supabase 本地栈可用（pnpm db:start，需 Docker）或有可用 staging 时，把 runPhotoRepositoryContract 接到 SupabasePhotoRepository 上。",
-      "owner": "engineering"
+      "mitigation": "范围在 16B/16D 之后**大幅收窄**：photoStorage 的写入方法（create / replacePhoto / setLocation / trash / restore / purge / emptyTrash / syncLocationCoordinatesToPhotos）已全部删除，photos 表在数据库层面冻结为只读。未覆盖的只剩几处读取（profile 统计、公开照片列表、AI 检索）。字段映射那一段已经是纯函数并有回归测试（test/unit/supabase-photo-mapper.test.ts）—— 那正是两个已知 Gallery bug 的发生位置。",
+      "closeWhen": "剩余的读取方（app/api/profile、app/api/public/photos、app/api/photos/embeddings、app/api/documents/generate）迁到新核心之后自然消失。在那之前不值得为一条只读、且目标实例已不存在的链路搭 Docker。",
+      "owner": "engineering",
+      "note": "16D：写入路径已删除，本缺口现在只覆盖读取。"
     },
     {
       "id": "e2e-data-operations-need-supabase",
@@ -26,8 +27,8 @@
       "severity": "medium",
       "area": "e2e/auth-and-isolation.spec.ts；不含 e2e/studio-vertical-slice.spec.ts",
       "impact": "遗留应用的数据操作全部走 supabaseAdmin → PostgREST，需要完整 Supabase 本地栈（Docker）。E2E 环境里没有，因此遗留页面的增删改查在浏览器层没有被验证。",
-      "mitigation": "新核心（Phase 2A 的九张表）已经不受这个限制：它走标准 pg driver，e2e/studio-vertical-slice.spec.ts 在真实浏览器里完整走通了 Journey → Moment → Observation → Interpretation 修订 → Work 引用 → 发布 → 撤回。遗留侧的资源隔离、默认私有、软删除、字段映射由 44 条 Repository 契约在集成层证明。",
-      "closeWhen": "遗留页面按 Strangler 计划迁到新核心之后，这条缺口自然消失；在那之前若需要提前覆盖，可用 Docker 起 pnpm db:start 把 E2E 指向本地 Supabase。",
+      "mitigation": "新核心不受这个限制。16B/16C 之后**旧 Gallery 的照片链路也不再需要 Supabase**：上传、列表、详情、删除、回收站、拍摄时间修正全部走标准 pg driver + 本地 ObjectStorage，并由 e2e/legacy-upload-cutover.spec.ts 在真实浏览器里从旧上传页完整验证（旧 Gallery 可见 / Studio 可见 / assets 多一行 / photos 一行不多）。仍然依赖 Supabase 的只剩文档、地点、画布、AI 修图。",
+      "closeWhen": "文档 / 地点（Phase 3B）/ 画布与 AI 修图（Phase 3D）迁完之后自然消失。",
       "owner": "engineering"
     },
     {
@@ -106,7 +107,7 @@
       "closeWhen": "实现 storage:audit 命令（ADR-002 第 5 节）：对比 ObjectStorage 里的 key 与 assets/published_assets 的引用，清理无引用的那些。",
       "owner": "engineering",
       "status": "partial",
-      "note": "15A 已把账号删除那一路接上 storage_cleanup_jobs 队列（可重试、并发安全、超过 8 次标记 abandoned）。剩下三种 reason —— publication_withdrawn / asset_deleted / orphan —— 表结构已就位但还没有生产者。"
+      "note": "15A 已把账号删除那一路接上 storage_cleanup_jobs 队列（可重试、并发安全、超过 8 次标记 abandoned）。16B 又接上了 orphan：uploadAsset 落库失败时，已落盘的字节会入队（reason=orphan），不再依赖一个还不存在的对账任务。剩下两种 reason —— publication_withdrawn / asset_deleted —— 表结构已就位但还没有生产者。"
     },
     {
       "id": "derived-assets-not-on-cdn",
@@ -181,6 +182,28 @@
       "mitigation": "优先读 FFMPEG_PATH 环境变量，所以部署镜像里已有 ffmpeg 时可以指向系统的那个并把 ffmpeg-static 排除出打包。找不到时**明确失败**而不是退回「跳过音频」—— 后者会让 15C 关掉的缺口悄悄回来。",
       "closeWhen": "确定生产运行环境后，二选一：镜像内置 ffmpeg 并设 FFMPEG_PATH，或确认平台能容纳静态二进制。",
       "owner": "engineering"
+    },
+    {
+      "id": "legacy-canvas-and-ai-still-write-supabase-storage",
+      "title": "画布与 AI 修图仍在写 Supabase Storage（Phase 3A 唯一未达成的完成标准）",
+      "severity": "medium",
+      "area": "lib/storage/canvas-storage.ts · lib/storage/ai-magic-storage.ts",
+      "impact": "Phase 3A 的完成标准之一是「没有新 Legacy Storage 对象」。照片链路（L1/L2/L3）已经硬切，但画布（L4）和 AI 生成图（L9）仍然调 uploadFile → Supabase bucket。当前环境里它们是运行时失败（目标实例 DNS 解析不到），换一个可用配置就会立刻恢复写入。",
+      "mitigation": "两条路径都在 check-architecture 的 LEGACY_WRITE_ALLOWLIST 里逐个文件列出，新增的第三条会在 CI 里失败。清单只能变短：test/unit/check-architecture.test.ts 有两条测试锁住「已关闭的入口不能重新豁免」。",
+      "closeWhen": "Phase 3D：画布产物和 AI 生成图都是素材，走 uploadAsset → ObjectStorage。两条都关掉之后豁免清单变空，Phase 3A 才算完成。",
+      "owner": "engineering",
+      "note": "Phase 3A 八条完成标准里唯一没勾上的那条。"
+    },
+    {
+      "id": "legacy-capabilities-retired-in-cutover",
+      "title": "硬切移除了几项旧 Gallery 能力（410，非静默失败）",
+      "severity": "low",
+      "area": "app/api/photos/**",
+      "impact": "清空回收站、给照片关联地点库、批量关联地点、给素材写说明文字、改地点坐标时回写照片 —— 这五项在 16B/16D 之后不可用。",
+      "mitigation": "端点返回 410 并在响应体里说明去向（CAPABILITY_REMOVED / CAPABILITY_PENDING / CAPABILITY_MOVED），不是 404，也不是会 500 的路径。e2e/legacy-upload-cutover.spec.ts 断言了这些状态码。其中「清空回收站」是**刻意不再提供**的：素材不再被硬删除（ADR-008 A7），字节的删除只走 storage_cleanup_jobs。",
+      "closeWhen": "地点相关的三项在 Phase 3B（Place）恢复；说明文字与硬删除不会恢复，这是设计决定。",
+      "owner": "product",
+      "note": "详见 docs/LEGACY-WRITE-INVENTORY.md 第六节。"
     }
   ]
 }

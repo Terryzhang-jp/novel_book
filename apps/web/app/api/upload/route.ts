@@ -1,76 +1,86 @@
-import { uploadFile, getPublicUrl } from "@/lib/supabase/storage";
-import {
-  requireApiAuth,
-  checkUploadedImage,
-  sanitizeFileName,
-  rateLimit,
-} from "@/lib/api/guard";
-import { NextResponse } from "next/server";
+/**
+ * 编辑器内嵌图片上传 —— 已经完全走新路径（Phase 3A / 16B）
+ *
+ * 这是 L3：原来它把字节直接扔进 Supabase 的 `documents` bucket，
+ * 然后把一个**公开 URL** 写进文档 JSON。两个问题：
+ *
+ *   1. 公开 bucket 意味着任何拿到 URL 的人都能取件 —— 文档本身是私有的，
+ *      但插在里面的图片不是。这不是理论风险，`is_public` 只控制应用
+ *      要不要显示，不控制对象能不能被直接访问。
+ *   2. 那个 URL 里带着原图，也就是带着 EXIF 和 GPS。
+ *
+ * 现在两件事都变了：
+ *
+ *   落库   uploadAsset → ObjectStorage（内容寻址、按用户隔离）
+ *   回给编辑器的 URL   指向**受控预览**，不是原件 ——
+ *                     长边 1600、WebP、元数据已剥离、走鉴权
+ *
+ * 原件仍然完整保存在 assets 里（带 GPS），只是不会被写进文档 JSON。
+ * 文档里存的是一个需要身份才能取的、干净的副本。
+ */
 
-// Use Node.js runtime for better compatibility with Buffer/Stream handling in Supabase client
-export const runtime = "nodejs";
+import { NextResponse } from 'next/server';
+import { uploadAsset } from '@tc/application';
+import { rateLimit } from '@/lib/api/guard';
+import { apiError, requireApiActor } from '@/lib/core/api';
+import { getCore } from '@/lib/core/context';
+import { getMediaProbe, getStorageKit } from '@/lib/core/storage';
 
-/** 单文件上限 10 MB，与 /api/photos 保持一致 */
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 /**
- * POST /api/upload — 编辑器内嵌图片上传
+ * 先看声明长度，避免把超大请求整个读进内存。
  *
- * 安全要求（此前全部缺失，见 PERFORMANCE-AUDIT.md 第七组 #3/#7）：
- * 1. 必须登录
- * 2. 按用户限流
- * 3. 大小上限
- * 4. 用 magic bytes 判定真实类型，不信任 Content-Type 请求头
- * 5. 文件名清洗，防止路径穿越进入对象存储 key
- * 6. 上传路径按用户隔离
+ * 这是一道**便宜的前置闸**，不是权威判定 —— content-length 是客户端说的。
+ * 真正的上限在 uploadAsset 的 MAX_UPLOAD_BYTES 里，对着真实字节数判。
  */
+const DECLARED_LENGTH_CEILING = 25 * 1024 * 1024;
+
 export async function POST(req: Request) {
+  const guard = await requireApiActor();
+  if (guard.response) return guard.response;
+
+  const userId = guard.actor.type === 'user' ? guard.actor.userId : 'anonymous';
+  const limited = rateLimit(`upload:${userId}`, { limit: 60, windowMs: 60_000 });
+  if (limited) return limited;
+
   try {
-    const guard = await requireApiAuth(req);
-    if (guard.response) return guard.response;
-    const { userId } = guard.session;
-
-    const limited = rateLimit(`upload:${userId}`, { limit: 60, windowMs: 60_000 });
-    if (limited) return limited;
-
     if (!req.body) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+      return NextResponse.json(
+        { error: 'No file provided', code: 'INVALID_INPUT' },
+        { status: 400 }
+      );
     }
 
-    // 先看声明长度，避免把超大请求整个读进内存
-    const declaredLength = Number(req.headers.get("content-length") ?? "0");
-    if (declaredLength > MAX_UPLOAD_BYTES) {
+    const declaredLength = Number(req.headers.get('content-length') ?? '0');
+    if (declaredLength > DECLARED_LENGTH_CEILING) {
       return NextResponse.json(
-        { error: "File too large (max 10MB)", code: "FILE_TOO_LARGE" },
+        { error: 'File too large', code: 'FILE_TOO_LARGE' },
         { status: 413 }
       );
     }
 
-    const buffer = Buffer.from(await req.arrayBuffer());
+    const bytes = new Uint8Array(await req.arrayBuffer());
+    const { asset } = await uploadAsset(
+      { core: getCore(), storage: getStorageKit(), probe: getMediaProbe() },
+      guard.actor,
+      {
+        bytes,
+        declaredMimeType: req.headers.get('content-type') ?? 'application/octet-stream',
+      }
+    );
 
-    // 真实类型校验 —— 返回的 mime 才可信，请求头里的不可信
-    const check = checkUploadedImage(buffer, { maxBytes: MAX_UPLOAD_BYTES });
-    if (check.response) return check.response;
-    const contentType = check.mime;
-
-    const rawName = req.headers.get("x-vercel-filename") ?? "image";
-    const safeName = sanitizeFileName(rawName, "image");
-
-    // 按用户隔离，和照片库的路径约定保持一致
-    const path = `${userId}/uploads/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
-    const bucket = "documents";
-
-    await uploadFile(bucket, path, buffer, {
-      contentType,
-      // 内容不可变（路径含 uuid），可以长期缓存
-      cacheControl: "public, max-age=31536000, immutable",
-      upsert: false,
+    // ⭐ 返回预览而不是 /raw。
+    //
+    // 这个 URL 会被写进文档 JSON 并长期保存下去，所以它指向什么，
+    // 就等于「这篇文档里的图片永远是什么」。指向原件的话，每一次打开
+    // 文档都会把满分辨率的、带 GPS 的字节发一遍。
+    return NextResponse.json({
+      url: `/api/studio/assets/${asset.id}/preview?size=large`,
+      assetId: asset.id,
     });
-
-    return NextResponse.json({ url: getPublicUrl(bucket, path) });
   } catch (error) {
-    // 不把内部错误信息回给客户端
-    console.error("[POST /api/upload] Upload failed:", error instanceof Error ? error.message : "unknown");
-    return NextResponse.json({ error: "Failed to upload file" }, { status: 500 });
+    return apiError(error);
   }
 }

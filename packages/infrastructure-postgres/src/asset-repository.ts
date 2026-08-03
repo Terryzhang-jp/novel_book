@@ -125,6 +125,19 @@ export class PostgresAssetRepository implements AssetRepository {
     return rows.map(mapAsset);
   }
 
+  /** 回收站。按删除时间倒序 —— 最近扔进去的最可能被找回来。 */
+  async listTrashed(actor: Actor, page: Page = {}): Promise<Asset[]> {
+    const { userId } = requireUser(actor);
+    const { rows } = await this.db.query<AssetRow>(
+      `SELECT ${ASSET_COLUMNS} FROM assets
+        WHERE user_id = $1 AND deleted_at IS NOT NULL
+        ORDER BY deleted_at DESC
+        LIMIT $2 OFFSET $3`,
+      [userId, page.limit ?? 100, page.offset ?? 0]
+    );
+    return rows.map(mapAsset);
+  }
+
   /** 幂等：已删的再删一次不报错，deleted_at 保持首次的时间 */
   async softDelete(actor: Actor, id: AssetId): Promise<Asset> {
     const { userId } = requireUser(actor);
@@ -286,6 +299,40 @@ export class PostgresAssetRepository implements AssetRepository {
       [assetId, userId]
     );
     return rows.map(mapCorrection);
+  }
+
+  /**
+   * 批量取修正。
+   *
+   * `= ANY($1)` 而不是拼 IN 列表：拼串会随 id 数量产生无数种不同的查询
+   * 文本，把 Postgres 的 prepared statement 缓存打散。
+   *
+   * 返回 Map 而不是扁平数组 —— 调用方要的就是「按 asset 分组」，
+   * 让每个调用方各自分一遍组是重复劳动，而且分错了不会有人发现。
+   */
+  async listCorrectionsFor(
+    actor: Actor,
+    assetIds: readonly AssetId[]
+  ): Promise<Map<AssetId, AssetMetadataCorrection[]>> {
+    const { userId } = requireUser(actor);
+    const grouped = new Map<AssetId, AssetMetadataCorrection[]>();
+    if (assetIds.length === 0) return grouped;
+
+    const { rows } = await this.db.query<CorrectionRow>(
+      `SELECT ${prefixed(CORRECTION_COLUMNS, 'c')}
+         FROM asset_metadata_corrections c
+         JOIN assets a ON a.id = c.asset_id
+        WHERE c.asset_id = ANY($1) AND a.user_id = $2
+        ORDER BY c.created_at ASC`,
+      [[...assetIds], userId]
+    );
+    for (const row of rows) {
+      const correction = mapCorrection(row);
+      const list = grouped.get(correction.assetId);
+      if (list) list.push(correction);
+      else grouped.set(correction.assetId, [correction]);
+    }
+    return grouped;
   }
 
   /**

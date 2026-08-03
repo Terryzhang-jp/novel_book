@@ -18,9 +18,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { NotFoundError, userActor, ANONYMOUS, systemActor } from '@tc/domain';
+import { userActor, ANONYMOUS, systemActor } from '@tc/domain';
 import type { PhotoRepository } from '@tc/legacy-adapters';
-import type { Photo } from '@tc/legacy-adapters';
 
 /** seed 里的固定身份 */
 export const ALICE = '11111111-1111-1111-1111-111111111111';
@@ -35,24 +34,6 @@ export const ALICE_TRASHED_PHOTO = 'a0000000-0000-0000-0000-000000000009';
 
 export const alice = userActor(ALICE, 'sess-alice');
 export const bob = userActor(BOB, 'sess-bob');
-
-const sampleMetadata = {
-  dateTime: '2025-09-20T10:00:00.000Z',
-  location: { latitude: 35.99, longitude: 139.08, source: 'exif' as const },
-  dimensions: { width: 100, height: 100 },
-  fileSize: 12345,
-  mimeType: 'image/jpeg',
-};
-
-function newPhotoInput(name: string) {
-  return {
-    fileName: `${name}.jpg`,
-    originalName: `${name}-orig.jpg`,
-    fileUrl: `http://example.test/${name}.jpg`,
-    metadata: sampleMetadata,
-    category: 'time-location' as const,
-  };
-}
 
 /**
  * 运行契约。
@@ -167,63 +148,33 @@ export function runPhotoRepositoryContract(
         expect(await repo.findById(bob, '00000000-0000-0000-0000-0000000000ff')).toBeNull();
       });
 
-      it('Bob setLocation Alice 的照片 → NotFoundError', async () => {
-        await expect(
-          repo.setLocation(bob, ALICE_PHOTO_WITH_LOCATION, null)
-        ).rejects.toBeInstanceOf(NotFoundError);
-      });
-
-      it('Bob trash Alice 的照片 → NotFoundError，且照片没被改动', async () => {
-        await expect(repo.trash(bob, ALICE_PHOTO_WITH_LOCATION)).rejects.toBeInstanceOf(
-          NotFoundError
-        );
-        const still = await repo.findById(alice, ALICE_PHOTO_WITH_LOCATION);
-        expect(still!.trashed).toBe(false);
-      });
-
-      it('Bob restore Alice 在回收站的照片 → NotFoundError，且仍在回收站', async () => {
-        await expect(repo.restore(bob, ALICE_TRASHED_PHOTO)).rejects.toBeInstanceOf(
-          NotFoundError
-        );
-        const still = await repo.findById(alice, ALICE_TRASHED_PHOTO);
-        expect(still!.trashed).toBe(true);
-      });
-
-      it('Bob purge Alice 的照片 → NotFoundError，且照片还在', async () => {
-        await expect(repo.purge(bob, ALICE_PHOTO_WITH_LOCATION)).rejects.toBeInstanceOf(
-          NotFoundError
-        );
-        expect(await repo.findById(alice, ALICE_PHOTO_WITH_LOCATION)).not.toBeNull();
-      });
-
-      it('Bob setPublic Alice 的照片 → NotFoundError，且仍是私有', async () => {
-        await expect(
-          repo.setPublic(bob, ALICE_PHOTO_WITH_LOCATION, true)
-        ).rejects.toBeInstanceOf(NotFoundError);
-        const still = await repo.findById(alice, ALICE_PHOTO_WITH_LOCATION);
-        expect(still!.isPublic).toBe(false);
-      });
-
-      it('Alice 用同一个 id 操作 → 成功（证明失败确实来自所有权而非 id 无效）', async () => {
-        const updated = await repo.setLocation(alice, ALICE_PHOTO_WITH_LOCATION, null);
-        expect(updated.locationId).toBeUndefined();
-      });
-
       it('Bob 的列表里不含 Alice 的任何照片', async () => {
         const photos = await repo.list(bob, { limit: 100, includeTrashed: true });
         expect(photos.every((p) => p.userId === BOB)).toBe(true);
         expect(photos.find((p) => p.id === ALICE_PHOTO_WITH_LOCATION)).toBeUndefined();
       });
 
-      it('NotFoundError 的对外信息不泄露「资源存在」', async () => {
-        const err = await repo
-          .trash(bob, ALICE_PHOTO_WITH_LOCATION)
-          .then(() => null)
-          .catch((e: unknown) => e as NotFoundError);
-        expect(err).toBeInstanceOf(NotFoundError);
-        expect(err!.message).not.toMatch(/forbidden|permission|owner|Alice/i);
-        // 真实原因只在内部字段里
-        expect(err!.internalReason).toBe('forbidden');
+      /**
+       * 这里原来还有六条：Bob 对 Alice 的照片调 setLocation / trash /
+       * restore / purge / setPublic 全都要 NotFoundError。
+       *
+       * 它们随那些方法一起删掉了（Phase 3A / 16D，photos 表冻结为只读）。
+       * 越权**写**现在有两道更强的保证，而且不依赖任何测试：
+       *
+       *   接口层    PhotoRepository 上根本没有写方法
+       *   数据库层  trg_guard_legacy_photo_write 拒绝一切未点名的 INSERT/UPDATE
+       *
+       * 对应的新断言在 legacy-write-freeze.test.ts 里 —— 那里直接拿 SQL
+       * 打这张表，证明「绕过应用层也写不进去」。
+       */
+    });
+
+    // ════════════════════════════════════════════════════════════════════════
+    describe('默认私有', () => {
+      it('seed 里没有任何公开照片', async () => {
+        // 三层默认私有里的 Repository 那一层。
+        // 新素材的公开性由 Publication 管理，photos 这条路已经封死。
+        expect(await repo.listPublic(ANONYMOUS, { limit: 200 })).toEqual([]);
       });
     });
 
@@ -246,113 +197,6 @@ export function runPhotoRepositoryContract(
       it('system actor 必须带 reason', () => {
         expect(() => systemActor('')).toThrow(/reason/);
         expect(() => systemActor('孤儿文件对账')).not.toThrow();
-      });
-    });
-
-    // ════════════════════════════════════════════════════════════════════════
-    describe('默认私有（三层中的 Repository 层）', () => {
-      it('create() 不接受 isPublic 入参，新照片一律私有', async () => {
-        const photo = await repo.create(alice, newPhotoInput('privacy'));
-        expect(photo.isPublic).toBe(false);
-      });
-
-      it('新建的照片不出现在 listPublic() 里', async () => {
-        const photo = await repo.create(alice, newPhotoInput('not-public'));
-        const pub = await repo.listPublic(ANONYMOUS, { limit: 200 });
-        expect(pub.find((p) => p.id === photo.id)).toBeUndefined();
-      });
-
-      it('seed 里没有任何公开照片', async () => {
-        expect(await repo.listPublic(ANONYMOUS, { limit: 200 })).toEqual([]);
-      });
-
-      it('明确发布后 → listPublic 可见', async () => {
-        const photo = await repo.create(alice, newPhotoInput('publish'));
-        await repo.setPublic(alice, photo.id, true);
-        const pub = await repo.listPublic(ANONYMOUS, { limit: 200 });
-        expect(pub.find((p) => p.id === photo.id)).toBeDefined();
-      });
-
-      it('取消公开后 → 立即不可见', async () => {
-        const photo = await repo.create(alice, newPhotoInput('unpublish'));
-        await repo.setPublic(alice, photo.id, true);
-        await repo.setPublic(alice, photo.id, false);
-        const pub = await repo.listPublic(ANONYMOUS, { limit: 200 });
-        expect(pub.find((p) => p.id === photo.id)).toBeUndefined();
-      });
-
-      it('已公开但进了回收站 → 不可见（回收站优先于公开）', async () => {
-        const photo = await repo.create(alice, newPhotoInput('pub-trash'));
-        await repo.setPublic(alice, photo.id, true);
-        await repo.trash(alice, photo.id);
-        const pub = await repo.listPublic(ANONYMOUS, { limit: 200 });
-        expect(pub.find((p) => p.id === photo.id)).toBeUndefined();
-      });
-    });
-
-    // ════════════════════════════════════════════════════════════════════════
-    describe('软删除状态机', () => {
-      let target: Photo;
-      beforeEach(async () => {
-        target = await repo.create(alice, newPhotoInput('soft-delete'));
-      });
-
-      it('Active → trash → Trashed', async () => {
-        const trashed = await repo.trash(alice, target.id);
-        expect(trashed.trashed).toBe(true);
-        expect(trashed.trashedAt).toBeTruthy();
-      });
-
-      it('trashed 的照片不出现在默认列表', async () => {
-        await repo.trash(alice, target.id);
-        const list = await repo.list(alice, { limit: 200 });
-        expect(list.find((p) => p.id === target.id)).toBeUndefined();
-      });
-
-      it('includeTrashed 时可见（回收站视图）', async () => {
-        await repo.trash(alice, target.id);
-        const list = await repo.list(alice, { limit: 200, includeTrashed: true });
-        expect(list.find((p) => p.id === target.id)).toBeDefined();
-      });
-
-      it('Trashed → restore → Active', async () => {
-        await repo.trash(alice, target.id);
-        const restored = await repo.restore(alice, target.id);
-        expect(restored.trashed).toBe(false);
-        expect(restored.trashedAt).toBeUndefined();
-        const list = await repo.list(alice, { limit: 200 });
-        expect(list.find((p) => p.id === target.id)).toBeDefined();
-      });
-
-      it('重复 trash 是幂等的，且 trashedAt 保持首次时间', async () => {
-        const first = await repo.trash(alice, target.id);
-        await new Promise((r) => setTimeout(r, 10));
-        const second = await repo.trash(alice, target.id);
-        expect(second.trashed).toBe(true);
-        expect(second.trashedAt).toBe(first.trashedAt);
-      });
-
-      it('重复 restore 是幂等的', async () => {
-        await repo.trash(alice, target.id);
-        await repo.restore(alice, target.id);
-        const again = await repo.restore(alice, target.id);
-        expect(again.trashed).toBe(false);
-      });
-
-      it('对未 trash 的照片直接 restore 不报错', async () => {
-        const r = await repo.restore(alice, target.id);
-        expect(r.trashed).toBe(false);
-      });
-
-      it('Trashed → purge → 记录消失', async () => {
-        await repo.trash(alice, target.id);
-        await repo.purge(alice, target.id);
-        expect(await repo.findById(alice, target.id)).toBeNull();
-      });
-
-      it('purge 已经不存在的照片 → NotFoundError', async () => {
-        await repo.purge(alice, target.id);
-        await expect(repo.purge(alice, target.id)).rejects.toBeInstanceOf(NotFoundError);
       });
     });
 
