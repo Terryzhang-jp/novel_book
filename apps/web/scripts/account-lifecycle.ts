@@ -7,6 +7,7 @@
  *   pnpm account restore  <email|userId> --reason "..."
  *   pnpm account finalize <email|userId> --reason "..." [--now <ISO>]
  *   pnpm account run-due  --reason "..." [--now <ISO>] [--limit 50]
+ *   pnpm account cleanup  --reason "..." [--limit 200]
  *
  * ## 为什么它必须走用例层，而不是直接写 SQL
  *
@@ -38,6 +39,7 @@ import {
   finalizeAccountDeletion,
   fixedClock,
   reactivateAccount,
+  processStorageCleanup,
   runDueDeletions,
   systemClock,
   type Clock,
@@ -99,7 +101,7 @@ async function main(): Promise<void> {
   const identifier = argv[1];
 
   if (!command) {
-    fail('用法：pnpm account <status|disable|restore|finalize|run-due> [identifier] [flags]');
+    fail('用法：pnpm account <status|disable|restore|finalize|run-due|cleanup> [identifier] [flags]');
   }
   if (!process.env.DATABASE_URL) fail('DATABASE_URL 未配置');
 
@@ -131,9 +133,34 @@ async function main(): Promise<void> {
       const { results, errors } = await runDueDeletions(deps, actor, limit);
       console.log(`✓ 永久删除 ${results.length} 个到期账号（判定时刻 ${clock.now().toISOString()}）`);
       for (const r of results) {
-        console.log(`  ${r.userId}：清理对象 ${r.deletedObjects} 个，失败 ${r.failedObjects.length} 个`);
+        console.log(
+          `  ${r.userId}：入队 ${r.queuedObjects} 个对象，已清理 ${r.deletedObjects} 个，` +
+            `${r.retryingObjects} 个留在队列里重试`
+        );
       }
       for (const e of errors) console.error(`  ✖ ${e.userId}：${e.message}`);
+      const after = await core.storageCleanup.stats(actor);
+      console.log(`  清理队列：待处理 ${after.pending}，已放弃 ${after.abandoned}`);
+      return;
+    }
+
+    if (command === 'cleanup') {
+      if (!reason) fail('cleanup 必须带 --reason（会进审计表）');
+      const actor: Actor = systemActor(reason);
+      const run = await processStorageCleanup(deps, actor, {
+        limit: Number(flag(argv, 'limit') ?? 200),
+      });
+      const after = await core.storageCleanup.stats(actor);
+      console.log(
+        `✓ 认领 ${run.claimed}，删除 ${run.deleted}，失败 ${run.failed}。` +
+          `队列剩余 ${after.pending}，已放弃 ${after.abandoned}`
+      );
+      if (after.abandoned > 0) {
+        console.error(
+          `  ⚠ 有 ${after.abandoned} 个对象重试到上限仍未删掉 —— 需要人工查看 ` +
+            `storage_cleanup_jobs.last_error`
+        );
+      }
       return;
     }
 
@@ -183,10 +210,17 @@ async function main(): Promise<void> {
           systemActor(reason),
           account.userId
         );
-        console.log(`✓ 已永久删除。清理对象 ${result.deletedObjects} 个。`);
-        if (result.failedObjects.length) {
+        if (result.alreadyDeleted) {
+          console.log('✓ 这个账号之前就已经删完了，什么都没有变（幂等）。');
+          return;
+        }
+        console.log(
+          `✓ 已永久删除。入队 ${result.queuedObjects} 个对象，已清理 ${result.deletedObjects} 个。`
+        );
+        if (result.retryingObjects) {
           console.error(
-            `  ✖ ${result.failedObjects.length} 个对象没删掉（已记 storage_cleanup_incomplete 审计）`
+            `  ⚠ ${result.retryingObjects} 个对象这次没删掉，留在队列里重试。` +
+              `跑 \`pnpm account cleanup --reason ...\` 可以再推一轮。`
           );
         }
         return;

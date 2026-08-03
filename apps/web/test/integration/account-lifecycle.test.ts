@@ -35,6 +35,7 @@ import {
   disableAccount,
   finalizeAccountDeletion,
   listAccountEvents,
+  processStorageCleanup,
   publishWork,
   reactivateAccount,
   requestAccountDeletion,
@@ -508,7 +509,7 @@ describe('灵魂 6：删了就是删了', () => {
     expect((await viewPublication(core, ANONYMOUS, slug)).status).toBe('not_found');
 
     // ③ 磁盘上的字节也没了 —— 原图和发布派生副本都要查
-    expect(result.failedObjects).toEqual([]);
+    expect(result.retryingObjects).toBe(0);
     expect(await storage.exists(asset.objectKey)).toBe(false);
     for (const key of derivedKeys) expect(await storage.exists(key)).toBe(false);
 
@@ -596,5 +597,178 @@ describe('灵魂 7：ADR-005 的「删 Work 保留 Publication」在删账号时
     // 用户要求「我要消失」时，公开作品继续挂在网上与删除预期直接冲突。
     const rows = await sql('SELECT 1 FROM publications WHERE slug = $1', [slug]);
     expect(rows).toHaveLength(0);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 15A：并发、幂等、清理队列
+//
+// 这一组测的不是「功能对不对」，是「同一件事被做两次会怎样」。
+// 定时任务重叠执行、运维手抖点两次、进程崩在半路重放 —— 这三种情况
+// 在生产里都会发生，而它们全都发生在正常路径之外。
+// ════════════════════════════════════════════════════════════════════════════
+
+describe('灵魂 8：删除是幂等的', () => {
+  it('对同一个账号连删两次 —— 第二次是 alreadyDeleted，不是报错', async () => {
+    const { actor, userId } = await makeUser('idempotent');
+    await seedContent(actor, '幂等删除');
+
+    const clock = advanceableClock(T0);
+    const deps: FinalizeDeps = {
+      core,
+      clock,
+      tokens: tokenIssuer,
+      storage: getObjectStorage(),
+    };
+    await requestAccountDeletion(deps, actor, {});
+    clock.advance(DELETION_GRACE_DAYS * DAY_MS);
+
+    const first = await finalizeAccountDeletion(deps, OPS, userId);
+    expect(first.alreadyDeleted).toBe(false);
+
+    // 运维手抖点了第二次 / 定时任务和手工操作撞上了
+    const second = await finalizeAccountDeletion(deps, OPS, userId);
+    expect(second.alreadyDeleted).toBe(true);
+    expect(second.deletedObjects).toBe(0);
+
+    // 审计里只有一条最终删除记录 —— 不是两条
+    const finalized = (await listAccountEvents(core, OPS, userId)).filter(
+      (e) => e.type === 'deletion_finalized'
+    );
+    expect(finalized).toHaveLength(1);
+  });
+
+  it('两个工作进程同时跑批量删除 —— 每个账号只被删一次', async () => {
+    const users = await Promise.all(
+      [1, 2, 3, 4].map((n) => makeUser(`concurrent-${n}`))
+    );
+
+    const clock = advanceableClock(T0);
+    const deps: FinalizeDeps = {
+      core,
+      clock,
+      tokens: tokenIssuer,
+      storage: getObjectStorage(),
+    };
+    for (const u of users) await requestAccountDeletion(deps, u.actor, {});
+    clock.advance(DELETION_GRACE_DAYS * DAY_MS);
+
+    // ⭐ 真的并发：两个 runDueDeletions 同时开跑，共用同一个连接池。
+    //
+    // 没有 FOR UPDATE SKIP LOCKED 的话，两边会列出同一批账号，
+    // 然后其中一边的每一次删除都撞在另一边刚删掉的行上 ——
+    // 表现为「一半的任务失败」，而实际上什么问题都没有。
+    const [runA, runB] = await Promise.all([
+      runDueDeletions(deps, OPS, 50),
+      runDueDeletions(deps, OPS, 50),
+    ]);
+
+    expect(runA.errors).toEqual([]);
+    expect(runB.errors).toEqual([]);
+
+    const deletedIds = [...runA.results, ...runB.results].map((r) => r.userId);
+    // 没有任何一个账号被两边同时认领
+    expect(new Set(deletedIds).size).toBe(deletedIds.length);
+
+    for (const u of users) {
+      expect(await sql('SELECT 1 FROM "user" WHERE id = $1', [u.userId])).toHaveLength(0);
+      const finalized = (await listAccountEvents(core, OPS, u.userId)).filter(
+        (e) => e.type === 'deletion_finalized'
+      );
+      expect(finalized, `${u.userId} 的最终删除记录应当只有一条`).toHaveLength(1);
+    }
+  });
+});
+
+describe('灵魂 9：字节删不掉是可重试的工作', () => {
+  it('清理任务在事务里入队 —— 即使之后什么都没跑，该删什么也已经记下来了', async () => {
+    const { actor, userId } = await makeUser('queued');
+    const { asset } = await seedContent(actor, '入队');
+
+    const clock = advanceableClock(T0);
+    // ⭐ 一个总是失败的存储：模拟对象存储临时不可用
+    const brokenStorage = {
+      ...getObjectStorage(),
+      delete: async () => {
+        throw new Error('模拟：对象存储不可用');
+      },
+      list: async function* () {
+        /* 不产出任何孤儿 */
+      },
+    } as unknown as FinalizeDeps['storage'];
+
+    const deps: FinalizeDeps = { core, clock, tokens: tokenIssuer, storage: brokenStorage };
+    await requestAccountDeletion(deps, actor, {});
+    clock.advance(DELETION_GRACE_DAYS * DAY_MS);
+
+    const result = await finalizeAccountDeletion(deps, OPS, userId);
+
+    // 数据库行照样删掉了 —— 存储故障不能让用户的删除请求变成「什么都没发生」
+    expect(await sql('SELECT 1 FROM "user" WHERE id = $1', [userId])).toHaveLength(0);
+
+    // 但该删的字节一个都没丢：它们在队列里
+    expect(result.queuedObjects).toBeGreaterThan(0);
+    expect(result.deletedObjects).toBe(0);
+    expect(result.retryingObjects).toBe(result.queuedObjects);
+
+    const pending = await core.storageCleanup.listPendingFor(OPS, userId);
+    expect(pending.map((j) => j.objectKey)).toContain(asset.objectKey);
+    expect(pending[0]!.attempts).toBe(1);
+    expect(pending[0]!.lastError).toContain('对象存储不可用');
+
+    // ⭐ 存储恢复之后，同一个队列用真实存储再跑一轮就清干净了
+    const storage = getObjectStorage();
+    expect(await storage.exists(asset.objectKey)).toBe(true);
+
+    // 退避：第一次失败后要等 60 秒才会被重新认领
+    const healthy: FinalizeDeps = { core, clock, tokens: tokenIssuer, storage };
+    expect((await processStorageCleanup(healthy, OPS, {})).claimed).toBe(0);
+
+    clock.advance(61_000);
+    const run = await processStorageCleanup(healthy, OPS, {});
+    expect(run.deleted).toBe(result.queuedObjects);
+    expect(await storage.exists(asset.objectKey)).toBe(false);
+    expect(await core.storageCleanup.listPendingFor(OPS, userId)).toHaveLength(0);
+  });
+
+  it('同一个 key 不会在队列里排两次', async () => {
+    const { userId } = await makeUser('dedupe');
+    const key = `users/${userId}/sha256/ab/${'a'.repeat(64)}.webp`;
+    const job = { ownerId: userId, objectKey: key, reason: 'orphan' as const };
+
+    expect(await core.storageCleanup.enqueue(OPS, [job])).toBe(1);
+    expect(await core.storageCleanup.enqueue(OPS, [job])).toBe(0);
+    expect(await core.storageCleanup.listPendingFor(OPS, userId)).toHaveLength(1);
+  });
+
+  it('两个清理进程同时跑 —— 同一个任务不会被认领两次', async () => {
+    const { userId } = await makeUser('claimrace');
+    const keys = Array.from(
+      { length: 6 },
+      (_, i) => `users/${userId}/sha256/bc/${String(i).repeat(64).slice(0, 64)}.webp`
+    );
+    await core.storageCleanup.enqueue(
+      OPS,
+      keys.map((objectKey) => ({ ownerId: userId, objectKey, reason: 'orphan' as const }))
+    );
+
+    // 入队时 next_attempt_at 取的是数据库的 now()（真实墙钟），
+    // 所以认领时刻必须在那之后 —— 用 T0 会一条都认领不到，
+    // 然后这条测试就在什么都没验证的情况下变绿。
+    const now = new Date(T0.getTime() + 365 * DAY_MS);
+    const [a, b] = await Promise.all([
+      core.storageCleanup.claimBatch(OPS, now, 10),
+      core.storageCleanup.claimBatch(OPS, now, 10),
+    ]);
+
+    const all = [...a, ...b];
+    // ⭐ 没有一个任务被两边同时认领。这条**不限定**在本测试的 key 上 ——
+    // 前面几条测试留下的待办也一起被认领了，正好顺带验证了同一件事。
+    const ids = all.map((j) => j.id);
+    expect(new Set(ids).size).toBe(ids.length);
+
+    // 本测试造的六个必须全部被认领，一个不漏
+    const mine = all.map((j) => j.objectKey).filter((k) => keys.includes(k));
+    expect(new Set(mine).size).toBe(keys.length);
   });
 });

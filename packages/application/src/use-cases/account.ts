@@ -40,8 +40,7 @@ import {
   type ObjectStorage,
 } from '@tc/domain';
 import type { Clock, TokenIssuer } from '../ports/clock';
-import type { CoreRepositories } from '../ports/unit-of-work';
-import type { UnitOfWork } from '../ports/unit-of-work';
+import type { CoreRepositories, UnitOfWork } from '../ports/unit-of-work';
 
 export interface AccountDeps {
   readonly core: UnitOfWork;
@@ -258,27 +257,85 @@ export async function cancelAccountDeletion(
 
 export interface FinalizeResult {
   readonly userId: string;
+  /** 排队等待清理的对象数 */
+  readonly queuedObjects: number;
+  /** 本次调用里当场删掉的 */
   readonly deletedObjects: number;
-  readonly failedObjects: readonly string[];
+  /** 没删掉、留在队列里等重试的 */
+  readonly retryingObjects: number;
+  /** true = 这个账号在本次调用之前就已经删完了。**不是错误。** */
+  readonly alreadyDeleted: boolean;
+}
+
+/** 一个对象重试多少次之后放弃并报警 */
+export const MAX_CLEANUP_ATTEMPTS = 8;
+
+/**
+ * 事务内的删除主体。返回 null 表示这一行已经不在了。
+ *
+ * 抽出来是因为「点名删一个」和「批量删到期的」只在**怎么拿到账号**上不同：
+ * 前者按 id 阻塞加锁，后者用 SKIP LOCKED 认领下一个。
+ * 后面的步骤必须逐字相同，写两遍迟早会分叉。
+ */
+async function purgeLocked(
+  repos: CoreRepositories,
+  actor: Actor,
+  account: Account,
+  now: Date
+): Promise<{ userId: string; queued: number }> {
+  assertDeletable(account.status, account.deletion, now);
+
+  const storageKeys = await repos.accounts.listStorageKeys(actor, account.userId);
+
+  // ⭐ 要删哪些字节，**在事务里就写下来**。
+  //
+  // 14D 的做法是提交之后再循环删，进程崩在中间那些 key 就永远丢了 ——
+  // 行已经没了，再也查不出该删什么。入队之后最坏情况只是「晚一点删」。
+  const queued = await repos.storageCleanup.enqueue(
+    actor,
+    storageKeys.map((objectKey) => ({
+      ownerId: account.userId,
+      objectKey,
+      reason: 'account_deleted' as const,
+    }))
+  );
+
+  await repos.accounts.recordEvent(actor, {
+    userId: account.userId,
+    type: 'deletion_finalized',
+    fromStatus: account.status,
+    toStatus: 'deleted',
+    detail: {
+      requestedAt: account.deletion!.requestedAt.toISOString(),
+      effectiveAt: account.deletion!.effectiveAt.toISOString(),
+      storageKeys: storageKeys.length,
+    },
+  });
+
+  await repos.accounts.purge(actor, account.userId);
+  return { userId: account.userId, queued };
 }
 
 /**
  * 永久删除。**不可逆。**
  *
- * ## 顺序是有讲究的
+ * ## 顺序
  *
- *   1. 事务内：断言可删 → 收集 object key → 写审计 → DELETE user 行（CASCADE）
- *   2. 事务外：删对象存储里的字节
- *
- * 为什么收集 key 必须在删行之前：行删掉之后，assets 和 published_assets
- * 都被 CASCADE 清空了，再也查不到该删哪些文件。
+ *   1. 事务内：`FOR UPDATE` 锁住账号 → 断言可删 → 清理任务入队 → 写审计 → 删行
+ *   2. 事务外：尽力跑一次清理队列
  *
  * 为什么删字节在事务之外：对象存储不参与数据库事务。放进去的话，
  * 一个删文件失败会回滚已经成功的行删除，用户的删除请求变成「什么都没发生」。
  *
- * 反过来的失败（行删了、字节没删干净）不会泄露数据 ——
- * 所有读取路径都要先查到数据库里的记录才能拿到 objectKey，而记录已经没了。
- * 它是存储成本问题，所以记一条 storage_cleanup_incomplete 审计留待对账。
+ * 反过来的失败（行删了、字节还在）不泄露数据 —— 所有读取路径都要先查到
+ * 数据库记录才能拿到 objectKey，而记录已经没了。它是存储成本问题，
+ * 所以交给队列重试。
+ *
+ * ## 幂等
+ *
+ * 重复调用不会报错：第二次拿到的锁会发现行已经不在，直接返回
+ * `alreadyDeleted: true`。定时任务重叠执行、运维手抖点两次、
+ * 崩溃后重放 —— 都是安全的。
  */
 export async function finalizeAccountDeletion(
   deps: FinalizeDeps,
@@ -288,70 +345,56 @@ export async function finalizeAccountDeletion(
   requireSystem(actor, '永久删除账号');
   const now = deps.clock.now();
 
-  const keys = await deps.core.transaction(async (repos) => {
-    const account = await loadAccount(repos, actor, userId);
-    // 这一行是整个系统里唯一的「不可逆」守门。
-    assertDeletable(account.status, account.deletion, now);
-
-    const storageKeys = await repos.accounts.listStorageKeys(actor, userId);
-
-    await repos.accounts.recordEvent(actor, {
-      userId,
-      type: 'deletion_finalized',
-      fromStatus: account.status,
-      toStatus: 'deleted',
-      detail: {
-        requestedAt: account.deletion.requestedAt.toISOString(),
-        effectiveAt: account.deletion.effectiveAt.toISOString(),
-        storageKeys: storageKeys.length,
-      },
-    });
-
-    await repos.accounts.purge(actor, userId);
-    return storageKeys;
+  const outcome = await deps.core.transaction(async (repos) => {
+    // 阻塞加锁：另一个进程正在删同一个账号时，这里会等它提交完，
+    // 然后看到行已消失。**不用 SKIP LOCKED** —— 跳过之后返回「没找到」
+    // 会被误读成「已经删完了」，而实际上那次删除可能刚刚回滚。
+    const account = await repos.accounts.lockForDeletion(actor, userId);
+    if (!account) return null; // 已经删完了
+    return purgeLocked(repos, actor, account, now);
   });
 
-  // ── 事务之外：清字节 ──
-  const all = new Set(keys);
-  try {
-    // 顺带扫一遍该用户的存储前缀：上传成功但数据库写失败会留下孤儿对象，
-    // 它们在任何表里都查不到，只有这里能扫到。
-    for await (const key of deps.storage.list(userObjectPrefix(userId))) {
-      all.add(key);
-    }
-  } catch {
-    // 列举失败不影响删除已知的 key —— 已知的那部分才是有引用的数据
-  }
-
-  const failed: string[] = [];
-  let deleted = 0;
-  for (const key of all) {
-    try {
-      await deps.storage.delete(key);
-      deleted += 1;
-    } catch {
-      failed.push(key);
-    }
-  }
-
-  if (failed.length > 0) {
-    // 审计表没有外键，所以在 user 行已经不存在之后仍然写得进去 ——
-    // 这正是当初不给它加外键的原因。
-    await deps.core.accounts.recordEvent(actor, {
+  if (!outcome) {
+    return {
       userId,
-      type: 'storage_cleanup_incomplete',
-      detail: { failed: failed.slice(0, 50), failedCount: failed.length },
-    });
+      queuedObjects: 0,
+      deletedObjects: 0,
+      retryingObjects: 0,
+      alreadyDeleted: true,
+    };
   }
 
-  return { userId, deletedObjects: deleted, failedObjects: failed };
+  // 顺带扫一遍该用户的存储前缀：上传成功但数据库写失败会留下孤儿对象，
+  // 它们在任何表里都查不到，只有这里能扫到。
+  let extra = 0;
+  try {
+    const orphans: { ownerId: string; objectKey: string; reason: 'orphan' }[] = [];
+    for await (const objectKey of deps.storage.list(userObjectPrefix(userId))) {
+      orphans.push({ ownerId: userId, objectKey, reason: 'orphan' });
+    }
+    extra = await deps.core.storageCleanup.enqueue(actor, orphans);
+  } catch {
+    // 列举失败不影响已入队的部分 —— 那部分才是有引用的数据
+  }
+
+  const swept = await processStorageCleanup(deps, actor, { limit: outcome.queued + extra + 16 });
+  return {
+    userId,
+    queuedObjects: outcome.queued + extra,
+    deletedObjects: swept.deleted,
+    retryingObjects: swept.failed,
+    alreadyDeleted: false,
+  };
 }
 
 /**
  * 定时任务入口：把所有到期的账号删掉。
  *
- * 单个失败不中断整批 —— 一个损坏的账号不该让其他人的删除请求
- * 无限期地卡在队列里。
+ * **一个一个认领**，而不是先 list 再逐个删。后者在两个工作进程同时跑时
+ * 会列出同一批账号，然后其中一个的每一次删除都撞在另一个刚删掉的行上 ——
+ * 表现为一半的任务「失败」，而实际上什么问题都没有。
+ *
+ * SKIP LOCKED 让它们各取各的：同一个账号只会被删一次，两个进程都不空转。
  */
 export async function runDueDeletions(
   deps: FinalizeDeps,
@@ -359,21 +402,93 @@ export async function runDueDeletions(
   limit = 50
 ): Promise<{ results: FinalizeResult[]; errors: { userId: string; message: string }[] }> {
   requireSystem(actor, '批量执行到期删除');
-  const due = await deps.core.accounts.listDueForDeletion(actor, deps.clock.now(), limit);
 
   const results: FinalizeResult[] = [];
   const errors: { userId: string; message: string }[] = [];
-  for (const account of due) {
+
+  for (let i = 0; i < limit; i++) {
+    const now = deps.clock.now();
+    let claimed: { userId: string; queued: number } | null;
     try {
-      results.push(await finalizeAccountDeletion(deps, actor, account.userId));
+      claimed = await deps.core.transaction(async (repos) => {
+        const account = await repos.accounts.claimNextDueForDeletion(actor, now);
+        if (!account) return null;
+        return purgeLocked(repos, actor, account, now);
+      });
     } catch (err) {
+      // 单个失败不中断整批 —— 一个损坏的账号不该让别人的删除请求
+      // 无限期卡在队列里。但也不能就这样接着循环：下一轮会再次认领到
+      // 同一个账号（它还在 deletion_requested），变成死循环。
+      // 所以记下来就停，交给下一次调度。
       errors.push({
-        userId: account.userId,
+        userId: 'unknown',
         message: err instanceof Error ? err.message : String(err),
       });
+      break;
+    }
+
+    if (!claimed) break; // 没有到期的了
+    const swept = await processStorageCleanup(deps, actor, { limit: claimed.queued + 16 });
+    results.push({
+      userId: claimed.userId,
+      queuedObjects: claimed.queued,
+      deletedObjects: swept.deleted,
+      retryingObjects: swept.failed,
+      alreadyDeleted: false,
+    });
+  }
+
+  return { results, errors };
+}
+
+// ── 清理队列 ─────────────────────────────────────────────────────────────────
+
+export interface CleanupRun {
+  readonly claimed: number;
+  readonly deleted: number;
+  readonly failed: number;
+}
+
+/**
+ * 跑一轮对象清理。
+ *
+ * 可以被多个进程同时调用 —— `claimBatch` 用 `FOR UPDATE SKIP LOCKED`，
+ * 各取各的。删除本身也是幂等的（对象不存在时 delete 不报错），
+ * 所以即使同一个 key 被处理两次也没有后果。
+ */
+export async function processStorageCleanup(
+  deps: FinalizeDeps,
+  actor: Actor,
+  options: { limit?: number } = {}
+): Promise<CleanupRun> {
+  requireSystem(actor, '清理对象存储');
+  const now = deps.clock.now();
+  const jobs = await deps.core.storageCleanup.claimBatch(actor, now, options.limit ?? 100);
+
+  let deleted = 0;
+  let failed = 0;
+  for (const job of jobs) {
+    try {
+      await deps.storage.delete(job.objectKey);
+      await deps.core.storageCleanup.markDone(actor, job.id, deps.clock.now());
+      deleted += 1;
+    } catch (err) {
+      await deps.core.storageCleanup.markFailed(
+        actor,
+        job.id,
+        err instanceof Error ? err.message : String(err),
+        deps.clock.now(),
+        MAX_CLEANUP_ATTEMPTS
+      );
+      failed += 1;
     }
   }
-  return { results, errors };
+  return { claimed: jobs.length, deleted, failed };
+}
+
+export function storageCleanupStats(uow: UnitOfWork, actor: Actor) {
+  requireSystem(actor, '查看清理队列');
+  return uow.storageCleanup.stats(actor);
 }
 
 // ── 查询 ─────────────────────────────────────────────────────────────────────

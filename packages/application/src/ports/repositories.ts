@@ -442,8 +442,27 @@ export interface AccountRepository {
    */
   transition(actor: Actor, userId: string, input: AccountTransition): Promise<Account>;
 
-  /** 到期可以永久删除的账号。定时任务用。 */
+  /** 到期可以永久删除的账号。只读，用于巡检和报表 —— **不要**拿它驱动删除。 */
   listDueForDeletion(actor: Actor, now: Date, limit?: number): Promise<Account[]>;
+
+  /**
+   * 认领**一个**到期待删账号。**必须在事务里调用。**
+   *
+   * `FOR UPDATE SKIP LOCKED`：两个工作进程同时跑时各拿各的，
+   * 既不会争抢同一个账号，也不会互相阻塞。
+   *
+   * 用它而不是「先 list 再逐个删」——后者两个进程会列出同一批账号，
+   * 然后其中一个的每一次删除都撞在另一个已经删掉的行上。
+   */
+  claimNextDueForDeletion(actor: Actor, now: Date): Promise<Account | null>;
+
+  /**
+   * 锁住一个账号准备删除。**必须在事务里调用。**
+   *
+   * 返回 null 表示这一行已经不在了 —— 对删除流程而言这是**成功**
+   * （目标状态已达成），不是错误。幂等性就落在这个 null 上。
+   */
+  lockForDeletion(actor: Actor, userId: string): Promise<Account | null>;
 
   /**
    * 撤销该用户的全部 session，返回撤销条数。
@@ -472,4 +491,65 @@ export interface AccountRepository {
    * 必须在 purge **之前**调用。
    */
   listStorageKeys(actor: Actor, userId: string): Promise<string[]>;
+}
+
+// ── 对象清理队列 ─────────────────────────────────────────────────────────────
+
+export type CleanupReason =
+  | 'account_deleted'
+  | 'publication_withdrawn'
+  | 'asset_deleted'
+  | 'orphan';
+
+export interface StorageCleanupJob {
+  readonly id: string;
+  readonly ownerId: string;
+  readonly objectKey: string;
+  readonly reason: CleanupReason;
+  readonly attempts: number;
+  readonly lastError?: string;
+}
+
+export interface CleanupStats {
+  readonly pending: number;
+  readonly abandoned: number;
+}
+
+/**
+ * 「有一个 object key 需要消失」的待办。
+ *
+ * 存在的理由是对象存储**不参与数据库事务**：删除账号的行可以原子提交，
+ * 删除它的字节不能。所以把「要删什么」写进事务，把「删」放在事务之外重试。
+ *
+ * 崩溃安全性来自一条很小的规则：**认领即计数**。工作进程一取走任务就把
+ * attempts +1 并把 next_attempt_at 推后，所以进程死在半路时这一行会在
+ * 退避时间之后被重新认领，而不是永远停在 pending。
+ */
+export interface StorageCleanupRepository {
+  /** 幂等入队：同一个 key 已经有待办时不重复插入 */
+  enqueue(
+    actor: Actor,
+    jobs: readonly { ownerId: string; objectKey: string; reason: CleanupReason }[]
+  ): Promise<number>;
+
+  /**
+   * 认领一批到期任务。
+   *
+   * `FOR UPDATE SKIP LOCKED` —— 两个工作进程同时跑时各拿各的，
+   * 不会争抢同一行，也不会互相阻塞。
+   */
+  claimBatch(actor: Actor, now: Date, limit: number): Promise<StorageCleanupJob[]>;
+
+  markDone(actor: Actor, id: string, at: Date): Promise<void>;
+  /** 超过 maxAttempts 就标记 abandoned —— 无限重试等于无限报警 */
+  markFailed(
+    actor: Actor,
+    id: string,
+    error: string,
+    at: Date,
+    maxAttempts: number
+  ): Promise<void>;
+
+  stats(actor: Actor): Promise<CleanupStats>;
+  listPendingFor(actor: Actor, ownerId: string): Promise<StorageCleanupJob[]>;
 }

@@ -15,6 +15,7 @@ import { PostgresMomentRepository } from './moment-repository';
 import { PostgresObservationRepository } from './observation-repository';
 import { PostgresPublicationRepository } from './publication-repository';
 import { PostgresPublishedAssetRepository } from './published-asset-repository';
+import { PostgresStorageCleanupRepository } from './storage-cleanup-repository';
 import { PostgresWorkRepository } from './work-repository';
 import type { Queryable } from './queryable';
 
@@ -29,6 +30,7 @@ export function createRepositories(db: Queryable): CoreRepositories {
     assets: new PostgresAssetRepository(db),
     publishedAssets: new PostgresPublishedAssetRepository(db),
     accounts: new PostgresAccountRepository(db),
+    storageCleanup: new PostgresStorageCleanupRepository(db),
   };
 }
 
@@ -42,6 +44,7 @@ export class PostgresUnitOfWork implements UnitOfWork {
   readonly assets: CoreRepositories['assets'];
   readonly publishedAssets: CoreRepositories['publishedAssets'];
   readonly accounts: CoreRepositories['accounts'];
+  readonly storageCleanup: CoreRepositories['storageCleanup'];
 
   constructor(private readonly pool: Pool) {
     const repos = createRepositories(pool);
@@ -54,6 +57,7 @@ export class PostgresUnitOfWork implements UnitOfWork {
     this.assets = repos.assets;
     this.publishedAssets = repos.publishedAssets;
     this.accounts = repos.accounts;
+    this.storageCleanup = repos.storageCleanup;
   }
 
   /**

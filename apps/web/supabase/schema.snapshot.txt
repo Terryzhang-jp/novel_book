@@ -192,6 +192,16 @@ column	session.token	text NOT NULL
 column	session.updated_at	timestamp with time zone DEFAULT now()
 column	session.user_agent	text
 column	session.user_id	text NOT NULL
+column	storage_cleanup_jobs.attempts	integer NOT NULL DEFAULT 0
+column	storage_cleanup_jobs.created_at	timestamp with time zone NOT NULL DEFAULT now()
+column	storage_cleanup_jobs.finished_at	timestamp with time zone
+column	storage_cleanup_jobs.id	uuid NOT NULL DEFAULT gen_random_uuid()
+column	storage_cleanup_jobs.last_error	text
+column	storage_cleanup_jobs.next_attempt_at	timestamp with time zone NOT NULL DEFAULT now()
+column	storage_cleanup_jobs.object_key	text NOT NULL
+column	storage_cleanup_jobs.owner_id	text NOT NULL
+column	storage_cleanup_jobs.reason	text NOT NULL
+column	storage_cleanup_jobs.status	text NOT NULL DEFAULT 'pending'::text
 column	user.created_at	timestamp with time zone DEFAULT now()
 column	user.deletion_cancel_token_hash	text
 column	user.deletion_effective_at	timestamp with time zone
@@ -343,6 +353,11 @@ constraint	published_assets.uq_published_asset	UNIQUE (work_version_id, sha256)
 constraint	session.session_pkey	PRIMARY KEY (id)
 constraint	session.session_token_key	UNIQUE (token)
 constraint	session.session_user_id_fkey	FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
+constraint	storage_cleanup_jobs.chk_cleanup_finished	CHECK ((((status = 'pending'::text) AND (finished_at IS NULL)) OR ((status <> 'pending'::text) AND (finished_at IS NOT NULL))))
+constraint	storage_cleanup_jobs.storage_cleanup_jobs_attempts_check	CHECK ((attempts >= 0))
+constraint	storage_cleanup_jobs.storage_cleanup_jobs_pkey	PRIMARY KEY (id)
+constraint	storage_cleanup_jobs.storage_cleanup_jobs_reason_check	CHECK ((reason = ANY (ARRAY['account_deleted'::text, 'publication_withdrawn'::text, 'asset_deleted'::text, 'orphan'::text])))
+constraint	storage_cleanup_jobs.storage_cleanup_jobs_status_check	CHECK ((status = ANY (ARRAY['pending'::text, 'done'::text, 'abandoned'::text])))
 constraint	user.chk_deletion_fields	CHECK ((((status = 'deletion_requested'::text) AND (deletion_requested_at IS NOT NULL) AND (deletion_effective_at IS NOT NULL) AND (deletion_cancel_token_hash IS NOT NULL)) OR ((status <> 'deletion_requested'::text) AND (deletion_requested_at IS NULL) AND (deletion_effective_at IS NULL) AND (deletion_cancel_token_hash IS NULL))))
 constraint	user.chk_deletion_window	CHECK (((deletion_effective_at IS NULL) OR (deletion_effective_at > deletion_requested_at)))
 constraint	user.user_email_key	UNIQUE (email)
@@ -466,6 +481,10 @@ index	session.idx_session_token	CREATE INDEX idx_session_token ON public.session
 index	session.idx_session_user_id	CREATE INDEX idx_session_user_id ON public.session USING btree (user_id)
 index	session.session_pkey	CREATE UNIQUE INDEX session_pkey ON public.session USING btree (id)
 index	session.session_token_key	CREATE UNIQUE INDEX session_token_key ON public.session USING btree (token)
+index	storage_cleanup_jobs.idx_cleanup_due	CREATE INDEX idx_cleanup_due ON public.storage_cleanup_jobs USING btree (next_attempt_at) WHERE (status = 'pending'::text)
+index	storage_cleanup_jobs.idx_cleanup_status	CREATE INDEX idx_cleanup_status ON public.storage_cleanup_jobs USING btree (status, created_at DESC)
+index	storage_cleanup_jobs.storage_cleanup_jobs_pkey	CREATE UNIQUE INDEX storage_cleanup_jobs_pkey ON public.storage_cleanup_jobs USING btree (id)
+index	storage_cleanup_jobs.uq_cleanup_pending_key	CREATE UNIQUE INDEX uq_cleanup_pending_key ON public.storage_cleanup_jobs USING btree (object_key) WHERE (status = 'pending'::text)
 index	user.idx_user_deletion_due	CREATE INDEX idx_user_deletion_due ON public."user" USING btree (deletion_effective_at) WHERE (status = 'deletion_requested'::text)
 index	user.idx_user_email	CREATE INDEX idx_user_email ON public."user" USING btree (email)
 index	user.uq_user_deletion_cancel_token	CREATE UNIQUE INDEX uq_user_deletion_cancel_token ON public."user" USING btree (deletion_cancel_token_hash) WHERE (deletion_cancel_token_hash IS NOT NULL)
@@ -532,6 +551,7 @@ table	photos	rls=enabled
 table	publications	rls=disabled
 table	published_assets	rls=disabled
 table	session	rls=disabled
+table	storage_cleanup_jobs	rls=disabled
 table	user	rls=disabled
 table	users	rls=enabled
 table	verification	rls=disabled

@@ -26,6 +26,7 @@ import type {
   ObservationRepository,
   PublicationRepository,
   PublishedAssetRepository,
+  StorageCleanupRepository,
   WorkRepository,
 } from './repositories';
 
@@ -43,6 +44,8 @@ export interface CoreRepositories {
    * 停用或申请删除的账号，公开页面必须立刻取不到（ADR-007）。
    */
   readonly accounts: AccountRepository;
+  /** 对象清理队列。字节删不掉是可重试的工作，不是一条日志。 */
+  readonly storageCleanup: StorageCleanupRepository;
 }
 
 export interface UnitOfWork extends CoreRepositories {

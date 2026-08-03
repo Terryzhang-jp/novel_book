@@ -202,6 +202,39 @@ export class PostgresAccountRepository implements AccountRepository {
     return rows.map(mapAccount);
   }
 
+  /**
+   * 认领一个到期账号。SKIP LOCKED 让并发的工作进程各取各的。
+   *
+   * 锁只在**当前事务**内有效，所以调用方必须在同一个事务里把删除做完 ——
+   * 否则锁一放开，另一个进程就会拿到同一行。
+   */
+  async claimNextDueForDeletion(actor: Actor, now: Date): Promise<Account | null> {
+    void actor;
+    const { rows } = await this.db.query<AccountRow>(
+      `SELECT ${ACCOUNT_COLUMNS} FROM "user"
+        WHERE status = 'deletion_requested' AND deletion_effective_at <= $1
+        ORDER BY deletion_effective_at ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED`,
+      [now]
+    );
+    return rows[0] ? mapAccount(rows[0]) : null;
+  }
+
+  /**
+   * 点名锁一个账号。这里**不能**用 SKIP LOCKED —— 调用方指名要删这一个，
+   * 跳过它然后返回「没找到」会被误读成「已经删完了」。
+   * 阻塞等待才对：前一个事务提交后，这里会看到行已消失并返回 null。
+   */
+  async lockForDeletion(actor: Actor, userId: string): Promise<Account | null> {
+    void actor;
+    const { rows } = await this.db.query<AccountRow>(
+      `SELECT ${ACCOUNT_COLUMNS} FROM "user" WHERE id = $1 FOR UPDATE`,
+      [userId]
+    );
+    return rows[0] ? mapAccount(rows[0]) : null;
+  }
+
   async revokeSessions(actor: Actor, userId: string): Promise<number> {
     void actor;
     const result = await this.db.query(`DELETE FROM session WHERE user_id = $1`, [userId]);
