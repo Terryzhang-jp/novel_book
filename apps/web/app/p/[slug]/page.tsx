@@ -82,7 +82,7 @@ export default async function PublicationPage({
 
   return (
     <main>
-      <SnapshotView snapshot={view.page.version.snapshot} />
+      <SnapshotView snapshot={view.page.version.snapshot} slug={decodeSlug(slug)} />
       <footer className="mx-auto max-w-2xl border-t border-neutral-200 px-4 py-6 text-xs text-neutral-400">
         发布于 {view.page.publication.publishedAt.slice(0, 10)} · 第{' '}
         {view.page.version.versionNumber} 版

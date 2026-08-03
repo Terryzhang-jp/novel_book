@@ -40,14 +40,17 @@ import {
   withdrawPublication,
 } from '@tc/application';
 import { PostgresUnitOfWork } from '@tc/infrastructure-postgres';
+import type { PublishDeps } from '@tc/application';
 import { ANONYMOUS, InvariantViolation, NotFoundError, userActor } from '@tc/domain';
 import { getPool, sql } from '../db/setup';
+import { getImageDeriver, getStorageKit } from '@/lib/core/storage';
 
 /** seed 里的固定身份 */
 const ALICE = userActor('11111111-1111-1111-1111-111111111111', 'sess-alice');
 const BOB = userActor('22222222-2222-2222-2222-222222222222', 'sess-bob');
 
 let core: PostgresUnitOfWork;
+let publishDeps: PublishDeps;
 
 /**
  * 每条测试自己造数据、自己起唯一标题。
@@ -62,6 +65,9 @@ const NOW = '2026-08-03T00:00:00.000Z';
 
 beforeAll(() => {
   core = new PostgresUnitOfWork(getPool() as unknown as Pool);
+  // 真实的存储和派生器 —— 不用假的。
+  // 用假的就测不到「派生副本里没有 EXIF」这类断言，而那正是要证明的事。
+  publishDeps = { core, storage: getStorageKit(), deriver: getImageDeriver() };
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -185,7 +191,7 @@ describe('灵魂 3：发布之后，改变理解不会改写已经发出去的�
     await addTextBlock(core, ALICE, work.id, '开场的一段文字。');
     await addMomentToWork(core, ALICE, work.id, moment.id);
 
-    const published = await publishWork(core, ALICE, { workId: work.id, now: NOW });
+    const published = await publishWork(publishDeps, ALICE, { workId: work.id, now: NOW });
     const slug = published.publication.slug;
 
     const before = await viewPublication(core, ANONYMOUS, slug);
@@ -225,7 +231,7 @@ describe('灵魂 3：发布之后，改变理解不会改写已经发出去的�
     const work = await createWork(core, ALICE, { title: uniq('重新发布') });
     await addMomentToWork(core, ALICE, work.id, moment.id);
 
-    const first = await publishWork(core, ALICE, { workId: work.id, now: NOW });
+    const first = await publishWork(publishDeps, ALICE, { workId: work.id, now: NOW });
     expect(first.firstPublish).toBe(true);
     expect(first.version.versionNumber).toBe(1);
 
@@ -235,7 +241,7 @@ describe('灵魂 3：发布之后，改变理解不会改写已经发出去的�
       expectedCurrentId: detail.current?.id,
     });
 
-    const second = await publishWork(core, ALICE, { workId: work.id, now: NOW });
+    const second = await publishWork(publishDeps, ALICE, { workId: work.id, now: NOW });
     expect(second.firstPublish).toBe(false);
     expect(second.version.versionNumber).toBe(2);
     // 链接必须不变 —— 已经分享出去的 URL 不能因为作者改了错别字就失效
@@ -257,7 +263,7 @@ describe('灵魂 3：发布之后，改变理解不会改写已经发出去的�
   it('撤回保留记录：访客看到「已下架」，不是 404', async () => {
     const work = await createWork(core, ALICE, { title: uniq('撤回验证') });
     await addTextBlock(core, ALICE, work.id, '一段文字。');
-    const pub = await publishWork(core, ALICE, { workId: work.id, now: NOW });
+    const pub = await publishWork(publishDeps, ALICE, { workId: work.id, now: NOW });
 
     await withdrawPublication(core, ALICE, pub.publication.id);
 
@@ -326,7 +332,7 @@ describe('灵魂 4：用户之间互不可见', () => {
   it('匿名访客看不到 private 的发布，且与「不存在」无法区分', async () => {
     const work = await createWork(core, ALICE, { title: uniq('私有发布') });
     await addTextBlock(core, ALICE, work.id, '只给我自己看。');
-    const pub = await publishWork(core, ALICE, {
+    const pub = await publishWork(publishDeps, ALICE, {
       workId: work.id,
       visibility: 'private',
       now: NOW,
@@ -375,7 +381,7 @@ describe('灵魂 5：删除的语义 —— 整理容器不等于销毁内容', 
     });
     const work = await createWork(core, ALICE, { title: uniq('待删除作品') });
     await addMomentToWork(core, ALICE, work.id, moment.id);
-    const pub = await publishWork(core, ALICE, { workId: work.id, now: NOW });
+    const pub = await publishWork(publishDeps, ALICE, { workId: work.id, now: NOW });
 
     await deleteWork(core, ALICE, work.id);
 
@@ -414,7 +420,7 @@ describe('灵魂 5：删除的语义 —— 整理容器不等于销毁内容', 
     expect(blocks[0]!.tombstone?.interpretation).toBe('删除前的理解。');
 
     // 带墓碑的作品照样能发布，快照里是墓碑而不是空洞
-    const pub = await publishWork(core, ALICE, { workId: work.id, now: NOW });
+    const pub = await publishWork(publishDeps, ALICE, { workId: work.id, now: NOW });
     const block = pub.version.snapshot.blocks[0]!;
     expect(block.type).toBe('moment_ref');
     expect(block.type === 'moment_ref' ? block.tombstone?.observations : null).toEqual([

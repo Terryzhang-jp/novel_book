@@ -24,6 +24,7 @@ import {
   type PresentationConfig,
   type RendererType,
   type SnapshotBlock,
+  type SnapshotAsset,
   type SnapshotMoment,
   type Work,
   type WorkBlock,
@@ -40,6 +41,13 @@ export interface SnapshotSources {
   readonly observations: ReadonlyMap<MomentId, readonly Observation[]>;
   /** 每个 Moment 的全部 revision（不只是 current）—— 由这里挑出 current */
   readonly interpretations: ReadonlyMap<MomentId, readonly InterpretationRevision[]>;
+  /**
+   * 每个 Moment 的**派生副本**（不是原图）。
+   *
+   * 由 publishWork 在调用之前生成好 —— 派生要跑图像处理，
+   * 而这个函数必须保持纯的（好穷举各种形状）。
+   */
+  readonly assets?: ReadonlyMap<MomentId, readonly SnapshotAsset[]>;
   /** 引用的 Moment 已被删除时，墓碑的时间戳落哪一刻 */
   readonly now: string;
 }
@@ -47,7 +55,8 @@ export interface SnapshotSources {
 function freezeMoment(
   moment: Moment,
   observations: readonly Observation[],
-  revisions: readonly InterpretationRevision[]
+  revisions: readonly InterpretationRevision[],
+  assets: readonly SnapshotAsset[]
 ): SnapshotMoment {
   const current = currentInterpretation(revisions);
   return {
@@ -70,6 +79,9 @@ function freezeMoment(
           },
         }
       : {}),
+    // 空数组不写进快照 —— `assets: []` 和「没有 assets 键」在 JSON 里不同，
+    // 而快照要逐字节可比
+    ...(assets.length > 0 ? { assets } : {}),
   };
 }
 
@@ -98,7 +110,8 @@ export function buildWorkSnapshot(src: SnapshotSources): WorkSnapshot {
         moment: freezeMoment(
           moment,
           src.observations.get(moment.id) ?? [],
-          src.interpretations.get(moment.id) ?? []
+          src.interpretations.get(moment.id) ?? [],
+          src.assets?.get(moment.id) ?? []
         ),
       };
     }

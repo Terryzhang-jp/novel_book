@@ -43,7 +43,7 @@ import {
 } from '@tc/application';
 import { InvariantViolation, isMomentAssetRole, type JourneyType } from '@tc/domain';
 import { getCore, requireActor } from '@/lib/core/context';
-import { getMediaProbe, getStorageKit } from '@/lib/core/storage';
+import { getImageDeriver, getMediaProbe, getStorageKit } from '@/lib/core/storage';
 import { toUserMessage } from '@/lib/core/errors';
 
 /**
@@ -223,13 +223,25 @@ export async function publishWorkAction(form: FormData) {
   const workId = str(form, 'workId');
   return run(`/studio/works/${workId}`, async () => {
     const actor = await requireActor();
-    const result = await publishWork(getCore(), actor, {
-      workId,
-      visibility: str(form, 'visibility') === 'public' ? 'public' : 'unlisted',
-      now: new Date().toISOString(),
-    });
+    const result = await publishWork(
+      { core: getCore(), storage: getStorageKit(), deriver: getImageDeriver() },
+      actor,
+      {
+        workId,
+        visibility: str(form, 'visibility') === 'public' ? 'public' : 'unlisted',
+        now: new Date().toISOString(),
+      }
+    );
     const what = result.firstPublish ? '已发布' : `已更新到第 ${result.version.versionNumber} 版`;
-    return `/studio/works/${workId}?notice=${encodeURIComponent(`${what}：/p/${result.publication.slug}`)}`;
+    const extra = [
+      result.derivedAssets > 0 ? `已生成 ${result.derivedAssets} 份安全副本（去掉了 GPS 和相机信息）` : '',
+      // 静默跳过等于骗人：用户必须知道发布页里少了什么
+      result.skippedAssets > 0
+        ? `有 ${result.skippedAssets} 份音频证据没有进入发布页 —— 音频的安全派生还没实现`
+        : '',
+    ].filter(Boolean).join('；');
+    const notice = `${what}：/p/${result.publication.slug}${extra ? ` · ${extra}` : ''}`;
+    return `/studio/works/${workId}?notice=${encodeURIComponent(notice)}`;
   });
 }
 

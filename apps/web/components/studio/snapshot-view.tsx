@@ -14,9 +14,16 @@
  */
 
 import type { WorkSnapshot } from '@tc/domain';
+import { MOMENT_ASSET_ROLE_LABELS } from '@tc/application';
 import { fmtDate } from './chrome';
 
-export function SnapshotView({ snapshot }: { snapshot: WorkSnapshot }) {
+/**
+ * @param slug 用来拼图片 URL。
+ *
+ * 图片地址是 `/p/{slug}/a/{derivedHash}.webp` —— **只用 hash，不用 objectKey**，
+ * 因为 objectKey 含 `users/{userId}/`，放进公开页面等于泄露作者的内部 id。
+ */
+export function SnapshotView({ snapshot, slug }: { snapshot: WorkSnapshot; slug: string }) {
   return (
     <article className="mx-auto max-w-2xl px-4 py-10">
       <h1 className="mb-8 text-3xl font-semibold" data-testid="pub-title">
@@ -75,6 +82,28 @@ export function SnapshotView({ snapshot }: { snapshot: WorkSnapshot }) {
               <p key={o.id} className="mb-2 whitespace-pre-wrap leading-relaxed">
                 {o.content}
               </p>
+            ))}
+
+            {/* 证据。这里显示的**全部是派生副本** —— 受控尺寸、无 EXIF、无 GPS。
+                原图永远不会出现在公开页面上（ADR-008 A8）。 */}
+            {(m.assets ?? []).map((a) => (
+              <figure key={a.derivedHash} className="my-4" data-testid="pub-asset">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/p/${encodeURIComponent(slug)}/a/${a.derivedHash}.webp`}
+                  alt={a.note ?? ''}
+                  width={a.width}
+                  height={a.height}
+                  className="w-full rounded"
+                  loading="lazy"
+                />
+                <figcaption className="mt-1 text-xs text-neutral-500">
+                  {/* 角色是内容的一部分 —— 「这张让我不确定」和「这是我看到的」
+                      对读者是完全不同的信息 */}
+                  {MOMENT_ASSET_ROLE_LABELS[a.role]}
+                  {a.note ? ` · ${a.note}` : ''}
+                </figcaption>
+              </figure>
             ))}
 
             {/* 冻结的是发布那一刻的理解。作者后来改了想法，这里也不会变。 */}

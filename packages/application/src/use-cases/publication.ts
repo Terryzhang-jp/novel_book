@@ -24,17 +24,40 @@ import {
   slugify,
   DEFAULT_PRESENTATION_CONFIG,
   type Actor,
+  parseObjectKey,
   type Publication,
   type PublicationId,
+  type SnapshotAsset,
   type RendererType,
   type Visibility,
   type WorkId,
   type WorkVersion,
 } from '@tc/domain';
-import type { PublishedPage } from '../ports/repositories';
+import type {
+  CreatePublishedAssetInput,
+  MomentAssetView,
+  PublishedPage,
+} from '../ports/repositories';
+import type { ImageDeriver, StorageKit } from '../ports/media';
 import type { CoreRepositories, UnitOfWork } from '../ports/unit-of-work';
 import { buildWorkSnapshot } from '../snapshot';
 import { loadWorkDetail } from './work';
+
+/**
+ * 发布需要的三样东西。
+ *
+ * storage 和 deriver 是**必需的**，不是可选的 —— 做成可选的话，
+ * 忘了注入就会静默发布出一篇没有任何图片的文章，而且不会有任何报错。
+ * 「环境缺失就跳过」是这个项目已经明令禁止的模式。
+ */
+export interface PublishDeps {
+  readonly core: UnitOfWork;
+  readonly storage: StorageKit;
+  readonly deriver: ImageDeriver;
+}
+
+/** 第一版唯一的派生预设。长边 1600，够网页看，也不至于把原图挂上公网。 */
+const WEB_PRESET = { name: 'web1600' as const, maxEdge: 1600 };
 
 export interface PublishCommand {
   readonly workId: WorkId;
@@ -53,6 +76,17 @@ export interface PublishCommand {
 export interface PublishResult extends PublishedPage {
   /** true = 这次是第一次发布（新建了 Publication），false = 重新发布 */
   readonly firstPublish: boolean;
+  /** 生成了几份派生副本 */
+  readonly derivedAssets: number;
+  /**
+   * 没有进入发布页的证据数量。
+   *
+   * 目前只有音频会被跳过：安全派生（剥离元数据）对音频还没实现，
+   * 而把原字节直接公开会连带公开录制设备信息。
+   *
+   * **显式返回而不是静默跳过** —— 用户必须知道他的发布页少了什么。
+   */
+  readonly skippedAssets: number;
 }
 
 /**
@@ -62,7 +96,7 @@ export interface PublishResult extends PublishedPage {
  * 已经分享出去的链接不能因为作者改了一次错别字就失效。
  */
 export async function publishWork(
-  uow: UnitOfWork,
+  deps: PublishDeps,
   actor: Actor,
   command: PublishCommand
 ): Promise<PublishResult> {
@@ -70,7 +104,7 @@ export async function publishWork(
   const rendererType: RendererType = command.rendererType ?? 'web';
   const visibility: Visibility = command.visibility ?? 'unlisted';
 
-  return uow.transaction(async (r) => {
+  return deps.core.transaction(async (r) => {
     const detail = await loadWorkDetail(r, actor, command.workId);
 
     // Presentation 是独立实体（ADR-005 修正）。没有就建一份默认的 ——
@@ -84,6 +118,15 @@ export async function publishWork(
         DEFAULT_PRESENTATION_CONFIG
       ));
 
+    // ── 派生安全副本 ────────────────────────────────────────────────────
+    // 在建 snapshot 之前做完，因为快照里存的是派生副本而不是原图（S-2）。
+    const momentIds = [...detail.moments.keys()];
+    const evidence = (await r.assets.listByMoments(actor, momentIds)).filter(
+      // 已删除的素材不进发布页 —— 用户删掉它就是不想再出现
+      (v) => !v.asset.deletedAt
+    );
+    const { byMoment, ledger, skipped } = await deriveEvidence(deps, actor, evidence);
+
     const snapshot = buildWorkSnapshot({
       work: detail.work,
       blocks: detail.blocks,
@@ -91,6 +134,7 @@ export async function publishWork(
       moments: detail.moments,
       observations: detail.observations,
       interpretations: detail.interpretations,
+      assets: byMoment,
       now: command.now,
     });
 
@@ -101,10 +145,22 @@ export async function publishWork(
       snapshot,
     });
 
+    // 账本在版本建好之后写。它不在读取路径上（A10），
+    // 只用于账号删除时清理、对账、避免重复派生。
+    for (const entry of ledger) {
+      await r.publishedAssets.create(actor, { ...entry, workVersionId: version.id });
+    }
+
     const existing = await r.publications.findByWork(actor, command.workId);
     if (existing) {
       const publication = await r.publications.repoint(actor, existing.publication.id, version.id);
-      return { publication, version, firstPublish: false };
+      return {
+        publication,
+        version,
+        firstPublish: false,
+        derivedAssets: ledger.length,
+        skippedAssets: skipped,
+      };
     }
 
     const publication = await createWithUniqueSlug(
@@ -115,8 +171,102 @@ export async function publishWork(
       version.id,
       visibility
     );
-    return { publication, version, firstPublish: true };
+    return {
+      publication,
+      version,
+      firstPublish: true,
+      derivedAssets: ledger.length,
+      skippedAssets: skipped,
+    };
   });
+}
+
+/**
+ * 把证据变成可以公开的派生副本。
+ *
+ * ## 为什么不能直接公开原图
+ *
+ * 原图带着 GPS —— 精确到用户家门口。还带着相机序列号、拍摄参数、
+ * 有时还有内嵌缩略图（那可能是裁剪前的画面）。
+ * 「发布一篇文章」不该等于把这些一起发出去。
+ *
+ * ## 派生对象也是内容寻址的
+ *
+ * key 由**派生后**的字节决定，所以和原图的 key 必然不同，
+ * 快照里也就不可能出现原图的 key（S-2）。
+ * 同一张图在多个版本里派生出的字节相同 ⇒ 同一个对象，不会重复占空间。
+ */
+async function deriveEvidence(
+  deps: PublishDeps,
+  actor: Actor,
+  evidence: readonly MomentAssetView[]
+): Promise<{
+  byMoment: Map<string, SnapshotAsset[]>;
+  ledger: Omit<CreatePublishedAssetInput, 'workVersionId'>[];
+  skipped: number;
+}> {
+  const { userId } = requireUser(actor);
+  const byMoment = new Map<string, SnapshotAsset[]>();
+  const ledger: Omit<CreatePublishedAssetInput, 'workVersionId'>[] = [];
+  const seen = new Map<string, SnapshotAsset>();
+  let skipped = 0;
+
+  for (const { link, asset } of evidence) {
+    if (asset.type !== 'image') {
+      // 音频的安全派生（剥离元数据）还没实现。跳过并计数 ——
+      // 静默漏掉会让用户以为发布页就该长这样。
+      skipped += 1;
+      continue;
+    }
+
+    let derived = seen.get(asset.id);
+    if (!derived) {
+      const original = await deps.storage.storage.get(asset.objectKey);
+      const out = await deps.deriver.derive(original, { maxEdge: WEB_PRESET.maxEdge });
+      const objectKey = deps.storage.buildObjectKey(userId, out.bytes, out.mimeType);
+      const { hash } = parseObjectKey(objectKey);
+
+      await deps.storage.storage.put({
+        key: objectKey,
+        body: out.bytes,
+        contentType: out.mimeType,
+        overwrite: true,
+      });
+
+      derived = {
+        role: link.role,
+        derivedHash: hash,
+        objectKey,
+        mimeType: out.mimeType,
+        width: out.width,
+        height: out.height,
+      };
+      seen.set(asset.id, derived);
+      ledger.push({
+        sourceAssetId: asset.id,
+        objectKey,
+        sha256: hash,
+        mimeType: out.mimeType,
+        width: out.width,
+        height: out.height,
+        byteSize: out.bytes.byteLength,
+        preset: WEB_PRESET.name,
+      });
+    }
+
+    const bucket = byMoment.get(link.momentId);
+    // role 和 note 是**关系**上的，同一份素材在两个 Moment 里可以不同角色，
+    // 所以这里基于共享的派生结果再套一层关系数据
+    const item: SnapshotAsset = {
+      ...derived,
+      role: link.role,
+      ...(link.note ? { note: link.note } : {}),
+    };
+    if (bucket) bucket.push(item);
+    else byMoment.set(link.momentId, [item]);
+  }
+
+  return { byMoment, ledger, skipped };
 }
 
 /**

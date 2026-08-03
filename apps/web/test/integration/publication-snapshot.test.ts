@@ -26,8 +26,10 @@ import {
   viewPublication,
 } from '@tc/application';
 import { createRepositories, PostgresUnitOfWork } from '@tc/infrastructure-postgres';
+import type { PublishDeps } from '@tc/application';
 import { ANONYMOUS, assertSnapshotIsSelfContained, userActor } from '@tc/domain';
 import { getPool } from '../db/setup';
+import { getImageDeriver, getStorageKit } from '@/lib/core/storage';
 
 const ALICE = userActor('11111111-1111-1111-1111-111111111111', 'sess-alice');
 const NOW = '2026-08-03T00:00:00.000Z';
@@ -42,9 +44,13 @@ const LIVE_TABLES = [
 ];
 
 let core: PostgresUnitOfWork;
+let publishDeps: PublishDeps;
 
 beforeAll(() => {
   core = new PostgresUnitOfWork(getPool() as unknown as Pool);
+  // 真实的存储和派生器 —— 不用假的。
+  // 用假的就测不到「派生副本里没有 EXIF」这类断言，而那正是要证明的事。
+  publishDeps = { core, storage: getStorageKit(), deriver: getImageDeriver() };
 });
 
 describe('发布快照必须自洽', () => {
@@ -63,7 +69,7 @@ describe('发布快照必须自洽', () => {
     await addTextBlock(core, ALICE, work.id, '一段开场文字。');
     await addMomentToWork(core, ALICE, work.id, moment.id);
 
-    const published = await publishWork(core, ALICE, { workId: work.id, now: NOW });
+    const published = await publishWork(publishDeps, ALICE, { workId: work.id, now: NOW });
     const slug = published.publication.slug;
 
     // ── 在事务里把实时表藏起来 ──
@@ -128,7 +134,7 @@ describe('发布快照必须自洽', () => {
     const work = await createWork(core, ALICE, { title: `冻结完整性-${Date.now().toString(36)}` });
     await addMomentToWork(core, ALICE, work.id, moment.id);
 
-    const published = await publishWork(core, ALICE, { workId: work.id, now: NOW });
+    const published = await publishWork(publishDeps, ALICE, { workId: work.id, now: NOW });
     const block = published.version.snapshot.blocks[0]!;
 
     expect(block.type).toBe('moment_ref');
